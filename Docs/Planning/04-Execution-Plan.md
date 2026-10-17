@@ -142,18 +142,20 @@ Roughly seven months part-time to the full proposal, with a usable library at si
 | Late menu swaps | Allowed after Finalize, with a preview of the schedule diff. |
 | Kitchen theme | A toggle (cook mode More and Pantry → Profile), never automatic. |
 | Wine pairings | Live on the menu, per course, with a non-alcoholic alternative; bottles from Cellar & Bar. |
+| Heavy-reasoning model | Apple's Private Cloud Compute model by default; Claude available as a setting (Pantry → Profile → Intelligence). Extraction and classification stay on device. |
+| Bundle ID | `com.calebpietrafesa.RecipeCodex` kept; extensions `.Share` and `.Widgets`; iCloud container `iCloud.com.calebpietrafesa.RecipeCodex`; App Group `group.com.calebpietrafesa.RecipeCodex`. |
+| Portal registration | Xcode automatic signing with Caleb's Apple account; identifiers registered from a signed device build (see phase0-notes). |
+| GitHub | Public repository. Scanned cookbook pages and any other copyrighted fixtures stay out of it. |
+| Capture device | iPhone 17 Pro for capture quality; iPad for review and the scanning session UI. Both supported. |
+| Event dates | Set while planning and editable until service starts (event status `inService`); fixed after that, with actual times recorded by the debrief. |
+| Now Cooking accessory on iPad | Window only; the accessory is an iPhone surface. |
 
 ### 5.2 Still needed from you
 
-| Decision | Options | Recommendation |
+| Decision | What it means | Recommendation |
 |---|---|---|
-| Heavy-reasoning model | Apple cloud (free with limits), Claude (billed, strongest), on-device only | Build the abstraction; default to Apple cloud, with Claude as a setting. Can wait until Phase 6; `ModelTier` already has all three. |
-| Bundle ID | Keep `com.calebpietrafesa.RecipeCodex` (and `iCloud.com.calebpietrafesa.RecipeCodex`) vs another | Keep it; it only has to be registered once, before the first device build. |
-| Portal registration | Let Xcode's automatic signing create the App ID, App Group and iCloud container, or create them yourself in the developer portal | Automatic signing with your Apple account signed in to Xcode; one device build does it. Can be run from here on your say-so. |
-| GitHub remote | Private repository now vs later | Now; cloud sessions and backups both need it. Needs your GitHub login (`gh auth login`) or a repository you create and share the URL of. |
-| Capture device | iPhone camera vs iPad | iPhone 17 Pro for capture quality; iPad for the review and session UI. Support both. Assumed unless you object. |
-| First dinner fixture | Which event becomes the Phase 4/5 scheduler fixture | Pick one on the calendar; the scheduler is built against it. Needed by Phase 4. |
-| Now Cooking accessory on iPad | Accessory above the tab bar vs the dedicated cook-mode window only | Window only; revisit after Phase 3 (03 §7). |
+| First dinner fixture | A real upcoming dinner (date, guest count, the actual menu you intend to cook) that becomes the scenario the scheduler is built and tested against in Phases 4 and 5: its recipes get step annotations first, and its timeline is the one judged against what really happened. | Name one when you have it on the calendar; needed by the start of Phase 4, not before. |
+| Pantry pane selector on iPhone | Chips under the title, or a segmented control for four panes with the rest in More (03 §7). | Chips; decide after seeing it in Phase 4. |
 
 ## 6. Risks to the plan
 

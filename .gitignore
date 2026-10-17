@@ -43,3 +43,6 @@ TestResults/
 *.local.xcconfig
 .env
 .env.*
+
+# Copyrighted capture fixtures (photographed cookbook pages) never go in the public repo.
+Docs/Fixtures/Private/

@@ -50,14 +50,10 @@ Ingredient quantities are stored as `quantityNumerator` / `quantityDenominator` 
 
 | Item | Why | Where to change |
 |---|---|---|
-| **Bundle ID** | Placeholder `com.calebpietrafesa.RecipeCodex` (extensions: `.Share`, `.Widgets`). Register the App ID in the portal (automatic signing will do it on the first device build) unless Caleb wants another ID. | `PRODUCT_BUNDLE_IDENTIFIER` in `project.pbxproj`, three targets. |
-| **App Group registration** | `group.com.calebpietrafesa.RecipeCodex` is in all three entitlements files and in `RecipeStore.appGroupIdentifier`. It works on the simulator without registration; on a device it must exist in the portal and the provisioning profile. | Entitlements files; `Packages/RecipeModel/Sources/RecipeModel/RecipeStore.swift`. |
-| **iCloud container** | Not enabled. Create `iCloud.com.calebpietrafesa.RecipeCodex` (or whatever matches the final bundle ID), add the iCloud capability with CloudKit to the app target, then change `cloudKitDatabase: .none` to `.automatic` in `RecipeStore.makeContainer`. The schema already follows the CloudKit rules. | Signing & Capabilities; `RecipeStore.swift`. |
-| **Sync proof** | 04 §2 Phase 0 asks to prove sync between iPhone and iPad with a throwaway record. Blocked on the three items above. | — |
-| **GitHub remote and Claude GitHub App** | Repo is local only (two commits on `main`). Push to a private repo and install the app so cloud sessions can run the pure-Swift packages. | — |
+| **Sync proof** | 04 §2 Phase 0 asks to prove sync between iPhone and iPad with a throwaway record. The iPhone build is installed (below); the iPad has not been connected yet, and there is no UI to enter a record until Phase 1. | Install on the iPad Pro once Phase 1's manual entry exists; add a recipe on one device and watch it appear on the other. |
+| **GitHub remote and Claude GitHub App** | Repo is local only. Caleb decided on a **public** repository (04 §5.1); `gh` is already logged in as `calebpie`. Create it, push `main`, install the Claude GitHub App so cloud sessions can run the pure-Swift packages. Copyrighted fixtures (photographed cookbook pages) must stay out: `Docs/Fixtures/Private/` is gitignored for them. | `gh repo create RecipeCodex --public --source=. --remote=origin --push` |
 | **Design tokens and app icon** | Asset catalog has empty `AppIcon` and `AccentColor`. Icon Composer file and accent colour are Phase 0 items not covered here. | `RecipeCodex/Assets.xcassets`. |
-| **AlarmKit and App Intents capabilities** | Listed for Phase 0 in 04 §2; need the team first. Not added. | Signing & Capabilities. |
-| **Heavy-reasoning model choice** | `ModelTier` has `onDevice`, `appleCloud`, `claude`; nothing picks one yet. | Decision in 04 §5.2. |
+| **AlarmKit usage description** | AlarmKit needs `NSAlarmKitUsageDescription` in the app Info.plist before the first timer (Phase 3). App Intents need no capability. Neither is added yet. | `INFOPLIST_KEY_NSAlarmKitUsageDescription` in `project.pbxproj`. |
 
 ## Useful commands
 
@@ -83,3 +79,14 @@ Caleb's review of the planning docs changed the scaffold as follows; the decisio
 - **Tabs.** Order is now Recipes · Pantry · Plan · Cook · Search (`AppTab`). `BooksView` is gone; `RecipesView` has a segmented Recipes · Books switch with a contextual Add menu (Import, Scan Page, New Recipe vs Add Book) and a More menu. `PantryView` is new, with a chip-style pane selector for Pantry, Tools, Sources, Cellar & Bar, Kitchens and Profile. The app launches on Recipes.
 - **Schema v1 (still unshipped, so edited in place rather than migrated).** New models `Source` (supplier directory and frequented stores; optional `book` and `kitchen`, inverse of `ShoppingItem.source`), `BeverageItem` (cellar and bar, cascade-owned by `Kitchen`) and `Pairing` (on `Slot`, optional `beverage`). New attributes `Book.reviewedLayouts`, `RecipeVersion.captureConfidence` and `RecipeVersion.needsReview` for the scan-review policy. `UserProfile.knuckleModeEnabled` became `kitchenThemeEnabled`. New enums `SourceKind`, `SourceCategory`, `BeverageKind`, `PairingRole`.
 - **Verified.** `swift test` passes in RecipeModel (5 tests, CloudKit rules included) and `xcodebuild build` for the iPhone 17 Pro simulator succeeds.
+
+## Second review round (Oct 17, 2026, later that evening)
+
+Caleb answered the remaining questions (04 §5.1). Changes:
+
+- **Signing and portal.** `xcodebuild build -destination 'generic/platform=iOS' -allowProvisioningUpdates` with automatic signing and Caleb's Apple account registered the three App IDs with their capabilities, the App Group, the iCloud container `iCloud.com.calebpietrafesa.RecipeCodex` and push, and created "iOS Team Provisioning Profile" profiles for all three bundle IDs (signing identity `Apple Development: cep93@cornell.edu`). The embedded profile carries the iCloud, App Group and `aps-environment` entitlements.
+- **Entitlements.** The app target now has `com.apple.developer.icloud-services` (CloudKit), `com.apple.developer.icloud-container-identifiers` and `aps-environment` (development), plus `UIBackgroundModes = remote-notification` so CloudKit pushes wake the mirroring. The extensions keep App Groups only.
+- **Store.** `RecipeStore.makeContainer(inMemory:syncsWithCloudKit:)`; the app passes `syncsWithCloudKit: true` (`.private("iCloud.com.calebpietrafesa.RecipeCodex")`), falls back to a local store, then to in-memory. Extensions open the same file without mirroring; persistent history carries their writes to the app, which exports them. The CloudKit development schema is created by SwiftData on first run with an iCloud account; it must be deployed to production from CloudKit Console before any App Store or TestFlight build.
+- **Model routing.** `Intelligence.ModelRouting.tier(for:preferredHeavyReasoning:)`: extraction always on device, heavy reasoning `appleCloud` by default, `claude` when chosen. `UserProfile.heavyReasoningModel` stores the choice as a raw string.
+- **Installed on the iPhone 17 Pro** (`devicectl device install app`); launch from here was refused because the phone was locked, so the first run (and the iCloud schema creation) happens when Caleb opens it. Also run on the iPhone 17 Pro simulator: the CloudKit store opened without falling back; mirroring reports "No account" there, as expected.
+- **Verified.** Package tests pass (Intelligence 5, RecipeModel 5); simulator and signed device builds succeed.

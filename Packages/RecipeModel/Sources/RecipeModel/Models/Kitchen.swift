@@ -125,6 +125,8 @@ extension RecipeSchemaV1 {
         public var voiceCommandsEnabled: Bool = false
         /// The high-contrast kitchen theme is a toggle, never automatic (03 §3.12).
         public var kitchenThemeEnabled: Bool = false
+        /// Raw value of `Intelligence.ModelTier` for menu conversation and pairings; Apple cloud by default (04 §5.1).
+        public var heavyReasoningModel: String = "appleCloud"
         public var createdAt: Date = Date.now
 
         public init(proficiency: Proficiency = .confident) {

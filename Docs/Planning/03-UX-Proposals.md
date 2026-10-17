@@ -115,7 +115,7 @@ Add (+) presents a menu: Import from link, Scan page, Scan book, New recipe, Fro
 
 **Purpose.** Compose a balanced menu for real people.
 
-**iPhone.** Event header card (date, arrival, seating, guests with restriction chips, kitchen). Slots listed as sections: Starter, Main, Sides, Dessert, Drinks, plus Add slot. Each slot shows candidate cards (image, name, servings stepper, finalize checkmark) and an Add button that opens a library picker sheet. Sub-recipes appear indented under their parent with a link icon. Inline notes under cards: "Never cooked," "Contains flour (Rosa)," "Oven conflict with the gratin." A Balance card summarizes coverage, servings vs guests, complexity load, and work after arrival. Bottom toolbar: Ask Codex · Shopping · **Finalize** (prominent, enabled when every slot has exactly one finalized candidate or is marked optional).
+**iPhone.** Event header card (date, arrival, seating, guests with restriction chips, kitchen). Date and times are set here and stay editable until service starts; once the event is in service they are fixed, and the debrief records the actual times. Slots listed as sections: Starter, Main, Sides, Dessert, Drinks, plus Add slot. Each slot shows candidate cards (image, name, servings stepper, finalize checkmark) and an Add button that opens a library picker sheet. Sub-recipes appear indented under their parent with a link icon. Inline notes under cards: "Never cooked," "Contains flour (Rosa)," "Oven conflict with the gratin." A Balance card summarizes coverage, servings vs guests, complexity load, and work after arrival. Bottom toolbar: Ask Codex · Shopping · **Finalize** (prominent, enabled when every slot has exactly one finalized candidate or is marked optional).
 
 **Pairings.** Pairings live on the menu. Each course slot has a Pairings row under its finalized candidate: a wine or other drink and a non-alcoholic alternative, each typed or picked from Cellar & Bar (3.17). A picked bottle shows "on hand"; a pairing without one shows "to buy" and flows to the shopping list under a Wine & drinks stop. Ask Codex can propose pairings with a one-line reason, labeled Suggested. The menu card PDF prints the pairings under each course.
 
@@ -159,7 +159,7 @@ Add (+) presents a menu: Import from link, Scan page, Scan book, New recipe, Fro
 
 ### 3.14 Now Cooking accessory
 
-Above the tab bar on iPhone while a session runs: recipe or event name, current step truncated, next timer, a Next button. Scrolling a list minimizes the tab bar into the accessory. Tap expands to the full session. Ends when the session ends (HIG: end activities promptly).
+iPhone only. Above the tab bar while a session runs: recipe or event name, current step truncated, next timer, a Next button. Scrolling a list minimizes the tab bar into the accessory. Tap expands to the full session. Ends when the session ends (HIG: end activities promptly). On iPad there is no accessory: the session opens in its own window (§4).
 
 ### 3.15 Live Activity
 
@@ -237,7 +237,10 @@ Resolved Oct 17, 2026, from your review:
 5. **Cook-mode targets.** Standard control sizes with generous spacing; the enlarged "knuckle mode" is dropped (3.12, §5).
 6. **Tabs.** Recipes · Pantry · Plan · Cook · Search; Books is a view inside Recipes; Pantry absorbs the profile and adds Sources and Cellar & Bar (02 §1.1).
 
+7. **Now Cooking accessory on iPad.** Window only; the accessory is an iPhone surface (3.14).
+8. **Heavy-reasoning model.** Apple cloud by default, Claude as a setting in Profile → Intelligence.
+9. **Event dates.** Set in Plan and editable until service starts (3.9).
+
 Still open:
 
-1. Should the Now Cooking accessory also appear on iPad, or is the dedicated window enough?
-2. Pantry pane selector on iPhone: chips under the title (proposed), or a segmented control for the four most-used panes with the rest in More?
+1. Pantry pane selector on iPhone: chips under the title (proposed), or a segmented control for the four most-used panes with the rest in More?

@@ -12,6 +12,30 @@ public enum ModelTier: String, Sendable, Codable, CaseIterable {
     case appleCloud
     /// Claude via ClaudeForFoundationModels. Billed; strongest reasoning.
     case claude
+
+    /// Decided Oct 17, 2026 (04 §5.1): heavy reasoning goes to Apple's cloud model unless the cook
+    /// picks Claude in Profile → Intelligence. Extraction and classification always stay on device.
+    public static let defaultHeavyReasoning: ModelTier = .appleCloud
+    public static let defaultExtraction: ModelTier = .onDevice
+}
+
+/// What a prompt is for; decides which tier answers it (02 §4.3).
+public enum ModelTask: String, Sendable, Codable, CaseIterable {
+    /// Structuring OCR text, parsing ingredients, classifying a recipe, short summaries.
+    case extraction
+    /// Menu conversation, pairing notes, balance commentary.
+    case heavyReasoning
+}
+
+public enum ModelRouting {
+    /// The tier for a task given the cook's preferred heavy-reasoning tier. On-device never
+    /// escalates; a preference for on-device only is honored for heavy reasoning too.
+    public static func tier(for task: ModelTask, preferredHeavyReasoning: ModelTier = ModelTier.defaultHeavyReasoning) -> ModelTier {
+        switch task {
+        case .extraction: return ModelTier.defaultExtraction
+        case .heavyReasoning: return preferredHeavyReasoning
+        }
+    }
 }
 
 /// Why a tier is not usable right now, mirrored into the UI as the HIG asks.

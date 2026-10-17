@@ -10,15 +10,20 @@ struct RecipeCodexApp: App {
     init() {
         let logger = Logger(subsystem: "com.calebpietrafesa.RecipeCodex", category: "store")
         do {
-            container = try RecipeStore.makeContainer()
+            container = try RecipeStore.makeContainer(syncsWithCloudKit: true)
         } catch {
-            // Phase 0: keep the app usable if the shared store cannot open (for example an
-            // unregistered App Group on a device). Data entered in this state is not kept.
-            logger.error("Falling back to an in-memory store: \(error.localizedDescription)")
+            // Without the iCloud entitlement or container (a build without the team, or a test
+            // host) keep the data local rather than losing it; only if even that fails go in-memory.
+            logger.error("CloudKit store unavailable, using a local store: \(error.localizedDescription)")
             do {
-                container = try RecipeStore.makeContainer(inMemory: true)
+                container = try RecipeStore.makeContainer()
             } catch {
-                fatalError("Could not create even an in-memory store: \(error)")
+                logger.error("Falling back to an in-memory store: \(error.localizedDescription)")
+                do {
+                    container = try RecipeStore.makeContainer(inMemory: true)
+                } catch {
+                    fatalError("Could not create even an in-memory store: \(error)")
+                }
             }
         }
     }

@@ -44,3 +44,18 @@ private extension ModelUnavailability {
         .deviceNotEligible, .appleIntelligenceNotEnabled, .modelNotReady, .notConfigured, .unknown,
     ]
 }
+
+@Suite("Model routing")
+struct ModelRoutingTests {
+    @Test func extractionAlwaysStaysOnDevice() {
+        for preferred in ModelTier.allCases {
+            #expect(ModelRouting.tier(for: .extraction, preferredHeavyReasoning: preferred) == .onDevice)
+        }
+    }
+
+    @Test func heavyReasoningDefaultsToAppleCloudAndHonorsClaude() {
+        #expect(ModelRouting.tier(for: .heavyReasoning) == .appleCloud)
+        #expect(ModelRouting.tier(for: .heavyReasoning, preferredHeavyReasoning: .claude) == .claude)
+        #expect(ModelRouting.tier(for: .heavyReasoning, preferredHeavyReasoning: .onDevice) == .onDevice)
+    }
+}

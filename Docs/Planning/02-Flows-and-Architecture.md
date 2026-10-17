@@ -22,7 +22,7 @@ The top toolbar of every top-level screen is contextual: **Add (+)** when the sc
 
 ### 1.2 Persistent surfaces
 
-- **Now Cooking accessory.** When a cook or service session is active, a bottom accessory sits above the tab bar on iPhone (the Music MiniPlayer pattern) showing current step, next timer, and a Next button. Scrolling minimizes the tab bar into it. Tapping expands to full cook mode.
+- **Now Cooking accessory.** iPhone only. When a cook or service session is active, a bottom accessory sits above the tab bar (the Music MiniPlayer pattern) showing current step, next timer, and a Next button. Scrolling minimizes the tab bar into it. Tapping expands to full cook mode. On iPad the session lives in its own window instead.
 - **Live Activity.** Mirrors the session to the Dynamic Island, Lock Screen, StandBy, Apple Watch Smart Stack and the Mac menu bar.
 - **Widgets.** Tonight's plan, next event countdown, running timers, "cook something new" suggestion.
 - **Siri and Spotlight.** Recipes, books and events are indexed entities; cook mode actions are App Shortcuts.
@@ -217,7 +217,7 @@ Recipe ──< RecipeLink (subRecipe, role: component | variation | reference)
 Recipe ──< Tag ; Recipe ──< CookSession (start, end, placeName, rating, notes, photos, observedYield)
 Recipe ──< SourceInfo (url, author, sourceRating, importedAt, readerSummary)
 Recipe ── NutritionEstimate (perServing, confidence, computedAt)
-Event (date, arrival, seating, guestCount, kitchen) ──< Guest ; Event ── Menu ──< Slot ──< Candidate (recipe, servings, doneness, finalized)
+Event (date, arrival, seating: editable until status is inService; guestCount, kitchen) ──< Guest ; Event ── Menu ──< Slot ──< Candidate (recipe, servings, doneness, finalized)
 Slot ──< Pairing (role: wine | cocktail | beer | nonAlcoholic | other, text, servingNote, isSuggested, beverage?)
 Event ── ShoppingList ──< ShoppingItem (normalizedIngredient, qty, stop | source, section, checked)
 Event ── Schedule ──< Task (recipe, step, start, duration, kind, dependencies[], resources[], locked)
@@ -242,8 +242,8 @@ CloudKit rules applied: every relationship optional with inverse, no unique cons
 | Annotate steps for scheduling | On-device first; larger model when confidence is low | One recipe | `[StepAnnotation]` |
 | Summarize reader comments | On-device | Chunk, then merge | `ReaderSummary` |
 | Natural-language search | On-device | Query only | `SearchQuery` |
-| Menu conversation | PCC or Claude (on-device fallback with reduced scope) | Tool calling over library index; Dynamic Profiles | `MenuProposal`, chat |
-| Wine pairing notes | PCC or Claude | Menu summary | short text |
+| Menu conversation | Apple cloud (PCC) by default, Claude when chosen in Profile → Intelligence; on-device fallback with reduced scope | Tool calling over library index; Dynamic Profiles | `MenuProposal`, chat |
+| Wine pairing notes | Apple cloud by default, Claude when chosen | Menu summary | short text |
 
 ### 4.4 Sync and offline
 
