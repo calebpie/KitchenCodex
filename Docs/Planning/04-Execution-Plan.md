@@ -32,7 +32,7 @@ Goal: replaces Paprika for web and manual recipes.
 - Share Extension with JSON-LD parsing and on-device model fallback; in-app browser import.
 - Step photos: `RecipeImage.step` and the `stepPhoto` role; the importer downloads `HowToStep.image` and per-step photos; thumbnails on detail steps, tap to enlarge.
 - Paprika/Mela import.
-- Recipe detail with scaling, friendly rounding, unit toggle (US/metric), provenance.
+- Recipe detail with scaling, friendly rounding, unit toggle (US/metric), provenance. Temperatures shown in the preferred unit (°F or °C, Pantry → Profile) with the original kept; ingredient groups shown as sections.
 - Recipes tab with the Recipes · Books view switch (Books empty until Phase 2), filters, collections, smart collections, favorites, recents; Pantry tab shell with the Profile pane (proficiency, units, intelligence); Search tab.
 - PDF, text and Markdown export.
 - iPad: adaptable tab bar/sidebar, three-column split, keyboard shortcuts, drag and drop into collections.
@@ -46,7 +46,7 @@ Goal: the cookbook shelf and the whole-book flow.
 
 - ISBN scan and book metadata; Books view inside Recipes; book detail with sections and completeness; Sources page capture into Pantry → Sources.
 - Page scan with quality gate; OCR → structured recipe; review screen with region assignment (tap on iPhone, Pencil lasso on iPad); per-book layout confirmation and confidence scoring so review is forced only for the first recipe, new layouts and low-confidence results; multi-page stitching. A "Step photo" region in review attaches a printed process photo to the adjacent step.
-- Cross-reference detection and sub-recipe linking.
+- Cross-reference detection and sub-recipe linking. Also for a single web page whose ingredient and step groups line up (a main dish plus its pickles): the import preview offers "Split into N recipes", user-confirmed, creating linked component recipes the parent inlines at cook time.
 - Reference capture: an article or technique chapter saved as a `Reference` (02 §4.2) with its source, linked to recipes and its book; the importer offers it when a page has Article markup and no recipe.
 - Whole-book session: contents and index extraction → punchlist → capture loop → background queue → review queue.
 - Photo cleanup and cover selection; PDF and photo-library import through the same pipeline.
@@ -72,7 +72,7 @@ Exit: a weeknight dinner cooked entirely from cook mode, hands-free at least onc
 Goal: a dinner party planned and shopped in the app, without the scheduler yet.
 
 - Pantry tab: pantry, tools, sources (frequented stores as shopping stops), cellar and bar, multiple kitchens, profile; guest profiles under Plan.
-- Events; menu builder with slots, candidates, finalize; sub-recipe auto-add; balance panel and inline warnings; menu-wide scaling; doneness targets with temperature table; pairings per course (manual, from the cellar or typed) with "to buy" bottles on the shopping list.
+- Events; menu builder with slots, candidates, finalize; sub-recipe auto-add; balance panel and inline warnings; menu-wide scaling; doneness targets with temperature table; inputs for parameterized steps (bird weight for "20 mins per kg") asked when the recipe joins the menu; pairings per course (manual, from the cellar or typed) with "to buy" bottles on the shopping list.
 - Shopping list: aggregation, normalization, pantry subtraction, sections, stops, check-off sync, share to text and Reminders.
 - Menu card PDF; test-cook scheduling; calendar entries via EventKit.
 
@@ -82,7 +82,7 @@ Exit: your next dinner party is planned and shopped in Codex.
 
 Goal: the feature nobody else has.
 
-- Step annotation UX (active/passive, waits, equipment, hold rule) with model-proposed defaults and the component knowledge base.
+- Step annotation UX (active/passive/lead, attention, waits, equipment, component, hold rule, formula durations) with deterministic phrase rules first, model-proposed defaults for the rest, and the component knowledge base. Steps stay as written; a step yields one or more tasks. Annotation test set from the saved pages: Barefoot Contessa's orzo (preheat, meanwhile, dressing component), Food.com's boeuf bourguignon (44 fine-grained steps, early preheat), Alison Roman's shallot pasta (stirring constantly), BBC Good Food's goose (per-kg formula with doneness), VICE's short ribs (three components on one page).
 - Scheduler engine: task graph, constraints, backward list scheduling, host-presence objective, explanations. Property tests and scenario fixtures built from your real menus.
 - Timeline editor across days with drag, snap, warnings, overload bars, reserve tasks, daily checklist on Cook; schedule diff preview for replans and late menu swaps.
 - Service mode: Now/Next/Watch lanes, lateness tracking, replan, proactive checks, temperature guidance from readings, food-safety minimums, pot-size suggestions, plating and hold reminders, debrief.
@@ -151,6 +151,11 @@ Roughly seven months part-time to the full proposal, with a usable library at si
 | Capture device | iPhone 17 Pro for capture quality; iPad for review and the scanning session UI. Both supported. |
 | Event dates | Set while planning and editable until service starts (event status `inService`); fixed after that, with actual times recorded by the debrief. |
 | Now Cooking accessory on iPad | Window only; the accessory is an iPhone surface. |
+| Step granularity | Steps are stored as the source wrote them, never split or merged on import (Food.com's 44 one-sentence steps stay 44). Scheduling derives one or more annotated tasks per step; presentation problems are solved in cook mode. |
+| Make-ahead | Whether a component can be made ahead is its hold rule (KnowledgeBase, by component type, overridable per recipe), not its position among the steps. |
+| Parameterized steps | Steps like "20 mins per kg for medium-rare" carry a duration formula with inputs (weight, doneness); inputs are asked in Plan when the recipe joins a menu. A probe temperature outranks the time estimate for proteins. |
+| Temperatures | Shown in the preferred unit (°F or °C, part of the units preference), original kept and reachable; "240C/fan 220C/gas 9" forms parsed. |
+| Sub-recipes on one page | A web page or book spread that carries several components is offered as a split into linked recipes at import, always user-confirmed; the parent inlines them at cook time and each is searchable on its own. |
 
 ### 5.2 Still needed from you
 

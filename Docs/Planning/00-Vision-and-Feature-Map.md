@@ -43,7 +43,7 @@ Legend for *Source*: **P** = in your proposal, **M** = market parity (competitor
 | Single page scan with quality gate | P | 2 | VisionKit document camera, Vision `RecognizeDocumentsRequest`, `DetectLensSmudgeRequest`, sharpness check. |
 | Structured OCR review (assign blocks: title, ingredients, steps, headnote) | M (Mela), P | 2 | Apple Pencil lasso on iPad; tap-to-assign on iPhone. Forced for the first recipe from each book and for new page layouts; afterwards only when confidence is low (C). |
 | Capture a book's Sources page into the supplier directory | C | 2 | Name, phone, website, what they carry; linked to the book. |
-| Sub-recipe detection ("see page 84") and linking | P | 2 | Regex plus model; separate record, inlined at cook time. |
+| Sub-recipe detection ("see page 84") and linking | P | 2 | Regex plus model; separate record, inlined at cook time. Also offered when one page's ingredient and step groups form components (a main plus its pickles); user-confirmed split (C). |
 | ISBN scan → book metadata and cover | P | 2 | VisionKit barcode scanner; Open Library (keyless) with Google Books fallback. |
 | Whole-book ingestion session with index-derived punchlist | P | 2 | The flagship capture flow. Background OCR queue; completeness tracking. |
 | Multi-page recipe stitching | N | 2 | Cookbook recipes routinely span two pages; the session must merge them. |
@@ -73,7 +73,7 @@ Legend for *Source*: **P** = in your proposal, **M** = market parity (competitor
 | Version history with cook notes per version | P | 3 | |
 | "Never cooked" state, cook count, last cooked, where cooked | P | 3 | Location via CoreLocation at cook time (city-level). |
 | Learned actual times refine stated times | P | 3 | |
-| Task annotation: active vs passive time, hold windows, dependencies | N | 5 | The data the scheduler needs. Model-assisted, confirmed by you once per recipe. |
+| Task annotation: active vs passive time, hold windows, dependencies | N | 5 | The data the scheduler needs. Steps stay as written; each yields one or more tasks (preheat as a lead task, "meanwhile" as a parallel hint, "stirring constantly" as locked attention, component membership, per-kg formula durations). Phrase rules first, model-assisted for the rest, confirmed by you once per recipe (C). |
 | Technique glossary and inline explanations | N | 7 | "What does *monter au beurre* mean?" without leaving cook mode. |
 
 ### 4.3 Browse and search
@@ -112,7 +112,8 @@ Legend for *Source*: **P** = in your proposal, **M** = market parity (competitor
 | Never-cooked and complexity-load warnings | P | 4 | |
 | Sub-recipes auto-added | P | 4 | |
 | Menu-wide scaling to guest count | P | 4 | |
-| Doneness targets → pull temperatures with carryover and rest | P | 4 | Per protein and cut; USDA minimums enforced. |
+| Doneness targets → pull temperatures with carryover and rest | P | 4 | Per protein and cut; USDA minimums enforced. Weight and other step inputs collected here for formula durations (C). |
+| Temperature unit preference (°F / °C) with originals kept | C | 1 | Part of the units preference; detail and cook-mode pills convert, oven forms like "fan 220C/gas 9" parsed. |
 | Conversational menu builder | P | 6 | Tool-calling over your library; swappable model (on-device, Private Cloud Compute, Claude). |
 | Pairings on the menu: per course, a wine or drink plus a non-alcoholic option, picked from the cellar or typed | N, C | 4 | Manual in Phase 4; model-suggested pairings in Phase 6. "To buy" bottles flow to the shopping list. |
 | Late swap after Finalize with a preview of the schedule diff | C | 5 | Needs the scheduler; before Phase 5 a swap only regenerates the shopping list. |
