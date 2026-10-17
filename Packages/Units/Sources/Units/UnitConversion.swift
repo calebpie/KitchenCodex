@@ -114,24 +114,37 @@ extension Quantity {
     /// Quantities without a unit, counts and informal units come back unchanged. The result is
     /// exact; call ``friendlyRounded()`` afterwards to snap the value to measurable fractions.
     ///
-    /// Metric: millilitres and grams, switching to litres and kilograms at 1000.
+    /// Metric: millilitres and grams, switching to litres and kilograms at 1000. Teaspoons and
+    /// tablespoons stay spoons in a metric kitchen (every kitchen has them) until they add up to
+    /// more than half a cup (8 tbsp), so 1 tbsp stays 1 tbsp while 12 tbsp becomes 177 mL.
     ///
     /// US volume: teaspoons below 1 tbsp, tablespoons below ¼ cup, cups below 2 quarts, then
-    /// quarts and gallons. A unit is only chosen when the value reads cleanly in it (whole
-    /// teaspoons up to 8, tablespoons in halves up to 16, cups in quarters or thirds, quarts and
-    /// gallons in halves), so 5 tsp stays 5 tsp and 6 tbsp stays 6 tbsp while 48 tsp becomes
-    /// 1 cup. When no unit reads cleanly the largest unit that fits is used and friendly rounding
-    /// does the rest, so 1.1 cups stays in cups rather than becoming 17.6 tbsp.
+    /// quarts and gallons. A unit is chosen when the value reads cleanly in it, exactly or within
+    /// 5 percent of its clean grid (whole teaspoons up to 8, tablespoons in halves up to 16, cups
+    /// in quarters or thirds, quarts and gallons in halves), so 5 tsp stays 5 tsp, 6 tbsp stays
+    /// 6 tbsp and 9 tbsp stays 9 tbsp (½ cup would be 11 percent short), while 48 tsp becomes
+    /// 1 cup and ⅓ cup × 1¼ (5/12 cup) becomes 6⅔ tbsp for ``friendlyRounded()`` to read as 6½ tbsp.
+    /// When no unit reads cleanly the largest unit that fits is used and friendly rounding does
+    /// the rest, so 1.1 cups stays in cups rather than becoming 17.6 tbsp.
     ///
-    /// US mass: ounces, or pounds when the amount is at least a pound and a multiple of ¼ lb.
+    /// US mass: ounces, or pounds when the amount is at least a pound and within 5 percent of a
+    /// quarter pound (1 kg reads as 2¼ lb).
     public func displayed(in system: MeasurementSystem) -> Quantity {
         guard let unit, unit.isConvertible else { return self }
-        let candidates = CookingUnit.displayCandidates(dimension: unit.dimension, system: system)
+        if system == .metric, unit.isSpoon, let inTablespoons = converted(to: .tablespoon),
+           inTablespoons.value.magnitude <= CookingUnit.spoonCeilingInTablespoons {
+            return displayed(among: CookingUnit.spoonCandidates, system: .us)
+        }
+        return displayed(among: CookingUnit.displayCandidates(dimension: unit.dimension, system: system), system: system)
+    }
+
+    private func displayed(among candidates: [CookingUnit.DisplayCandidate], system: MeasurementSystem) -> Quantity {
+        guard let unit else { return self }
         let converted = candidates.compactMap { candidate -> (unit: CookingUnit, value: Rational, threshold: Rational, clean: Bool)? in
             guard let factor = unit.conversionFactor(to: candidate.unit) else { return nil }
             let v = value * factor
             let withinCeiling = candidate.ceiling.map { v.magnitude <= $0 } ?? true
-            let onGrid = candidate.cleanSteps.isEmpty || candidate.cleanSteps.contains { v.magnitude.isMultiple(of: $0) }
+            let onGrid = candidate.cleanSteps.isEmpty || FriendlyRounding.isClose(v.magnitude, toGridOf: candidate.cleanSteps)
             return (candidate.unit, v, candidate.threshold, withinCeiling && onGrid)
         }
         let fitting = converted.filter { $0.value.magnitude >= $0.threshold }
@@ -155,6 +168,17 @@ extension CookingUnit {
         var ceiling: Rational? = nil
         /// Steps a value must be a multiple of to read cleanly; empty means any value is fine.
         var cleanSteps: [Rational]
+    }
+
+    /// Teaspoons and tablespoons, which every kitchen has whatever its system.
+    public var isSpoon: Bool { self == .teaspoon || self == .tablespoon }
+
+    /// Spoons displayed in metric stay spoons up to this many tablespoons (half a cup).
+    static let spoonCeilingInTablespoons = Rational(8)
+
+    /// The spoon candidates used when a spoon amount is shown in a metric kitchen.
+    static var spoonCandidates: [DisplayCandidate] {
+        displayCandidates(dimension: .volume, system: .us).filter { $0.unit.isSpoon }
     }
 
     /// Display units from largest to smallest.
@@ -186,5 +210,24 @@ extension CookingUnit {
         case (.count, _), (.informal, _):
             []
         }
+    }
+}
+
+extension MeasurementSystem {
+    /// The system most of a recipe's measured ingredients are written in, or nil when none of them
+    /// belongs to one. Spoons, counts and informal units are neutral: a metric recipe still says
+    /// "1 tsp salt". Ties go to US.
+    public static func dominant(in units: some Sequence<CookingUnit?>) -> MeasurementSystem? {
+        var us = 0
+        var metric = 0
+        for case let unit? in units where !unit.isSpoon {
+            switch unit.system {
+            case .us?: us += 1
+            case .metric?: metric += 1
+            case nil: break
+            }
+        }
+        if us == 0, metric == 0 { return nil }
+        return metric > us ? .metric : .us
     }
 }

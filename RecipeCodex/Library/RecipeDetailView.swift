@@ -225,8 +225,8 @@ struct RecipeDetailView: View {
     }
 
     private func hasMeasuredIngredients(_ version: RecipeVersion) -> Bool {
-        // Spoons count: they become milliliters in metric once they add up.
-        version.sortedIngredients.contains { $0.cookingUnit?.system != nil || $0.cookingUnit == .teaspoon || $0.cookingUnit == .tablespoon }
+        // Spoons count: they become millilitres in metric once they add up past half a cup.
+        version.sortedIngredients.contains { $0.cookingUnit?.isConvertible == true }
     }
 
     // MARK: - Content
@@ -345,9 +345,16 @@ private struct IngredientLine: View {
         .animation(.default, value: amount)
     }
 
+    /// Scaled exactly, then re-expressed in the chosen system, then rounded to what a cook can
+    /// measure. Until the cook taps US or Metric the amount stays as written: no conversion, and a
+    /// unit change only when scaling makes the written unit awkward (¼ cup × 1.5 is 6 tbsp).
     private var amount: String? {
         guard let quantity = ingredient.quantity, quantity.unit != .toTaste else { return nil }
-        return quantity.friendly(scaledBy: factor, in: system).formatted()
+        var shown = quantity.scaled(by: factor)
+        if let system = system ?? (factor == .one ? nil : quantity.unit?.system) {
+            shown = shown.displayed(in: system)
+        }
+        return shown.friendlyRounded().formatted()
     }
 
     private var description: String {

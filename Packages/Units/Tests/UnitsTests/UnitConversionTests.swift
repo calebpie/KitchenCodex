@@ -118,7 +118,8 @@ struct DisplayUnitTests {
         (Quantity(Rational(9, 2), .teaspoon), .us, Quantity(Rational(3, 2), .tablespoon)),
         (Quantity(4, .teaspoon), .us, Quantity(4, .teaspoon)),
         (Quantity(7, .teaspoon), .us, Quantity(7, .teaspoon)),
-        (Quantity(17, .teaspoon), .us, Quantity(Rational(17, 48), .cup)),
+        // 17 tsp is within 5 percent of 5½ tbsp, so tablespoons win over 17/48 cup.
+        (Quantity(17, .teaspoon), .us, Quantity(Rational(17, 3), .tablespoon)),
         (Quantity(Rational(53, 10), .teaspoon), .us, Quantity(Rational(53, 30), .tablespoon)),
         (Quantity(15, .tablespoon), .us, Quantity(15, .tablespoon)),
         (Quantity(19, .tablespoon), .us, Quantity(Rational(19, 16), .cup)),
@@ -129,7 +130,9 @@ struct DisplayUnitTests {
         (Quantity(6, .tablespoon), .us, Quantity(6, .tablespoon)),
         (Quantity(Rational(1, 8), .cup), .us, Quantity(2, .tablespoon)),
         (Quantity(Rational(3, 8), .cup), .us, Quantity(6, .tablespoon)),
-        (Quantity(Rational(11, 30), .cup), .us, Quantity(Rational(11, 30), .cup)),
+        (Quantity(Rational(11, 30), .cup), .us, Quantity(Rational(88, 15), .tablespoon)),
+        (Quantity(Rational(5, 12), .cup), .us, Quantity(Rational(20, 3), .tablespoon)),
+        (Quantity(Rational(6, 5), .cup), .us, Quantity(Rational(6, 5), .cup)),
         (Quantity(4, .cup), .us, Quantity(4, .cup)),
         (Quantity(1, .pint), .us, Quantity(2, .cup)),
         (Quantity(8, .fluidOunce), .us, Quantity(1, .cup)),
@@ -145,6 +148,13 @@ struct DisplayUnitTests {
         (Quantity(20, .ounce), .us, Quantity(Rational(5, 4), .pound)),
         (Quantity(18, .ounce), .us, Quantity(18, .ounce)),
         (Quantity(Rational(1, 2), .pound), .us, Quantity(8, .ounce)),
+        // Spoons stay spoons in metric up to half a cup, then become millilitres.
+        (Quantity(1, .tablespoon), .metric, Quantity(1, .tablespoon)),
+        (Quantity(Rational(3, 2), .teaspoon), .metric, Quantity(Rational(3, 2), .teaspoon)),
+        (Quantity(3, .teaspoon), .metric, Quantity(1, .tablespoon)),
+        (Quantity(8, .tablespoon), .metric, Quantity(8, .tablespoon)),
+        (Quantity(12, .tablespoon), .metric, Quantity(Rational(236_588 * 3, 4_000), .milliliter)),
+        (Quantity(25, .teaspoon), .metric, Quantity(Rational(236_588 * 25, 48_000), .milliliter)),
     ])
     func picksTheMostReadableUnit(input: Quantity, system: MeasurementSystem, expected: Quantity) {
         #expect(input.displayed(in: system) == expected)
@@ -155,6 +165,8 @@ struct DisplayUnitTests {
         #expect(Quantity(5, .cup).displayed(in: .metric) == Quantity(Rational(236_588 * 5, 1_000_000), .liter))
         #expect(Quantity(2, .pound).displayed(in: .metric) == Quantity(Rational(283_495 * 32, 10_000), .gram))
         #expect(Quantity(500, .gram).displayed(in: .us).unit == .ounce)
+        // 1 kg is within 5 percent of 2¼ lb, so it reads in pounds.
+        #expect(Quantity(1, .kilogram).displayed(in: .us).unit == .pound)
         #expect(Quantity(250, .milliliter).displayed(in: .us).unit == .cup)
         #expect(Quantity(15, .milliliter).displayed(in: .us).unit == .tablespoon)
         #expect(Quantity(5, .milliliter).displayed(in: .us).unit == .teaspoon)
@@ -174,7 +186,8 @@ struct DisplayUnitTests {
                 for system in MeasurementSystem.allCases {
                     let original = Quantity(value, unit)
                     let shown = original.displayed(in: system)
-                    #expect(shown.unit?.system == system)
+                    let keptSpoon = system == .metric && unit.isSpoon && shown.unit?.isSpoon == true
+                    #expect(shown.unit?.system == system || keptSpoon, "\(original) shown in \(system) as \(shown)")
                     #expect(shown.converted(to: unit) == original, "\(original) shown in \(system) as \(shown)")
                 }
             }
