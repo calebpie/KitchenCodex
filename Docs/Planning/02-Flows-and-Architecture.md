@@ -212,11 +212,14 @@ The split matters for two reasons. The Scheduler and Units packages are pure Swi
 Book (…, reviewedLayouts[]) ──< BookSection ──< BookEntry (title, page, status: listed | captured | reviewed)
 Book ──< Recipe ; Book ──< Source
 Recipe ──< RecipeVersion (current; captureConfidence, needsReview) ──< Ingredient (qty rational, unit, item, prep, optional, group)
-RecipeVersion ──< Step (text, order, annotations: active/passive min, equipment, waits, hold rule)
+RecipeVersion ──< Step (text, order, annotations: active/passive min, equipment, waits, hold rule) ──< RecipeImage (role: stepPhoto, from import, scan or your camera)
+Recipe ──< RecipeImage (role: photo | pageScan | cookPhoto | stepPhoto; step?, cookSession?; externalStorage)
 Recipe ──< RecipeLink (subRecipe, role: component | variation | reference)
 Recipe ──< Tag ; Recipe ──< CookSession (start, end, placeName, rating, notes, photos, observedYield)
 Recipe ──< SourceInfo (url, author, sourceRating, importedAt, readerSummary)
 Recipe ── NutritionEstimate (perServing, confidence, computedAt)
+Reference (title, author, kind: article | technique | chapter | clipping, capturedAt, tags[]) ──< ReferenceSection (heading, body, order) ; Reference ──< RecipeImage
+Reference ── SourceInfo (url or book + pageRange; required) ; Reference >──< Recipe (related reading) ; Book ──< Reference
 Event (date, arrival, seating: editable until status is inService; guestCount, kitchen) ──< Guest ; Event ── Menu ──< Slot ──< Candidate (recipe, servings, doneness, finalized)
 Slot ──< Pairing (role: wine | cocktail | beer | nonAlcoholic | other, text, servingNote, isSuggested, beverage?)
 Event ── ShoppingList ──< ShoppingItem (normalizedIngredient, qty, stop | source, section, checked)
@@ -228,6 +231,10 @@ UserProfile (proficiency, concurrency, units preference, voice options, kitchenT
 ```
 
 `Source` does two jobs: a supplier directory, captured from cookbook Sources pages or added by hand, and the list of stores you frequent, which the shopping list uses as stops. `BeverageItem` is the cellar and bar. A `Pairing` sits on a course slot; it can point at a bottle on hand or stay free text, and a pairing with no bottle flows to the shopping list.
+
+`Reference` holds prose that is not a recipe: a technique essay saved from the web, a cookbook's technique chapter, a clipping. It is captured by the same two pipelines as recipes (the web importer when a page carries Article rather than Recipe markup; page scan for a chapter), keeps its source, links to the recipes it informs in both directions, and is what cook-mode technique lookups consult before the model. Not in schema v1; it lands with the Phase 2 schema change (04 §5.2 decides where it shows in the library).
+
+Step photos reuse `RecipeImage`: an optional `step` relationship (inverse `Step.images`) and a `stepPhoto` role, both CloudKit-safe. A photo with a step and a cook session is yours from that cook; one with a step and no session came from the source. Added in Phase 1 slice 3, before the CloudKit schema goes to production, because web import is the first place step images appear.
 
 CloudKit rules applied: every relationship optional with inverse, no unique constraints (IDs are UUID attributes), all non-optional attributes have defaults, images in `.externalStorage`.
 

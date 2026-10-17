@@ -30,6 +30,7 @@ Goal: replaces Paprika for web and manual recipes.
 
 - Recipe, version, ingredient and step models; manual entry; structured ingredient parser.
 - Share Extension with JSON-LD parsing and on-device model fallback; in-app browser import.
+- Step photos: `RecipeImage.step` and the `stepPhoto` role; the importer downloads `HowToStep.image` and per-step photos; thumbnails on detail steps, tap to enlarge.
 - Paprika/Mela import.
 - Recipe detail with scaling, friendly rounding, unit toggle (US/metric), provenance.
 - Recipes tab with the Recipes · Books view switch (Books empty until Phase 2), filters, collections, smart collections, favorites, recents; Pantry tab shell with the Profile pane (proficiency, units, intelligence); Search tab.
@@ -44,8 +45,9 @@ Exit: you move your web recipes in and stop using the old app.
 Goal: the cookbook shelf and the whole-book flow.
 
 - ISBN scan and book metadata; Books view inside Recipes; book detail with sections and completeness; Sources page capture into Pantry → Sources.
-- Page scan with quality gate; OCR → structured recipe; review screen with region assignment (tap on iPhone, Pencil lasso on iPad); per-book layout confirmation and confidence scoring so review is forced only for the first recipe, new layouts and low-confidence results; multi-page stitching.
+- Page scan with quality gate; OCR → structured recipe; review screen with region assignment (tap on iPhone, Pencil lasso on iPad); per-book layout confirmation and confidence scoring so review is forced only for the first recipe, new layouts and low-confidence results; multi-page stitching. A "Step photo" region in review attaches a printed process photo to the adjacent step.
 - Cross-reference detection and sub-recipe linking.
+- Reference capture: an article or technique chapter saved as a `Reference` (02 §4.2) with its source, linked to recipes and its book; the importer offers it when a page has Article markup and no recipe.
 - Whole-book session: contents and index extraction → punchlist → capture loop → background queue → review queue.
 - Photo cleanup and cover selection; PDF and photo-library import through the same pipeline.
 - Measure extraction accuracy on the fixture set; iterate prompts and region heuristics until the review step averages under a minute per recipe.
@@ -56,7 +58,7 @@ Exit: one real cookbook fully captured.
 
 Goal: cooking one recipe is better in Codex than from the book.
 
-- Cook mode: step view, ingredient highlighting, tappable times → AlarmKit timers, multiple named timers, keep-awake, kitchen theme toggle; standard control sizes throughout.
+- Cook mode: step view, ingredient highlighting, tappable times → AlarmKit timers, multiple named timers, keep-awake, kitchen theme toggle; standard control sizes throughout. Step photo under the step with tap to enlarge and a "Show me" phrase; a camera button saves your own photo of the step, shown beside the source's on later cooks.
 - Now Cooking accessory; Live Activity for Dynamic Island, Lock Screen, StandBy, Watch Smart Stack.
 - Hands-free: App Shortcuts (Next, Back, Timer, What's next), Action button setup, optional in-app voice phrases; Snippets for Siri results.
 - Post-cook flow: rating, notes, photo, observed time and yield, location; cook log; "never cooked" state; learned times.
@@ -156,6 +158,7 @@ Roughly seven months part-time to the full proposal, with a usable library at si
 |---|---|---|
 | First dinner fixture | A real upcoming dinner (date, guest count, the actual menu you intend to cook) that becomes the scenario the scheduler is built and tested against in Phases 4 and 5: its recipes get step annotations first, and its timeline is the one judged against what really happened. | Name one when you have it on the calendar; needed by the start of Phase 4, not before. |
 | Pantry pane selector on iPhone | Chips under the title, or a segmented control for four panes with the rest in More (03 §7). | Chips; decide after seeing it in Phase 4. |
+| Where References live | A third view in Recipes (Recipes · Books · References), or a section inside the Books view. Search covers them either way; the choice only affects the library's top-level switch and how a scanned chapter sits next to its book. | Third view in Recipes; decide when the first article is captured in Phase 2. |
 
 ## 6. Risks to the plan
 

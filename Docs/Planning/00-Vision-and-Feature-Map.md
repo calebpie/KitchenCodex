@@ -49,7 +49,10 @@ Legend for *Source*: **P** = in your proposal, **M** = market parity (competitor
 | Multi-page recipe stitching | N | 2 | Cookbook recipes routinely span two pages; the session must merge them. |
 | Printed-photo capture and cleanup for cover image | P | 2 | Deskew, crop, auto-levels, sharpen. Honest about limits (moiré, gloss glare). |
 | Your own dish photo, optionally replacing cover | P | 3 | Taken from the post-cook flow. |
+| Your own step photos from cook mode, shown beside the source's | C | 3 | A camera button on the step saves a photo tagged to that step and cook session; the next time through, the step shows the book's or site's photo and yours side by side. Built for test-cooks before a dinner. |
 | Headnote/story captured but collapsed by default | P | 2 | |
+| Capture articles and technique chapters as References, linked to recipes and books | C | 2 | The web importer branches when a page carries Article markup instead of Recipe (ATK's macaron guide, technique essays); page scan does the same for a book's technique chapter. Shelved in the library beside Recipes and Books, searchable, with "Related reading" on recipe detail. Source URL or book is required so a market version can fall back to excerpt plus link. Cook-mode technique lookups read these first (Phase 7). |
+| Step-level photos from imports and scans | C | 1, 2 | Schema.org `HowToStep.image` and per-step photos on sites like ChefSteps are downloaded and attached to the step (schema: `RecipeImage.step`, role `stepPhoto`), landing with slice 3 of Phase 1. Page scan adds a "Step photo" region in review that attaches a printed process photo to the adjacent step (Phase 2). References carry figures the same way. |
 | Import Paprika / Mela / Crouton libraries | M | 1 | Migration is a one-time win; Paprika's `.paprikarecipes` is gzipped JSON. |
 | PDF recipe import (publisher PDFs, printed handouts) | N | 2 | Same pipeline as page scan using PDFKit page images. |
 | Screenshot and photo-library import (Instagram/TikTok screenshots) | M (ReciMe) | 2 | Same OCR pipeline. Video import deliberately out of scope. |
