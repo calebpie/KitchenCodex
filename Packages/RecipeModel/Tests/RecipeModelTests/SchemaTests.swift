@@ -84,6 +84,37 @@ struct SchemaTests {
         #expect(bottle.kitchen?.isDefault == true)
     }
 
+    /// A step photo links both ways; one from the source has no cook session. Deleting the step
+    /// deletes its photos, and deleting a photo leaves the step.
+    @Test func stepPhotoLinksBothWays() throws {
+        let container = try RecipeStore.makeContainer(inMemory: true)
+        let context = ModelContext(container)
+
+        let version = RecipeVersion()
+        let step = Step(text: "Truss the duck.", sortOrder: 0)
+        let first = RecipeImage(role: .stepPhoto, imageData: Data([0xFF, 0xD8]))
+        let second = RecipeImage(role: .stepPhoto, imageData: Data([0xFF, 0xD8, 0x01]))
+        for model in [version, step, first, second] as [any PersistentModel] { context.insert(model) }
+        version.steps = [step]
+        first.step = step
+        second.step = step
+        try context.save()
+
+        let fetched = try context.fetch(FetchDescriptor<Step>()).first
+        #expect(fetched?.images?.count == 2)
+        #expect(fetched?.images?.allSatisfy { $0.role == .stepPhoto && $0.cookSession == nil } == true)
+        #expect(first.step?.text == "Truss the duck.")
+
+        context.delete(second)
+        try context.save()
+        #expect(try count(of: Step.self, in: context) == 1)
+        #expect(step.images?.count == 1)
+
+        context.delete(step)
+        try context.save()
+        #expect(try count(of: RecipeImage.self, in: context) == 0)
+    }
+
     /// 02 §4.2: every relationship optional with an inverse, no unique constraints,
     /// defaults on non-optional attributes, images in external storage.
     @Test func followsCloudKitRules() throws {

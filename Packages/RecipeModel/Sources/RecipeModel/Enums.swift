@@ -18,6 +18,8 @@ public enum RecipeLinkRole: String, Codable, Sendable, CaseIterable {
 /// What an attached image is.
 public enum RecipeImageRole: String, Codable, Sendable, CaseIterable {
     case photo, pageScan, cookPhoto
+    /// A photo of one step. With a cook session it is the cook's own; without, it came from the source.
+    case stepPhoto
 }
 
 /// Lifecycle of a dinner.

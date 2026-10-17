@@ -110,7 +110,7 @@ extension RecipeSchemaV1 {
         public var cookMinutes: Int?
         public var totalMinutes: Int?
         public var notes: String = ""
-        /// 0…1 from the capture pipeline; nil for manual entry and web import.
+        /// 0…1 from the capture pipeline (web, scan and library imports); nil for manual entry.
         public var captureConfidence: Double?
         /// Set when capture confidence was low or the book's layout was new, until the cook reviews it.
         public var needsReview: Bool = false
@@ -164,6 +164,9 @@ extension RecipeSchemaV1 {
 
         public var version: RecipeVersion?
         @Relationship(deleteRule: .nullify, inverse: \ScheduleTask.step) public var scheduleTasks: [ScheduleTask]?
+        /// Photos of this step (role `.stepPhoto`). One with a cook session is the cook's own; one
+        /// without came from the source.
+        @Relationship(deleteRule: .cascade, inverse: \RecipeImage.step) public var images: [RecipeImage]?
 
         public init(text: String = "", sortOrder: Int = 0) {
             self.text = text
@@ -261,7 +264,7 @@ extension RecipeSchemaV1 {
         }
     }
 
-    /// A page scan, a cook photo, or an extra photo. Bytes live in external storage.
+    /// A page scan, a cook photo, a step photo, or an extra photo. Bytes live in external storage.
     @Model
     public final class RecipeImage {
         public var id: UUID = UUID()
@@ -273,6 +276,8 @@ extension RecipeSchemaV1 {
 
         public var recipe: Recipe?
         public var cookSession: CookSession?
+        /// Set for `.stepPhoto` images. Deleting the step deletes its photos; deleting a photo leaves the step.
+        public var step: Step?
 
         public init(role: RecipeImageRole = .photo, imageData: Data? = nil) {
             self.role = role
