@@ -1,0 +1,285 @@
+import Capture
+import PhotosUI
+import RecipeModel
+import SwiftData
+import SwiftUI
+import Units
+
+/// New Recipe and Edit share this form (03 §3.4). Editing saves a new version when the content changes.
+struct RecipeEditorView: View {
+    let recipe: Recipe?
+
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+
+    @State private var draft: RecipeDraft
+    @State private var photoItem: PhotosPickerItem?
+    @State private var photoPreview: UIImage?
+    @State private var isLoadingPhoto = false
+    @State private var photoFailed = false
+    @State private var isConfirmingDiscard = false
+    private let original: RecipeDraft
+
+    init(recipe: Recipe?) {
+        self.recipe = recipe
+        let draft = recipe.map(RecipeDraft.init(recipe:)) ?? RecipeDraft()
+        _draft = State(initialValue: draft)
+        original = draft
+    }
+
+    private var isEditing: Bool { recipe != nil }
+    private var hasChanges: Bool { draft != original }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                photoSection
+
+                Section {
+                    TextField("Title", text: $draft.title, axis: .vertical)
+                        .font(.headline)
+                    Picker("Course", selection: $draft.course) {
+                        Text("None").tag(String?.none)
+                        ForEach(courseOptions, id: \.self) { course in
+                            Text(course).tag(Optional(course))
+                        }
+                    }
+                }
+
+                Section("Yield") {
+                    NumberField(title: "Servings", text: $draft.servings)
+                    TextField("Yield, like “1 loaf” or “24 cookies”", text: $draft.yieldText)
+                }
+
+                Section("Time") {
+                    NumberField(title: "Prep", text: $draft.prepMinutes, unit: "min")
+                    NumberField(title: "Cook", text: $draft.cookMinutes, unit: "min")
+                    NumberField(title: "Total", text: $draft.totalMinutes, unit: "min")
+                }
+
+                Section {
+                    PlaceholderTextEditor(text: $draft.ingredientsText, placeholder: "2 cups flour\n1 1/2 tsp kosher salt\n3 large eggs\nsalt to taste")
+                        .frame(minHeight: 140)
+                        // "tsp" and "tbsp" are not typos.
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                } header: {
+                    Text("Ingredients")
+                } footer: {
+                    Text("One ingredient per line. Amounts and units are read automatically so the recipe can scale.")
+                }
+
+                if !draft.parsedIngredients.isEmpty {
+                    Section("Reads As") {
+                        ForEach(Array(draft.parsedIngredients.enumerated()), id: \.offset) { _, parsed in
+                            ParsedIngredientRow(parsed: parsed)
+                        }
+                    }
+                }
+
+                Section {
+                    PlaceholderTextEditor(text: $draft.stepsText, placeholder: "Whisk the dry ingredients.\n\nBeat in the eggs one at a time.")
+                        .frame(minHeight: 180)
+                } header: {
+                    Text("Steps")
+                } footer: {
+                    Text("One step per paragraph. Leave a blank line between steps; numbering is added for you.")
+                }
+
+                Section("Notes") {
+                    PlaceholderTextEditor(text: $draft.notes, placeholder: "Substitutions, timing, what to serve it with")
+                        .frame(minHeight: 100)
+                }
+
+                if let recipe {
+                    Section {
+                        TextField("What changed? (optional)", text: $draft.changeSummary)
+                    } header: {
+                        Text("Version")
+                    } footer: {
+                        Text("Saving a change to the yield, times, ingredients, steps or notes creates version \(recipe.nextVersionNumber). Earlier versions are kept.")
+                    }
+                }
+            }
+            .scrollDismissesKeyboard(.interactively)
+            .navigationTitle(isEditing ? "Edit Recipe" : "New Recipe")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(role: .cancel) {
+                        if hasChanges { isConfirmingDiscard = true } else { dismiss() }
+                    }
+                    .confirmationDialog("Discard changes?", isPresented: $isConfirmingDiscard, titleVisibility: .visible) {
+                        Button("Discard Changes", role: .destructive) { dismiss() }
+                        Button("Keep Editing", role: .cancel) {}
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save", role: .confirm) { save() }
+                        .disabled(!draft.canSave || (isEditing && !hasChanges) || isLoadingPhoto)
+                }
+            }
+            .interactiveDismissDisabled(hasChanges)
+            .onChange(of: photoItem) { _, item in
+                guard let item else { return }
+                Task { await loadPhoto(item) }
+            }
+            .task {
+                if let data = recipe?.coverImageData {
+                    photoPreview = await ImageProcessing.thumbnail(from: data, maxPixelSize: 600)
+                }
+            }
+        }
+    }
+
+    // MARK: - Photo
+
+    private var photoSection: some View {
+        Section {
+            if let photoPreview {
+                Image(uiImage: photoPreview)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 200)
+                    .clipShape(.rect(cornerRadius: 12))
+                    .listRowInsets(EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 8))
+                    .accessibilityLabel("Cover photo")
+            }
+            // PhotosPicker's label closure is nonisolated, so read the state here.
+            let title = photoPreview == nil ? "Add Photo" : "Change Photo"
+            let isLoading = isLoadingPhoto
+            PhotosPicker(selection: $photoItem, matching: .images, photoLibrary: .shared()) {
+                HStack {
+                    Label(title, systemImage: "photo")
+                    if isLoading {
+                        Spacer()
+                        ProgressView()
+                    }
+                }
+            }
+            if photoPreview != nil {
+                Button("Remove Photo", systemImage: "trash", role: .destructive) {
+                    photoPreview = nil
+                    photoItem = nil
+                    draft.photo = recipe?.coverImageData == nil ? .unchanged : .removed
+                }
+            }
+        } footer: {
+            if photoFailed {
+                Text("That photo couldn't be read. Try another.")
+            }
+        }
+    }
+
+    private func loadPhoto(_ item: PhotosPickerItem) async {
+        isLoadingPhoto = true
+        photoFailed = false
+        defer { isLoadingPhoto = false }
+        guard let data = try? await item.loadTransferable(type: Data.self),
+              let photo = await ImageProcessing.jpeg(from: data, maxPixelSize: 2_400, quality: 0.85),
+              let cover = await ImageProcessing.jpeg(from: data, maxPixelSize: 900, quality: 0.8) else {
+            photoFailed = true
+            return
+        }
+        draft.photo = .replaced(photo: photo, cover: cover)
+        photoPreview = await ImageProcessing.thumbnail(from: cover, maxPixelSize: 600)
+    }
+
+    // MARK: - Saving
+
+    private var courseOptions: [String] {
+        var options = RecipeCourse.standard
+        if let course = draft.course, !options.contains(course) { options.append(course) }
+        return options
+    }
+
+    private func save() {
+        draft.save(to: recipe, comparedWith: original, in: modelContext)
+        dismiss()
+    }
+}
+
+/// A labelled whole-number field. Tapping anywhere in the row focuses it.
+private struct NumberField: View {
+    let title: String
+    @Binding var text: String
+    var unit: String?
+
+    @FocusState private var isFocused: Bool
+
+    var body: some View {
+        LabeledContent(title) {
+            HStack(spacing: 4) {
+                TextField(title, text: $text, prompt: Text("–"))
+                    .keyboardType(.numberPad)
+                    .multilineTextAlignment(.trailing)
+                    .focused($isFocused)
+                    .onChange(of: text) { _, new in
+                        let digits = new.filter(\.isNumber)
+                        if digits != new { text = digits }
+                    }
+                if let unit {
+                    Text(unit).foregroundStyle(.secondary)
+                }
+            }
+        }
+        .contentShape(.rect)
+        .onTapGesture { isFocused = true }
+    }
+}
+
+/// `TextEditor` with a placeholder, for the multi-line fields.
+private struct PlaceholderTextEditor: View {
+    @Binding var text: String
+    let placeholder: String
+
+    var body: some View {
+        TextEditor(text: $text)
+            .overlay(alignment: .topLeading) {
+                if text.isEmpty {
+                    Text(placeholder)
+                        .foregroundStyle(.tertiary)
+                        .padding(.top, 8)
+                        .padding(.leading, 5)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
+            }
+            .accessibilityHint(placeholder)
+    }
+}
+
+/// How the parser read one line: amount and unit in bold, then the item and preparation.
+private struct ParsedIngredientRow: View {
+    let parsed: ParsedIngredient
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(amount)
+                .font(.subheadline.weight(.semibold))
+                .monospacedDigit()
+                .frame(minWidth: 72, alignment: .leading)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(parsed.item)
+                if let detail {
+                    Text(detail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .font(.subheadline)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var amount: String {
+        guard let quantity = parsed.quantity else { return parsed.unit == .toTaste ? "to taste" : "—" }
+        return Quantity(quantity, parsed.unit).formatted()
+    }
+
+    private var detail: String? {
+        let parts = [parsed.preparation, parsed.isOptional ? "optional" : nil].compactMap(\.self)
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+}

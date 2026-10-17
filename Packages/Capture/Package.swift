@@ -9,18 +9,23 @@ let package = Package(
     ],
     dependencies: [
         .package(path: "../Intelligence"),
+        .package(path: "../Units"),
     ],
     targets: [
         .target(
             name: "Capture",
             dependencies: [
                 .product(name: "Intelligence", package: "Intelligence"),
+                .product(name: "Units", package: "Units"),
             ],
             swiftSettings: [.enableUpcomingFeature("ApproachableConcurrency")]
         ),
         .testTarget(
             name: "CaptureTests",
-            dependencies: ["Capture"],
+            dependencies: [
+                "Capture",
+                .product(name: "Units", package: "Units"),
+            ],
             swiftSettings: [.enableUpcomingFeature("ApproachableConcurrency")]
         ),
     ],
