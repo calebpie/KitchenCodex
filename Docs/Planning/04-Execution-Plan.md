@@ -15,7 +15,7 @@
 
 Goal: a project that builds, syncs, and tests, with the design system decided.
 
-- Enroll in the Apple Developer Program; create the App ID, iCloud container, App Group, AlarmKit and App Intents capabilities.
+- Apple Developer Program: enrolled (individual team `BXSW6MRVTR`, set in the project Oct 17, 2026). Still to do: register the App ID and App Group, create the iCloud container, add the AlarmKit and App Intents capabilities.
 - Create the Xcode 27 workspace: app target, Share Extension, Widget/Live Activity extension, and the Swift packages listed in doc 02 (RecipeModel, Units, Capture, Intelligence, KnowledgeBase, Scheduler, Nutrition).
 - Initialize git; push to a private GitHub repository; install the Claude GitHub App so cloud sessions can run the pure-Swift packages later.
 - SwiftData schema v1 with CloudKit rules enforced by a test. Prove sync between iPhone and iPad with a throwaway record.
@@ -32,7 +32,7 @@ Goal: replaces Paprika for web and manual recipes.
 - Share Extension with JSON-LD parsing and on-device model fallback; in-app browser import.
 - Paprika/Mela import.
 - Recipe detail with scaling, friendly rounding, unit toggle (US/metric), provenance.
-- Recipes tab with filters, collections, smart collections, favorites, recents; Search tab.
+- Recipes tab with the Recipes · Books view switch (Books empty until Phase 2), filters, collections, smart collections, favorites, recents; Pantry tab shell with the Profile pane (proficiency, units, intelligence); Search tab.
 - PDF, text and Markdown export.
 - iPad: adaptable tab bar/sidebar, three-column split, keyboard shortcuts, drag and drop into collections.
 - Spotlight indexing of recipes.
@@ -43,8 +43,8 @@ Exit: you move your web recipes in and stop using the old app.
 
 Goal: the cookbook shelf and the whole-book flow.
 
-- ISBN scan and book metadata; Books tab; book detail with sections and completeness.
-- Page scan with quality gate; OCR → structured recipe; review screen with region assignment (tap on iPhone, Pencil lasso on iPad); multi-page stitching.
+- ISBN scan and book metadata; Books view inside Recipes; book detail with sections and completeness; Sources page capture into Pantry → Sources.
+- Page scan with quality gate; OCR → structured recipe; review screen with region assignment (tap on iPhone, Pencil lasso on iPad); per-book layout confirmation and confidence scoring so review is forced only for the first recipe, new layouts and low-confidence results; multi-page stitching.
 - Cross-reference detection and sub-recipe linking.
 - Whole-book session: contents and index extraction → punchlist → capture loop → background queue → review queue.
 - Photo cleanup and cover selection; PDF and photo-library import through the same pipeline.
@@ -56,7 +56,7 @@ Exit: one real cookbook fully captured.
 
 Goal: cooking one recipe is better in Codex than from the book.
 
-- Cook mode: step view, ingredient highlighting, tappable times → AlarmKit timers, multiple named timers, keep-awake, knuckle mode.
+- Cook mode: step view, ingredient highlighting, tappable times → AlarmKit timers, multiple named timers, keep-awake, kitchen theme toggle; standard control sizes throughout.
 - Now Cooking accessory; Live Activity for Dynamic Island, Lock Screen, StandBy, Watch Smart Stack.
 - Hands-free: App Shortcuts (Next, Back, Timer, What's next), Action button setup, optional in-app voice phrases; Snippets for Siri results.
 - Post-cook flow: rating, notes, photo, observed time and yield, location; cook log; "never cooked" state; learned times.
@@ -69,8 +69,8 @@ Exit: a weeknight dinner cooked entirely from cook mode, hands-free at least onc
 
 Goal: a dinner party planned and shopped in the app, without the scheduler yet.
 
-- Kitchen: tools, multiple kitchens, pantry, proficiency; guest profiles.
-- Events; menu builder with slots, candidates, finalize; sub-recipe auto-add; balance panel and inline warnings; menu-wide scaling; doneness targets with temperature table.
+- Pantry tab: pantry, tools, sources (frequented stores as shopping stops), cellar and bar, multiple kitchens, profile; guest profiles under Plan.
+- Events; menu builder with slots, candidates, finalize; sub-recipe auto-add; balance panel and inline warnings; menu-wide scaling; doneness targets with temperature table; pairings per course (manual, from the cellar or typed) with "to buy" bottles on the shopping list.
 - Shopping list: aggregation, normalization, pantry subtraction, sections, stops, check-off sync, share to text and Reminders.
 - Menu card PDF; test-cook scheduling; calendar entries via EventKit.
 
@@ -82,7 +82,7 @@ Goal: the feature nobody else has.
 
 - Step annotation UX (active/passive, waits, equipment, hold rule) with model-proposed defaults and the component knowledge base.
 - Scheduler engine: task graph, constraints, backward list scheduling, host-presence objective, explanations. Property tests and scenario fixtures built from your real menus.
-- Timeline editor across days with drag, snap, warnings, overload bars, reserve tasks, daily checklist on Cook.
+- Timeline editor across days with drag, snap, warnings, overload bars, reserve tasks, daily checklist on Cook; schedule diff preview for replans and late menu swaps.
 - Service mode: Now/Next/Watch lanes, lateness tracking, replan, proactive checks, temperature guidance from readings, food-safety minimums, pot-size suggestions, plating and hold reminders, debrief.
 - Live Activity for service mode.
 
@@ -128,16 +128,32 @@ Roughly seven months part-time to the full proposal, with a usable library at si
 - **Dogfood events.** Phases 4, 5 and 6 each end with a real dinner. The debrief feeds the backlog.
 - **Cloud sessions where they fit.** Units, Scheduler, KnowledgeBase and Nutrition are pure Swift and testable on Linux; after Phase 0 pushes to GitHub, their test-heavy work can run in Claude Code cloud sessions in parallel with local UI work. Anything touching Xcode, the simulator or devices stays local.
 
-## 5. Decisions needed from you
+## 5. Decisions
+
+### 5.1 Decided (Oct 17, 2026)
+
+| Decision | Outcome |
+|---|---|
+| Minimum OS | iOS 27 only. |
+| Developer Program | Enrolled; individual team `BXSW6MRVTR`, set as the development team for all three targets. |
+| Tabs | Recipes · Pantry · Plan · Cook · Search, in the order the work happens. Books is a view switch inside Recipes. Pantry replaces the profile button and adds Sources and Cellar & Bar. Top toolbars are contextual: Add (+) and More (⋯). |
+| Cook-mode controls | Standard HIG sizes with generous spacing; no enlarged "knuckle mode." |
+| Scan review | Forced for the first recipe from each book and for any new page layout; afterwards surfaced only on low confidence. |
+| Late menu swaps | Allowed after Finalize, with a preview of the schedule diff. |
+| Kitchen theme | A toggle (cook mode More and Pantry → Profile), never automatic. |
+| Wine pairings | Live on the menu, per course, with a non-alcoholic alternative; bottles from Cellar & Bar. |
+
+### 5.2 Still needed from you
 
 | Decision | Options | Recommendation |
 |---|---|---|
-| Minimum OS | iOS 27 only vs iOS 26 compatibility | iOS 27 only. You run it, and it unlocks image input, Dynamic Profiles, server models and the new App Intents APIs. |
-| Heavy-reasoning model | Apple cloud (free with limits), Claude (billed, strongest), on-device only | Build the abstraction; default to Apple cloud once enrolled, with Claude as a setting. |
-| Developer Program | Enroll now vs later | Now; CloudKit sync is Phase 0. |
-| Capture device | iPhone camera vs iPad | iPhone 17 Pro for capture quality; iPad for the review and session UI. Support both. |
-| Name and bundle ID | Recipe Codex vs other | Keep Recipe Codex; register the bundle ID in Phase 0. |
-| Scope of first dinner test | Which event becomes the Phase 4/5 fixture | Pick one on the calendar now; the scheduler is built against it. |
+| Heavy-reasoning model | Apple cloud (free with limits), Claude (billed, strongest), on-device only | Build the abstraction; default to Apple cloud, with Claude as a setting. Can wait until Phase 6; `ModelTier` already has all three. |
+| Bundle ID | Keep `com.calebpietrafesa.RecipeCodex` (and `iCloud.com.calebpietrafesa.RecipeCodex`) vs another | Keep it; it only has to be registered once, before the first device build. |
+| Portal registration | Let Xcode's automatic signing create the App ID, App Group and iCloud container, or create them yourself in the developer portal | Automatic signing with your Apple account signed in to Xcode; one device build does it. Can be run from here on your say-so. |
+| GitHub remote | Private repository now vs later | Now; cloud sessions and backups both need it. Needs your GitHub login (`gh auth login`) or a repository you create and share the URL of. |
+| Capture device | iPhone camera vs iPad | iPhone 17 Pro for capture quality; iPad for the review and session UI. Support both. Assumed unless you object. |
+| First dinner fixture | Which event becomes the Phase 4/5 scheduler fixture | Pick one on the calendar; the scheduler is built against it. Needed by Phase 4. |
+| Now Cooking accessory on iPad | Accessory above the tab bar vs the dedicated cook-mode window only | Window only; revisit after Phase 3 (03 §7). |
 
 ## 6. Risks to the plan
 

@@ -15,7 +15,7 @@ Recipe Codex's wedge is the gap between those two categories:
 1. **Whole-cookbook capture.** Scan an ISBN, scan the index, then photograph pages; the app builds the book's table of contents and tracks which recipes are captured. Mela and Crouton scan a page; nobody owns the book.
 2. **Menu as the unit.** Events, guests, dietary needs, course slots with candidates, sub-recipe auto-inclusion, balance checks, and scaling across the whole menu.
 3. **The workback schedule.** A dependency-aware, resource-aware plan across days that knows a 24-hour fridge rest can't happen at noon the day of, that pasta can't be cooked an hour early, and that the kitchen should be clean before the doorbell rings.
-4. **Service mode.** Cook mode that spans recipes, tracks lateness against guest arrival, manages timers and temperature checks, and is operable by voice, Action button, or a knuckle.
+4. **Service mode.** Cook mode that spans recipes, tracks lateness against guest arrival, manages timers and temperature checks, and is operable by voice, Action button, or a knuckle on standard-size controls.
 5. **Host-centric optimization.** The schedule's objective is not just "everything lands together," it is "the host spends as little time in the kitchen as possible after guests arrive." This comes straight from your hosting philosophy and is the design principle the whole app inherits.
 
 ## 3. Design principles (derived from how you host)
@@ -31,7 +31,7 @@ Recipe Codex's wedge is the gap between those two categories:
 
 ## 4. Feature map
 
-Legend for *Source*: **P** = in your proposal, **M** = market parity (competitors do it, we must too), **N** = new proposal from this review. *Phase* refers to the delivery plan in [04-Execution-Plan](04-Execution-Plan.md).
+Legend for *Source*: **P** = in your proposal, **M** = market parity (competitors do it, we must too), **N** = new proposal from this review, **C** = added in your review of these docs (Oct 17, 2026). *Phase* refers to the delivery plan in [04-Execution-Plan](04-Execution-Plan.md).
 
 ### 4.1 Capture
 
@@ -41,7 +41,8 @@ Legend for *Source*: **P** = in your proposal, **M** = market parity (competitor
 | In-app browser import with your own logins | M (Mela) | 1 | Needed for paywalled sites whose JSON-LD is behind auth. |
 | Manual step-by-step entry, blanks allowed | P | 1 | Unknown fields auto-fill from cook history (actual time, actual yield). |
 | Single page scan with quality gate | P | 2 | VisionKit document camera, Vision `RecognizeDocumentsRequest`, `DetectLensSmudgeRequest`, sharpness check. |
-| Structured OCR review (assign blocks: title, ingredients, steps, headnote) | M (Mela), P | 2 | Apple Pencil lasso on iPad; tap-to-assign on iPhone. |
+| Structured OCR review (assign blocks: title, ingredients, steps, headnote) | M (Mela), P | 2 | Apple Pencil lasso on iPad; tap-to-assign on iPhone. Forced for the first recipe from each book and for new page layouts; afterwards only when confidence is low (C). |
+| Capture a book's Sources page into the supplier directory | C | 2 | Name, phone, website, what they carry; linked to the book. |
 | Sub-recipe detection ("see page 84") and linking | P | 2 | Regex plus model; separate record, inlined at cook time. |
 | ISBN scan → book metadata and cover | P | 2 | VisionKit barcode scanner; Open Library (keyless) with Google Books fallback. |
 | Whole-book ingestion session with index-derived punchlist | P | 2 | The flagship capture flow. Background OCR queue; completeness tracking. |
@@ -77,7 +78,7 @@ Legend for *Source*: **P** = in your proposal, **M** = market parity (competitor
 | Feature | Source | Phase | Notes |
 |---|---|---|---|
 | Recipe library with filters (metadata, tags, book, cooked state) | P | 1 | |
-| Cookbook shelf with sort/filter by cuisine, author | P | 2 | |
+| Cookbook shelf as a Books view inside the Recipes tab, sort/filter by cuisine, author | P, C | 2 | View switch Recipes · Books; no separate tab (C). |
 | Book detail: by section or index, completeness callouts | P | 2 | |
 | Keyword search in a single place (search tab) | P | 1 | HIG: search as a dedicated tab on iPhone. |
 | Natural-language search over cook history ("that veg dish I made in Seattle") | P | 6 | Model turns the phrase into a structured query; semantic ranking. |
@@ -85,7 +86,7 @@ Legend for *Source*: **P** = in your proposal, **M** = market parity (competitor
 | Collections (manual) and Smart Collections (saved filters) | M | 1 | Cheap and heavily used in every competitor. |
 | Favorites, recently viewed, recently cooked | M | 1 | |
 
-### 4.4 Kitchen profile
+### 4.4 Pantry (kitchen profile)
 
 | Feature | Source | Phase | Notes |
 |---|---|---|---|
@@ -93,7 +94,10 @@ Legend for *Source*: **P** = in your proposal, **M** = market parity (competitor
 | Tools library (ovens and count, burners, mixers, circulator, etc.) | P | 4 | Also informs scheduler resource limits. |
 | Proficiency setting drives concurrency and technique warnings | P | 4 | |
 | Multiple kitchens (home, a rental) with their own tools | N | 4 | Solves your "Airbnb kitchen" case directly: plan against the kitchen you'll be in. |
-| Guest profiles: restrictions, dislikes, drink preferences, history | N | 4 | Remembered across events. |
+| Guest profiles: restrictions, dislikes, drink preferences, history | N | 4 | Remembered across events; live under Plan. |
+| Sources: stores you frequent and specialty suppliers for equipment, food and drink; frequented stores become shopping stops | C | 4 | Added by hand, from a URL, or from a cookbook's Sources page. |
+| Cellar & Bar inventory (wine, spirits, mixers) with bottle counts and open state | C | 4 | Pairings read from it; missing bottles go to the shopping list. |
+| Profile and settings live in the Pantry tab, not behind a profile button | C | 1 | Proficiency, units, voice, kitchen theme toggle, intelligence, export. |
 
 ### 4.5 Events and menus
 
@@ -107,7 +111,8 @@ Legend for *Source*: **P** = in your proposal, **M** = market parity (competitor
 | Menu-wide scaling to guest count | P | 4 | |
 | Doneness targets → pull temperatures with carryover and rest | P | 4 | Per protein and cut; USDA minimums enforced. |
 | Conversational menu builder | P | 6 | Tool-calling over your library; swappable model (on-device, Private Cloud Compute, Claude). |
-| Wine and drink pairing notes, including a non-alcoholic option per course | N | 6 | Directly from your hosting notes. |
+| Pairings on the menu: per course, a wine or drink plus a non-alcoholic option, picked from the cellar or typed | N, C | 4 | Manual in Phase 4; model-suggested pairings in Phase 6. "To buy" bottles flow to the shopping list. |
+| Late swap after Finalize with a preview of the schedule diff | C | 5 | Needs the scheduler; before Phase 5 a swap only regenerates the shopping list. |
 | Printable menu card and guest-facing menu share | N | 4 | PDF; nice for the table, and it needs no app. |
 | Post-event debrief: ratings, notes, what to change | N | 5 | Feeds recipe versions and guest profiles. |
 | Test-cook scheduling for untested recipes | N | 4 | Puts a rehearsal on the calendar before the event. |
@@ -135,7 +140,7 @@ Legend for *Source*: **P** = in your proposal, **M** = market parity (competitor
 | Single-recipe cook mode with step view, ingredient highlighting | P, M | 3 | |
 | Timers from highlighted times; multiple named timers | P, M | 3 | AlarmKit so they alert through Silent/Focus. |
 | Live Activity: Dynamic Island, Lock Screen, StandBy, Apple Watch Smart Stack | N | 3 | Free Watch presence without a Watch app. |
-| Hands-free: Siri, Action button, big-target "knuckle mode", voice phrases | P | 3 | |
+| Hands-free: Siri, Action button, voice phrases, swipe anywhere; standard-size controls with wide spacing (no enlarged-button mode) | P, C | 3 | |
 | Service mode across recipes with lateness tracking and replan | P | 5 | |
 | Proactive checks ("roast should be near 120°F, check it") | P | 5 | |
 | Temperature guidance from your readings (time-to-target estimate) | P | 5 | Physics-lite model fit to the readings you enter. |
@@ -144,7 +149,7 @@ Legend for *Source*: **P** = in your proposal, **M** = market parity (competitor
 | Bluetooth probe integration (Combustion Inc., open MIT SDK) | N | 7 | Live temps and their prediction engine; MEATER has no public API. |
 | Reserve tasks for helpers | N | 5 | Simple, safe tasks pre-selected for a guest who wants to help. |
 | iPad as kitchen display, iPhone as remote | N | 7 | Local network link; same session on both. |
-| Keep screen awake in cook mode; high-contrast kitchen theme | M | 3 | |
+| Keep screen awake in cook mode; high-contrast kitchen theme as a toggle | M, C | 3 | |
 
 ### 4.8 Sharing, sync, platforms
 

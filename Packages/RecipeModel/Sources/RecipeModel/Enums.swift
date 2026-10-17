@@ -39,3 +39,29 @@ public enum Proficiency: String, Codable, Sendable, CaseIterable {
 public enum UnitPreference: String, Codable, Sendable, CaseIterable {
     case us, metric
 }
+
+/// What kind of supplier a `Source` is (03 §3.17 Sources pane).
+public enum SourceKind: String, Codable, Sendable, CaseIterable {
+    /// A shop you can walk into; a frequented store becomes a shopping stop.
+    case store
+    /// Ships to you.
+    case online
+    /// A farm, dairy, fishmonger or maker that sells direct.
+    case producer
+    case other
+}
+
+/// What a `Source` carries, as cookbooks group their Sources pages. A source may carry several.
+public enum SourceCategory: String, Codable, Sendable, CaseIterable {
+    case equipment, food, drink
+}
+
+/// Cellar and bar inventory kinds.
+public enum BeverageKind: String, Codable, Sendable, CaseIterable {
+    case wine, spirit, liqueur, beer, mixer, nonAlcoholic, other
+}
+
+/// The role of a `Pairing` on a course slot; every course can carry a non-alcoholic option.
+public enum PairingRole: String, Codable, Sendable, CaseIterable {
+    case wine, cocktail, beer, nonAlcoholic, other
+}

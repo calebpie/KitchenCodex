@@ -6,17 +6,19 @@
 
 ### 1.1 Top level
 
-Five tabs on iPhone, matching the HIG preference for a small number of tabs with a dedicated trailing search tab. On iPad the same tabs appear in a top tab bar that converts to a sidebar (`.sidebarAdaptable`), where each tab expands into sections.
+Five tabs on iPhone, matching the HIG preference for a small number of tabs with a dedicated trailing search tab. They sit in the order the work happens: collect recipes, stock the kitchen, plan the dinner, cook it. On iPad the same tabs appear in a top tab bar that converts to a sidebar (`.sidebarAdaptable`), where each tab expands into sections.
 
 | Tab | Purpose | iPad sidebar sections |
 |---|---|---|
-| **Cook** | Today. The active cook session if one is running; otherwise upcoming events, tonight's plan, timers, and "what should I make" suggestions. | Today, Active session, Upcoming events |
-| **Recipes** | The library. Browse, filter, collections. | All, Favorites, Never cooked, Recently cooked, Collections (user), Smart collections (saved filters), Tags |
-| **Books** | The cookbook shelf. Completeness, sections, index. | Shelf, each book, Scanning queue |
-| **Plan** | Events and menus, shopping lists, schedules. | Events, Shopping lists, Schedules, Guests |
-| **Search** | The one place to find anything (recipes, books, events, ingredients, cook history). | Search |
+| **Recipes** | The library, with a view switch between **Recipes** (browse, filter, collections) and **Books** (the cookbook shelf: completeness, sections, index, scanning queue). | Recipes: All, Favorites, Never cooked, Recently cooked, Collections, Smart collections, Tags. Books: Shelf, each book, Scanning queue |
+| **Pantry** | Your kitchen as a resource: pantry ingredients, tools, sources (stores you frequent and specialty suppliers), cellar and bar, kitchens, and your profile and settings. | Pantry, Tools, Sources, Cellar & Bar, Kitchens, Profile |
+| **Plan** | Events and menus (with pairings), shopping lists, schedules, guests. | Events, Shopping lists, Schedules, Guests |
+| **Cook** | Today. The active cook or service session if one is running; otherwise tonight's plan, today's prep tasks, timers, and "what should I make" suggestions. | Today, Active session, Upcoming events |
+| **Search** | The one place to find anything (recipes, books, events, ingredients, sources, cook history). | Search |
 
-**Kitchen** (pantry, tools, kitchens, proficiency, guest profiles, settings) is reached from a profile button at the top trailing edge of every top-level screen, as in Apple's own apps, and appears as a sidebar section on iPad. It is not a tab: it is configuration, not a daily destination.
+Books is a view of the library rather than a tab because a cookbook is a way of grouping recipes, not a separate activity; the shelf, book detail and scanning queue are unchanged, they just open from the Recipes tab. The Pantry tab replaces the profile button: what you have on hand (ingredients, tools, wine, suppliers) is consulted while planning and shopping, which makes it a destination. Profile and settings (proficiency, units, voice, intelligence, export) are its last pane.
+
+The top toolbar of every top-level screen is contextual: **Add (+)** when the screen can create something (a recipe or book, a pantry item or source, an event), and a **More (⋯)** menu for screen-level actions (view switch, sort, select, import and export). There is no profile button.
 
 ### 1.2 Persistent surfaces
 
@@ -30,12 +32,13 @@ Five tabs on iPhone, matching the HIG preference for a small number of tabs with
 | Path | Depth |
 |---|---|
 | Recipes → Recipe detail → Cook | 2 |
-| Books → Book detail → Recipe detail | 2 |
+| Recipes (Books view) → Book detail → Recipe detail | 2 |
+| Pantry → pane (Sources, Cellar & Bar, …) → item | 2 |
 | Plan → Event → Menu / Shopping / Schedule → item | 3 |
 | Cook → Service mode (full screen) | 1 |
 | Search → result → detail | 2 |
 
-Capture flows (import, scan, manual entry, book session) are modal sheets or full-screen covers launched from a single **Add** menu (a plus button in the Recipes and Books toolbars). They never live in the tab hierarchy.
+Capture flows (import, scan, manual entry, book session) are modal sheets or full-screen covers launched from the **Add** menu in the Recipes toolbar, whose items follow the view: Import, Scan page and New recipe in the Recipes view; Add book in the Books view. They never live in the tab hierarchy.
 
 ## 2. Core user flows
 
@@ -57,20 +60,21 @@ Fix-up: every imported recipe opens in the same editable structure as a manual o
 2. Camera opens (VisionKit document camera). Overlay shows a quality meter: Sharp / Hold still / Clean lens.
 3. Capture one or more pages. "Add next page" is one tap because recipes span pages.
 4. Processing sheet: "Reading text… Finding ingredients… Finding steps…" (each stage real).
-5. **Review screen**: the structured recipe on top, the page image below with colored regions. Tap a region to reassign it (Title, Yield, Ingredients, Step, Headnote, Ignore). On iPad, Apple Pencil lasso does the same.
+5. **Review, when it is needed.** Review is forced for the first recipe captured from each book, and again whenever a page's layout differs from one already confirmed for that book (two columns, a sidebar of notes, a recipe that spans a spread). Once a layout is confirmed, later scans save straight to the library, and the review screen appears only when confidence is low: OCR confidence under threshold, ingredient lines that did not parse into quantity and item, a step count that does not match the page, or a region the structurer could not assign. The review screen itself: the structured recipe on top, the page image below with colored regions. Tap a region to reassign it (Title, Yield, Ingredients, Step, Headnote, Ignore). On iPad, Apple Pencil lasso does the same. Every scanned recipe keeps a Review action in More, so an auto-accepted scan can be checked later.
 6. If a cross-reference was found ("Pasta Dough, page 84"), a card asks: Link to existing recipe / Add to this book's to-scan list / Ignore.
 7. Book and page: if the scan was started from a book, both are prefilled; otherwise a "Which book?" field offers recent books or ISBN scan.
 8. Save. The page image stays attached and viewable from the recipe forever.
 
 ### Flow C — Add a whole cookbook
 
-1. Books → Add book → scan ISBN (or type it, or search by title).
+1. Recipes → Books view → Add book → scan ISBN (or type it, or search by title).
 2. Book card appears with cover, title, author, year from Open Library/Google Books. Confirm.
 3. "Build the recipe list": scan the table of contents and chapter openers (and the index if useful). The model extracts recipe titles and pages; you correct inline. Result: a punchlist of N recipes, each with a page number.
 4. **Scanning session** (full screen, iPad-optimized but works on iPhone): punchlist on the left, camera on the right. The current item is the next uncaptured recipe; captured pages accumulate under it. Tapping a different recipe jumps to it. Page numbers read off the scans keep the list in step automatically.
 5. OCR and structuring run in a background queue; the session shows "12 captured, 9 processed, 2 need review."
-6. Stop any time. Books shows the book as "47 of 112 recipes captured" with a filter for what's missing. Resume later from where you were.
-7. Review queue: swipe through structured recipes; fix regions; link sub-recipes; done.
+6. Stop any time. The Books view shows the book as "47 of 112 recipes captured" with a filter for what's missing. Resume later from where you were.
+7. Review queue: the first recipe (which confirms the book's layout) and anything flagged low-confidence; swipe through them, fix regions, link sub-recipes, done. Everything else is accepted automatically and marked as such.
+8. Sources page: if the book ends with a Sources or Resources page (suppliers for equipment and ingredients), scan it once. Each entry (name, phone, website, what they carry) becomes a Source linked to the book in Pantry → Sources.
 
 ### Flow D — Manual entry
 
@@ -123,7 +127,7 @@ Recipes → Add → New recipe. A single scrolling form: title, source (free tex
 
 ### Flow J — First run (kitchen setup)
 
-Three screens, skippable: your kitchen's tools (checklist with counts for ovens and burners), proficiency (three levels with a sentence each about what changes), and pantry staples (a prefilled checklist to trim). Everything is editable later from Kitchen.
+Three screens, skippable: your kitchen's tools (checklist with counts for ovens and burners), proficiency (three levels with a sentence each about what changes), and pantry staples (a prefilled checklist to trim). Everything is editable later from the Pantry tab.
 
 ## 3. Interaction model
 
@@ -132,7 +136,7 @@ Three screens, skippable: your kitchen's tools (checklist with counts for ovens 
 | Browsing | Touch; iPad pointer and keyboard; drag and drop recipes into menu slots and schedule | Siri ("show my braises") |
 | Capture | Camera; tap regions; Apple Pencil lasso on iPad | Keyboard for corrections |
 | Planning | Touch and drag on timeline; keyboard shortcuts on iPad | Chat with Ask Codex |
-| Cooking | Large touch targets ("knuckle mode" doubles target size and removes secondary controls), swipe, Action button, Siri App Shortcuts, in-app voice phrases | Apple Watch Smart Stack glance; probe thermometer |
+| Cooking | Standard-size controls (the HIG 44 pt minimum) spaced widely enough to hit with a knuckle, large type, swipe anywhere to advance, Action button, Siri App Shortcuts, in-app voice phrases | Apple Watch Smart Stack glance; probe thermometer |
 
 Hands-free details: Siri phrases ("Next step," "Back," "Start the timer," "How long on the roast," "What's next") map to App Shortcuts with multiple phrasings. The Action button is assigned to "Next step" in Settings on first run via a one-tap deep link. In-app listening (opt-in) uses the on-device Speech framework for a small command set and shows the system microphone indicator.
 
@@ -205,20 +209,25 @@ The split matters for two reasons. The Scheduler and Units packages are pure Swi
 ### 4.2 Data model (core entities)
 
 ```
-Book ──< BookSection ──< BookEntry (title, page, status: listed | captured | reviewed)
-Book ──< Recipe
-Recipe ──< RecipeVersion (current) ──< Ingredient (qty rational, unit, item, prep, optional, group)
+Book (…, reviewedLayouts[]) ──< BookSection ──< BookEntry (title, page, status: listed | captured | reviewed)
+Book ──< Recipe ; Book ──< Source
+Recipe ──< RecipeVersion (current; captureConfidence, needsReview) ──< Ingredient (qty rational, unit, item, prep, optional, group)
 RecipeVersion ──< Step (text, order, annotations: active/passive min, equipment, waits, hold rule)
 Recipe ──< RecipeLink (subRecipe, role: component | variation | reference)
 Recipe ──< Tag ; Recipe ──< CookSession (start, end, placeName, rating, notes, photos, observedYield)
 Recipe ──< SourceInfo (url, author, sourceRating, importedAt, readerSummary)
 Recipe ── NutritionEstimate (perServing, confidence, computedAt)
 Event (date, arrival, seating, guestCount, kitchen) ──< Guest ; Event ── Menu ──< Slot ──< Candidate (recipe, servings, doneness, finalized)
-Event ── ShoppingList ──< ShoppingItem (normalizedIngredient, qty, stop, section, checked, sources[])
+Slot ──< Pairing (role: wine | cocktail | beer | nonAlcoholic | other, text, servingNote, isSuggested, beverage?)
+Event ── ShoppingList ──< ShoppingItem (normalizedIngredient, qty, stop | source, section, checked)
 Event ── Schedule ──< Task (recipe, step, start, duration, kind, dependencies[], resources[], locked)
 Kitchen ──< Tool (type, count, capacity) ; Kitchen ──< PantryItem (item, inStock)
-UserProfile (proficiency, concurrency, units preference, voice options)
+Kitchen ──< Source (name, kind: store | online | producer, categories: equipment | food | drink, phone, url, address, carries, isFrequented)
+Kitchen ──< BeverageItem (kind: wine | spirit | liqueur | beer | mixer | nonAlcoholic, name, producer, vintage, region, style, bottles, isOpen, location)
+UserProfile (proficiency, concurrency, units preference, voice options, kitchenTheme)
 ```
+
+`Source` does two jobs: a supplier directory, captured from cookbook Sources pages or added by hand, and the list of stores you frequent, which the shopping list uses as stops. `BeverageItem` is the cellar and bar. A `Pairing` sits on a course slot; it can point at a bottle on hand or stay free text, and a pairing with no bottle flows to the shopping list.
 
 CloudKit rules applied: every relationship optional with inverse, no unique constraints (IDs are UUID attributes), all non-optional attributes have defaults, images in `.externalStorage`.
 

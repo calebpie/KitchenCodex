@@ -12,6 +12,8 @@ extension RecipeSchemaV1 {
 
         @Relationship(deleteRule: .cascade, inverse: \Tool.kitchen) public var tools: [Tool]?
         @Relationship(deleteRule: .cascade, inverse: \PantryItem.kitchen) public var pantryItems: [PantryItem]?
+        @Relationship(deleteRule: .nullify, inverse: \Source.kitchen) public var sources: [Source]?
+        @Relationship(deleteRule: .cascade, inverse: \BeverageItem.kitchen) public var beverages: [BeverageItem]?
         @Relationship(deleteRule: .nullify, inverse: \Event.kitchen) public var events: [Event]?
 
         public init(name: String = "Home", isDefault: Bool = false) {
@@ -54,6 +56,65 @@ extension RecipeSchemaV1 {
         }
     }
 
+    /// A store you frequent or a specialty supplier, as cookbooks list them on a Sources page:
+    /// name, phone, website, and what they carry. Frequented stores become shopping stops.
+    @Model
+    public final class Source {
+        public var id: UUID = UUID()
+        public var name: String = ""
+        public var kind: SourceKind = SourceKind.store
+        public var categories: [SourceCategory] = []
+        /// What they sell, in the book's own words ("pot de crème molds, lidded terrine molds").
+        public var carries: String = ""
+        public var phone: String?
+        public var url: URL?
+        public var address: String?
+        public var notes: String = ""
+        /// A store you actually shop at; the shopping list offers it as a stop.
+        public var isFrequented: Bool = false
+        public var addedAt: Date = Date.now
+
+        /// The cookbook whose Sources page this came from, if any.
+        public var book: Book?
+        /// The kitchen this source is near, for stores; nil for online suppliers.
+        public var kitchen: Kitchen?
+        public var shoppingItems: [ShoppingItem]?
+
+        public init(name: String = "", kind: SourceKind = .store, categories: [SourceCategory] = []) {
+            self.name = name
+            self.kind = kind
+            self.categories = categories
+        }
+    }
+
+    /// A bottle in the cellar or on the bar. Pairings read from here to say "on hand" or "to buy".
+    @Model
+    public final class BeverageItem {
+        public var id: UUID = UUID()
+        public var kind: BeverageKind = BeverageKind.wine
+        public var name: String = ""
+        public var producer: String = ""
+        public var vintage: Int?
+        public var region: String = ""
+        /// Grape, style or category ("Chablis", "rye", "sweet vermouth").
+        public var style: String = ""
+        public var bottles: Int = 1
+        public var isOpen: Bool = false
+        public var location: String = ""
+        public var drinkByNote: String = ""
+        public var notes: String = ""
+        public var addedAt: Date = Date.now
+
+        public var kitchen: Kitchen?
+        public var pairings: [Pairing]?
+
+        public init(kind: BeverageKind = .wine, name: String = "", bottles: Int = 1) {
+            self.kind = kind
+            self.name = name
+            self.bottles = bottles
+        }
+    }
+
     /// The single cook's preferences. One record; synced like everything else.
     @Model
     public final class UserProfile {
@@ -62,7 +123,8 @@ extension RecipeSchemaV1 {
         public var concurrencyLimit: Int = 2
         public var unitPreference: UnitPreference = UnitPreference.us
         public var voiceCommandsEnabled: Bool = false
-        public var knuckleModeEnabled: Bool = false
+        /// The high-contrast kitchen theme is a toggle, never automatic (03 §3.12).
+        public var kitchenThemeEnabled: Bool = false
         public var createdAt: Date = Date.now
 
         public init(proficiency: Proficiency = .confident) {

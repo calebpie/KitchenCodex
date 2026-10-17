@@ -20,9 +20,12 @@ struct SchemaTests {
             Step(text: "Salt it."), RecipeLink(), Tag(name: "weeknight"), CookSession(), SourceInfo(),
             NutritionEstimate(), RecipeImage(role: .pageScan, imageData: Data([0xFF, 0xD8])),
             Event(name: "Sunday Supper", guestCount: 8), Guest(name: "Rosa", restrictions: ["gluten-free"]),
-            EventMenu(), Slot(name: "Main"), Candidate(servings: 8), ShoppingList(), ShoppingItem(normalizedIngredient: "chicken"),
+            EventMenu(), Slot(name: "Main"), Candidate(servings: 8), Pairing(role: .wine, text: "a dry Riesling"),
+            ShoppingList(), ShoppingItem(normalizedIngredient: "chicken"),
             Schedule(), ScheduleTask(title: "Brine", durationMinutes: 20),
-            Kitchen(isDefault: true), Tool(type: "oven", name: "Wall oven"), PantryItem(item: "kosher salt"), UserProfile(),
+            Kitchen(isDefault: true), Tool(type: "oven", name: "Wall oven"), PantryItem(item: "kosher salt"),
+            Source(name: "D'Artagnan", kind: .online, categories: [.food]), BeverageItem(kind: .wine, name: "Chablis", bottles: 2),
+            UserProfile(),
         ]
         #expect(instances.count == RecipeSchemaV1.models.count)
 
@@ -56,6 +59,29 @@ struct SchemaTests {
         #expect(fetched?.currentVersion?.ingredients?.first?.item == "flour")
         #expect(fetched?.currentVersion?.recipe?.title == "Focaccia")
         #expect(fetched?.currentVersion?.isCurrentOf?.title == "Focaccia")
+    }
+
+    /// Pairings live on the menu and can point at a bottle in the cellar (03 §3.9, §3.17).
+    @Test func pairingLinksSlotAndCellar() throws {
+        let container = try RecipeStore.makeContainer(inMemory: true)
+        let context = ModelContext(container)
+
+        let kitchen = Kitchen(isDefault: true)
+        let bottle = BeverageItem(kind: .wine, name: "Chablis", bottles: 2)
+        let slot = Slot(name: "Starter")
+        let pairing = Pairing(role: .wine, text: "")
+        let mocktail = Pairing(role: .nonAlcoholic, text: "ginger and lime spritz")
+        for model in [kitchen, bottle, slot, pairing, mocktail] as [any PersistentModel] { context.insert(model) }
+        kitchen.beverages = [bottle]
+        slot.pairings = [pairing, mocktail]
+        pairing.beverage = bottle
+        try context.save()
+
+        let fetched = try context.fetch(FetchDescriptor<Slot>()).first
+        #expect(fetched?.pairings?.count == 2)
+        #expect(fetched?.pairings?.first { $0.role == .wine }?.beverage?.name == "Chablis")
+        #expect(bottle.pairings?.count == 1)
+        #expect(bottle.kitchen?.isDefault == true)
     }
 
     /// 02 §4.2: every relationship optional with an inverse, no unique constraints,

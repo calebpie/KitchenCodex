@@ -21,9 +21,9 @@ public enum RecipeSchemaV1: VersionedSchema {
             NutritionEstimate.self, RecipeImage.self,
             // Planning
             Event.self, Guest.self, EventMenu.self, Slot.self, Candidate.self,
-            ShoppingList.self, ShoppingItem.self, Schedule.self, ScheduleTask.self,
+            Pairing.self, ShoppingList.self, ShoppingItem.self, Schedule.self, ScheduleTask.self,
             // Kitchen
-            Kitchen.self, Tool.self, PantryItem.self, UserProfile.self,
+            Kitchen.self, Tool.self, PantryItem.self, Source.self, BeverageItem.self, UserProfile.self,
         ]
     }
 }
@@ -55,6 +55,7 @@ public typealias Guest = RecipeSchemaV1.Guest
 public typealias EventMenu = RecipeSchemaV1.EventMenu
 public typealias Slot = RecipeSchemaV1.Slot
 public typealias Candidate = RecipeSchemaV1.Candidate
+public typealias Pairing = RecipeSchemaV1.Pairing
 public typealias ShoppingList = RecipeSchemaV1.ShoppingList
 public typealias ShoppingItem = RecipeSchemaV1.ShoppingItem
 public typealias Schedule = RecipeSchemaV1.Schedule
@@ -63,4 +64,6 @@ public typealias ScheduleTask = RecipeSchemaV1.ScheduleTask
 public typealias Kitchen = RecipeSchemaV1.Kitchen
 public typealias Tool = RecipeSchemaV1.Tool
 public typealias PantryItem = RecipeSchemaV1.PantryItem
+public typealias Source = RecipeSchemaV1.Source
+public typealias BeverageItem = RecipeSchemaV1.BeverageItem
 public typealias UserProfile = RecipeSchemaV1.UserProfile

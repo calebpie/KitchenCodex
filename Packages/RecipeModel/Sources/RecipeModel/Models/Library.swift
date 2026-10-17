@@ -14,9 +14,13 @@ extension RecipeSchemaV1 {
         public var publicationYear: Int?
         public var addedAt: Date = Date.now
         @Attribute(.externalStorage) public var coverImageData: Data?
+        /// Page-layout signatures the cook has confirmed in review. Scan review is forced for the
+        /// first recipe from a book and for any layout not in this list (02 Flow B step 5).
+        public var reviewedLayouts: [String] = []
 
         @Relationship(deleteRule: .cascade, inverse: \BookSection.book) public var sections: [BookSection]?
         @Relationship(deleteRule: .nullify, inverse: \Recipe.book) public var recipes: [Recipe]?
+        @Relationship(deleteRule: .nullify, inverse: \Source.book) public var sources: [Source]?
 
         public init(title: String = "", author: String = "", isbn: String? = nil) {
             self.title = title
@@ -106,6 +110,10 @@ extension RecipeSchemaV1 {
         public var cookMinutes: Int?
         public var totalMinutes: Int?
         public var notes: String = ""
+        /// 0…1 from the capture pipeline; nil for manual entry and web import.
+        public var captureConfidence: Double?
+        /// Set when capture confidence was low or the book's layout was new, until the cook reviews it.
+        public var needsReview: Bool = false
 
         public var recipe: Recipe?
         public var isCurrentOf: Recipe?

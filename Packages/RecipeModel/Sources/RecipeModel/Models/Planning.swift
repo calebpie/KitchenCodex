@@ -69,6 +69,7 @@ extension RecipeSchemaV1 {
 
         public var menu: EventMenu?
         @Relationship(deleteRule: .cascade, inverse: \Candidate.slot) public var candidates: [Candidate]?
+        @Relationship(deleteRule: .cascade, inverse: \Pairing.slot) public var pairings: [Pairing]?
 
         public init(name: String = "", sortOrder: Int = 0) {
             self.name = name
@@ -90,6 +91,29 @@ extension RecipeSchemaV1 {
 
         public init(servings: Int = 0) {
             self.servings = servings
+        }
+    }
+
+    /// A drink paired with a course. Pairings live on the menu (03 §3.9): one per role per slot,
+    /// typed as text or pointing at a bottle in the cellar. A pairing with no bottle is "to buy".
+    @Model
+    public final class Pairing {
+        public var id: UUID = UUID()
+        public var role: PairingRole = PairingRole.wine
+        /// What to pour, when no bottle is linked ("a dry Riesling", "ginger and lime spritz").
+        public var text: String = ""
+        public var servingNote: String = ""
+        public var reason: String = ""
+        /// Proposed by the model rather than chosen by the cook; shown with a Suggested label.
+        public var isSuggested: Bool = false
+        public var sortOrder: Int = 0
+
+        public var slot: Slot?
+        @Relationship(deleteRule: .nullify, inverse: \BeverageItem.pairings) public var beverage: BeverageItem?
+
+        public init(role: PairingRole = .wine, text: String = "") {
+            self.role = role
+            self.text = text
         }
     }
 
@@ -122,6 +146,8 @@ extension RecipeSchemaV1 {
         public var sourceRecipeIDs: [UUID] = []
 
         public var list: ShoppingList?
+        /// Preferred supplier, when one is known; otherwise `stop` is free text.
+        @Relationship(deleteRule: .nullify, inverse: \Source.shoppingItems) public var source: Source?
 
         public init(normalizedIngredient: String = "", quantityText: String = "") {
             self.normalizedIngredient = normalizedIngredient

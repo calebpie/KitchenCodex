@@ -7,7 +7,7 @@ struct CookView: View {
             ContentUnavailableView {
                 Label("Nothing on the stove", systemImage: "frying.pan")
             } description: {
-                Text("Start a recipe from Recipes, or plan an event to see tonight's tasks here.")
+                Text("Plan an event to see tonight's tasks here, or start a recipe from Recipes.")
             }
             .navigationTitle("Cook")
         }
