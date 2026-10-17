@@ -1,0 +1,924 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"></head><body style="margin:0">
+<title>Recipe Codex Wireframes</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Instrument+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: a 72ch reading column for prose; device galleries break out to the full width, iPad frames scroll sideways. */
+:root{
+  --bg:#f4f5f2; --fg:#1b1f1d; --muted:#5d665f; --line:#d8ddd6; --surface:#ffffff;
+  --accent:#2f6b4a; --accent-ink:#ffffff; --warn:#b7791f; --bad:#b3362b; --ok:#2f6b4a;
+  --display:"Fraunces",Georgia,"Times New Roman",serif;
+  --body:"Instrument Sans",-apple-system,"Helvetica Neue",Arial,sans-serif;
+  --ios:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Arial,sans-serif;
+  /* iOS depiction colors are fixed: the frames show iOS in light mode on purpose. */
+  --ios-bg:#f2f2f7; --ios-card:#ffffff; --ios-label:#111114; --ios-2:#6e6e73; --ios-3:#aeaeb2; --ios-tint:#2f6b4a;
+  --ios-sep:rgba(60,60,67,.14); --ios-img:linear-gradient(135deg,#d9ddd5,#b9c2b6); --ios-glass:rgba(255,255,255,.66);
+  --ios-warn:#c07a12; --ios-bad:#b3362b; --ios-blue:#3b6fd6; --ios-purple:#7d55c7; --ios-green:#2f6b4a;
+  --frame:#1c1c1e;
+}
+@media (prefers-color-scheme:dark){ :root:not([data-theme="light"]){
+  --bg:#15181a; --fg:#e8ebe6; --muted:#9aa49c; --line:#2b3230; --surface:#1e2224;
+  --accent:#7fc29b; --accent-ink:#0f1a14; --warn:#e0a949; --bad:#e07a6f; --ok:#7fc29b; --frame:#0b0c0d; color-scheme:dark } }
+:root[data-theme="dark"]{
+  --bg:#15181a; --fg:#e8ebe6; --muted:#9aa49c; --line:#2b3230; --surface:#1e2224;
+  --accent:#7fc29b; --accent-ink:#0f1a14; --warn:#e0a949; --bad:#e07a6f; --ok:#7fc29b; --frame:#0b0c0d; color-scheme:dark }
+
+body{background:var(--bg);color:var(--fg);font-family:var(--body);line-height:1.5;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 48px}
+.wrap{max-width:1180px;margin:0 auto}
+.prose{max-width:72ch}
+h1,h2,h3,h4{font-family:var(--display);font-weight:600;text-wrap:balance;margin:0;line-height:1.15}
+h1{font-size:clamp(34px,5vw,54px);letter-spacing:-.01em}
+h2{font-size:clamp(24px,3vw,32px);margin-top:56px;padding-top:18px;border-top:1px solid var(--line)}
+h3{font-size:19px;margin-top:28px}
+p{margin:10px 0}
+.eyebrow{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600;margin:28px 0 8px}
+.lede{font-size:18px;color:var(--fg)}
+.muted{color:var(--muted)}
+a{color:var(--accent)}
+.legend{display:flex;flex-wrap:wrap;gap:16px;margin:16px 0 0;font-size:13px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:22px;height:14px;border-radius:5px;display:inline-block;border:1px solid var(--line)}
+.sw.glass{background:rgba(255,255,255,.7);backdrop-filter:blur(6px);box-shadow:0 1px 3px rgba(0,0,0,.15)}
+.sw.img{background:var(--ios-img)}
+.sw.dot{width:16px;height:16px;border-radius:50%;background:var(--accent);border:2px solid var(--surface)}
+.principles{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-top:16px}
+.principles div{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px;font-size:14px;min-width:0}
+.principles b{display:block;font-family:var(--display);font-weight:600;font-size:16px;margin-bottom:4px}
+
+/* Galleries */
+.gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:36px 28px;margin-top:22px}
+figure{margin:0;min-width:0}
+figcaption{margin-top:14px;font-size:14px}
+figcaption h4{font-size:17px;margin-bottom:6px}
+.notes{margin:6px 0 0;padding-left:0;list-style:none;display:grid;gap:5px;color:var(--muted)}
+.notes li{display:flex;gap:8px;align-items:flex-start}
+.notes li b{flex:none;width:18px;height:18px;border-radius:50%;background:var(--accent);color:var(--accent-ink);font-size:11px;font-weight:700;display:grid;place-items:center;margin-top:2px}
+.scroller{overflow-x:auto;padding-bottom:8px;-webkit-overflow-scrolling:touch}
+.scroller .gallery{grid-template-columns:repeat(5,660px);gap:28px;width:max-content}
+
+/* Device frames */
+.device{position:relative;background:var(--frame);box-shadow:0 18px 40px rgba(0,0,0,.18);font-family:var(--ios);color:var(--ios-label);-webkit-font-smoothing:antialiased}
+.phone{width:300px;height:652px;border-radius:48px;padding:8px;margin:0 auto}
+.phone .scr{border-radius:40px}
+.ipad{width:660px;height:495px;border-radius:30px;padding:12px}
+.ipad .scr{border-radius:20px}
+.scr{position:relative;width:100%;height:100%;background:var(--ios-bg);overflow:hidden;display:flex;flex-direction:column}
+.scr.dark{background:#000;color:#fff}
+.island{position:absolute;top:10px;left:50%;transform:translateX(-50%);width:96px;height:28px;border-radius:14px;background:#000;z-index:5}
+.sb{height:44px;display:flex;justify-content:space-between;align-items:center;padding:4px 26px 0;font-size:12px;font-weight:600;flex:none}
+.ipad .sb{height:28px;padding:2px 18px 0;font-size:11px}
+.sb .r{letter-spacing:1px;font-size:10px}
+.nav{display:flex;justify-content:space-between;align-items:center;padding:0 12px;flex:none;gap:6px}
+.nb{width:32px;height:32px;border-radius:50%;background:var(--ios-glass);backdrop-filter:blur(10px);box-shadow:0 1px 4px rgba(0,0,0,.14),inset 0 0 0 .5px rgba(255,255,255,.6);display:grid;place-items:center;font-size:13px;font-weight:600;color:var(--ios-label)}
+.nb.wide{width:auto;padding:0 12px;border-radius:16px;font-size:12px}
+.nb.tint{color:var(--ios-tint)}
+.navgroup{display:flex;gap:6px}
+.lt{font-size:28px;font-weight:700;letter-spacing:-.02em;padding:4px 16px 8px;flex:none}
+.t{font-size:14px;font-weight:600;text-align:center}
+.body{flex:1;min-height:0;overflow:hidden;padding:0 12px;display:flex;flex-direction:column;gap:8px}
+.body.pad{padding-bottom:90px}
+.card{background:var(--ios-card);border-radius:14px;padding:10px 12px;font-size:11px;line-height:1.35;box-shadow:0 .5px 0 rgba(0,0,0,.04)}
+.card h5{font-size:13px;font-weight:600;margin:0 0 4px}
+.card .sub{color:var(--ios-2);font-size:10.5px}
+.row{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:11px}
+.rows>.row{padding:7px 0;border-bottom:.5px solid var(--ios-sep)}
+.rows>.row:last-child{border-bottom:0}
+.sec{font-size:11px;font-weight:600;color:var(--ios-2);text-transform:uppercase;letter-spacing:.04em;padding:4px 4px 0}
+.img{background:var(--ios-img);border-radius:10px}
+.chips{display:flex;gap:5px;overflow:hidden;flex:none;padding:0 2px}
+.chip{flex:none;font-size:10px;font-weight:500;padding:4px 9px;border-radius:999px;background:var(--ios-card);color:var(--ios-label);box-shadow:0 .5px 0 rgba(0,0,0,.05)}
+.chip.on{background:var(--ios-tint);color:#fff}
+.badge{display:inline-block;font-size:9.5px;font-weight:600;padding:2px 7px;border-radius:999px;background:rgba(0,0,0,.06);color:var(--ios-2)}
+.badge.warn{background:rgba(192,122,18,.14);color:var(--ios-warn)}
+.badge.ok{background:rgba(47,107,74,.14);color:var(--ios-green)}
+.badge.bad{background:rgba(179,54,43,.14);color:var(--ios-bad)}
+.badge.new{background:rgba(125,85,199,.14);color:var(--ios-purple)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.rc .img{height:72px;margin-bottom:5px}
+.rc .nm{font-size:11px;font-weight:600;line-height:1.2}
+.rc .sub{font-size:9.5px;color:var(--ios-2)}
+.pill{display:inline-block;padding:2px 7px;border-radius:7px;background:rgba(47,107,74,.12);color:var(--ios-green);font-weight:600}
+.btn{display:inline-flex;align-items:center;justify-content:center;border-radius:999px;font-weight:600;font-size:12px;padding:7px 14px;background:var(--ios-glass);backdrop-filter:blur(10px);box-shadow:0 1px 4px rgba(0,0,0,.14);color:var(--ios-label)}
+.btn.pro{background:var(--ios-tint);color:#fff}
+.btn.big{height:56px;font-size:17px;border-radius:18px;flex:1}
+.btn.ghost{background:transparent;box-shadow:none;color:var(--ios-tint)}
+.check{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--ios-3);flex:none}
+.check.on{background:var(--ios-tint);border-color:var(--ios-tint)}
+.stripe{border-left:4px solid var(--ios-tint)}
+.tabbar{position:absolute;bottom:10px;left:12px;right:12px;display:flex;gap:8px;z-index:4}
+.tabs{flex:1;display:flex;justify-content:space-around;align-items:center;height:50px;border-radius:25px;background:var(--ios-glass);backdrop-filter:blur(14px);box-shadow:0 2px 10px rgba(0,0,0,.14),inset 0 0 0 .5px rgba(255,255,255,.6)}
+.tab{font-size:9px;font-weight:600;color:var(--ios-2);text-align:center;line-height:1}
+.tab i{display:block;width:16px;height:14px;border-radius:4px;background:currentColor;opacity:.75;margin:0 auto 3px}
+.tab.on{color:var(--ios-tint)}
+.stab{width:50px;height:50px;border-radius:50%;background:var(--ios-glass);backdrop-filter:blur(14px);box-shadow:0 2px 10px rgba(0,0,0,.14),inset 0 0 0 .5px rgba(255,255,255,.6);display:grid;place-items:center;color:var(--ios-label)}
+.mag{width:12px;height:12px;border:2.2px solid currentColor;border-radius:50%;position:relative;margin:-3px -3px 0 0}
+.mag::after{content:"";position:absolute;width:2.2px;height:6px;background:currentColor;right:-4px;bottom:-5px;transform:rotate(-45deg);border-radius:1px}
+.tabbar.min .tabs{flex:0 0 50px;justify-content:center}
+.tabbar.min .tab:not(.on){display:none}
+.acc{flex:1;height:50px;border-radius:25px;background:var(--ios-glass);backdrop-filter:blur(14px);box-shadow:0 2px 10px rgba(0,0,0,.14);display:flex;align-items:center;gap:8px;padding:0 6px 0 12px;font-size:11px;min-width:0}
+.acc .tx{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.acc .tx b{display:block;font-size:11px}
+.acc .tx span{color:var(--ios-2);font-size:10px}
+.bottombar{position:absolute;bottom:12px;left:12px;right:12px;display:flex;gap:8px;align-items:center;z-index:4}
+.bottombar .grp{display:flex;gap:4px;height:48px;padding:0 6px;border-radius:24px;background:var(--ios-glass);backdrop-filter:blur(14px);box-shadow:0 2px 10px rgba(0,0,0,.14);align-items:center}
+.bottombar .grp .nb{box-shadow:none;background:transparent}
+.bottombar .btn.pro{height:48px;border-radius:24px;flex:1;font-size:14px}
+.n{position:absolute;width:20px;height:20px;border-radius:50%;background:var(--accent);color:var(--accent-ink);font-size:11px;font-weight:700;display:grid;place-items:center;border:2px solid #fff;z-index:9;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+.cam{flex:1;background:radial-gradient(ellipse at 50% 40%,#5b6b5e,#1f2a22 70%);position:relative;overflow:hidden}
+.page{position:absolute;left:12%;right:12%;top:14%;bottom:18%;background:#f6f1e6;border-radius:3px;transform:rotate(-2deg);box-shadow:0 10px 30px rgba(0,0,0,.4);padding:14px 12px;font-family:Georgia,serif;color:#333;font-size:7px;line-height:1.5}
+.page h6{font-size:10px;margin:0 0 4px;font-weight:600}
+.page .ln{height:4px;background:#cfc6b4;border-radius:2px;margin:3px 0}
+.page .ln.s{width:60%}
+.outline{position:absolute;inset:0;border:2px solid #f3d35a;border-radius:4px;box-shadow:0 0 0 2px rgba(243,211,90,.25)}
+.rg{position:absolute;border-radius:3px;border:1.5px solid}
+.rg.ing{background:rgba(59,111,214,.18);border-color:#3b6fd6}
+.rg.stp{background:rgba(47,107,74,.18);border-color:#2f6b4a}
+.rg.ttl{background:rgba(125,85,199,.18);border-color:#7d55c7}
+.rg.hd{background:rgba(110,110,115,.18);border-color:#6e6e73}
+.rg small{position:absolute;top:-7px;left:4px;font-size:7px;font-weight:700;background:#fff;padding:0 4px;border-radius:4px;color:inherit;font-family:var(--ios)}
+.lane{display:flex;flex-direction:column;gap:6px}
+.task{border-radius:10px;padding:6px 8px;font-size:10px;background:var(--ios-card);border-left:4px solid var(--ios-tint);line-height:1.3}
+.task.c2{border-left-color:#b35c2a}.task.c3{border-left-color:#3b6fd6}.task.c4{border-left-color:#7d55c7}.task.c5{border-left-color:#8a7a2a}
+.task.pas{background:repeating-linear-gradient(135deg,var(--ios-card) 0 6px,#f3f3f6 6px 8px)}
+.task.warn{outline:1.5px solid var(--ios-warn);background:#fff8ec}
+.hours{display:grid;grid-template-columns:30px 6px 1fr;gap:4px 6px;font-size:9px;color:var(--ios-2)}
+.hours .h{text-align:right;padding-top:2px}
+.hours .d{border-radius:3px;background:rgba(47,107,74,.25)}
+.hours .d.hi{background:rgba(192,122,18,.6)}
+.hours .d.max{background:rgba(179,54,43,.7)}
+.seg{display:flex;background:rgba(118,118,128,.12);border-radius:9px;padding:2px;font-size:10px;font-weight:600}
+.seg span{flex:1;text-align:center;padding:4px 0;border-radius:7px;color:var(--ios-2)}
+.seg span.on{background:#fff;color:var(--ios-label);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.ring{width:54px;height:54px;border-radius:50%;background:conic-gradient(var(--ios-tint) 0 42%,rgba(0,0,0,.08) 42% 100%);display:grid;place-items:center;flex:none}
+.ring i{width:42px;height:42px;border-radius:50%;background:var(--ios-card);display:grid;place-items:center;font-size:10px;font-weight:700;font-style:normal}
+.step{font-size:20px;font-weight:600;line-height:1.25;letter-spacing:-.01em}
+.step .tm{display:inline-block;padding:1px 8px;border-radius:8px;background:rgba(47,107,74,.14);color:var(--ios-green);font-weight:700}
+.nextstep{font-size:12px;color:var(--ios-2)}
+.status{display:flex;justify-content:space-between;align-items:center;font-size:11px;padding:0 4px}
+.kb{font-size:10px;color:var(--ios-2)}
+.cover{width:46px;height:62px;border-radius:4px;background:linear-gradient(160deg,#6b4a2f,#2d241e);flex:none}
+.covers{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.covers div{aspect-ratio:3/4;border-radius:6px;background:linear-gradient(160deg,#5b6f8a,#28313d);position:relative;overflow:hidden}
+.covers div:nth-child(2){background:linear-gradient(160deg,#8a5b3f,#3b2a21)}
+.covers div:nth-child(3){background:linear-gradient(160deg,#4f7a5f,#213a2a)}
+.covers div:nth-child(4){background:linear-gradient(160deg,#9a7a3a,#4a3a1a)}
+.covers div:nth-child(5){background:linear-gradient(160deg,#6c4f8a,#2d2240)}
+.covers div:nth-child(6){background:linear-gradient(160deg,#8a3f4f,#3b1a21)}
+.covers b{position:absolute;left:0;right:0;bottom:0;height:4px;background:rgba(255,255,255,.3)}
+.covers b i{display:block;height:100%;background:#fff}
+.chat{background:var(--ios-card);border-radius:14px;padding:10px;font-size:11px}
+.bub{border-radius:12px;padding:7px 10px;margin:4px 0;max-width:92%}
+.bub.me{background:var(--ios-tint);color:#fff;margin-left:auto}
+.bub.ai{background:#eef0ea}
+/* iPad specifics */
+.toptabs{position:absolute;top:34px;left:0;right:0;display:flex;justify-content:center;z-index:5;pointer-events:none}
+.toptabs .tabs{height:40px;flex:0 0 auto;padding:0 8px;gap:4px;border-radius:20px}
+.toptabs .tab{font-size:11px;padding:0 12px}
+.toptabs .tab i{display:none}
+.toptabs .stab{width:40px;height:40px;margin-left:8px}
+.toptabs .nb{position:absolute;left:14px;top:4px}
+.toptabs .right{position:absolute;right:14px;top:4px;display:flex;gap:6px}
+.cols{flex:1;min-height:0;display:grid;gap:10px;padding:48px 12px 12px}
+.col{min-width:0;display:flex;flex-direction:column;gap:8px;overflow:hidden}
+.col.side{background:transparent}
+.side .row{padding:6px 8px;border-radius:8px;font-size:12px}
+.side .row.on{background:rgba(47,107,74,.14);color:var(--ios-green);font-weight:600}
+.side .sec{padding:8px 8px 2px}
+.list .row{padding:8px 10px;border-radius:10px;background:var(--ios-card);font-size:12px}
+.list .row.on{outline:2px solid var(--ios-tint)}
+.list .img{width:40px;height:40px;border-radius:8px;flex:none}
+.punch .row{padding:5px 8px;font-size:11px;border-radius:8px}
+.punch .row.on{background:rgba(47,107,74,.14);font-weight:600}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--ios-3);flex:none}
+.dot.ok{background:var(--ios-green)}.dot.rev{background:var(--ios-warn)}.dot.cur{background:var(--ios-blue)}
+.days{display:grid;grid-template-columns:28px repeat(3,1fr);gap:6px;font-size:10px;flex:1;min-height:0}
+.days .hd{font-weight:600;text-align:center;color:var(--ios-2)}
+.days .hcol{display:flex;flex-direction:column;justify-content:space-between;color:var(--ios-2);font-size:9px;text-align:right;padding-right:2px}
+.days .dcol{display:flex;flex-direction:column;gap:5px;border-left:.5px solid var(--ios-sep);padding-left:6px}
+.menu-la .flow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:14px 0 0}
+/* Live activity panels */
+.la{display:flex;flex-wrap:wrap;gap:22px;align-items:flex-start;margin-top:20px}
+.la figure{flex:1 1 280px}
+.di{background:#000;color:#fff;border-radius:999px;display:flex;align-items:center;justify-content:space-between;font-family:var(--ios);font-weight:700;margin:0 auto}
+.di.c{width:190px;height:38px;padding:0 14px;font-size:13px}
+.di.c i{width:30px;height:24px;border-radius:12px;background:#111;display:block}
+.di.x{width:300px;height:118px;border-radius:44px;flex-direction:column;align-items:stretch;justify-content:center;padding:14px 18px;font-size:13px;gap:8px}
+.di.x .r1{display:flex;justify-content:space-between;font-size:12px;color:#bbb;font-weight:600}
+.di.x .r2{font-size:15px;line-height:1.25}
+.di.x .r3{display:flex;gap:6px;align-items:center}
+.di.x .r3 span{background:#1d1d1f;border-radius:999px;padding:3px 9px;font-size:11px}
+.di.x .r3 b{margin-left:auto;background:var(--ios-tint);border-radius:999px;padding:5px 12px;font-size:12px}
+.ls{width:300px;margin:0 auto;background:rgba(255,255,255,.92);color:#111;border-radius:22px;padding:12px 14px;font-family:var(--ios);font-size:12px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+.ls .r1{display:flex;justify-content:space-between;font-weight:600;color:#555;font-size:11px}
+.ls .r2{font-size:15px;font-weight:600;margin:4px 0 6px;line-height:1.25}
+.ls .r3{display:flex;gap:6px;align-items:center}
+.ls .r3 span{background:rgba(0,0,0,.06);border-radius:999px;padding:3px 9px;font-size:11px;font-weight:600}
+.ls .r3 b{margin-left:auto;background:var(--ios-tint);color:#fff;border-radius:999px;padding:5px 12px;font-size:12px}
+.flowmap{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:14px 0 0;font-size:13px}
+.flowmap span{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 12px;min-width:0}
+.flowmap span.ai{border-style:dashed}
+.flowmap i{color:var(--muted);font-style:normal}
+table{border-collapse:collapse;width:100%;font-size:14px;margin-top:14px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-weight:600;color:var(--muted);font-size:12px;letter-spacing:.04em;text-transform:uppercase}
+.tablewrap{overflow-x:auto}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+@media (max-width:700px){h2{margin-top:40px}}
+</style>
+
+<div class="wrap">
+<p class="eyebrow">Recipe Codex · Low-fidelity wireframes · iOS 27 and iPadOS 27 · October 17, 2026</p>
+<h1>Recipe Codex Wireframes</h1>
+<div class="prose">
+<p class="lede">Core screens and flows for iPhone 17 Pro (402 × 874 pt) and the 13-inch iPad Pro (1376 × 1032 pt, landscape), drawn against the Human Interface Guidelines as updated through October 2026. Gray blocks stand for photos. Frosted pills are Liquid Glass: they appear only in the navigation layer, never inside content. Numbered dots are explained under each frame.</p>
+<div class="legend"><span><i class="sw glass"></i> Liquid Glass (tab bar, toolbars, accessory)</span><span><i class="sw img"></i> Photo placeholder</span><span><i class="sw dot"></i> Callout</span></div>
+</div>
+
+<div class="principles">
+  <div><b>Content first</b>Glass only where the system puts it. Recipes, cards and timelines sit on standard materials.</div>
+  <div><b>Kitchen-proof</b>Large type, 60-pt targets, bottom-anchored actions, the current step never hidden. Knuckle mode doubles targets.</div>
+  <div><b>Progressive disclosure</b>Headnotes, nutrition, versions and balance detail sit behind disclosures. Warnings are inline notes, not alerts.</div>
+  <div><b>Trustworthy intelligence</b>Model output is labeled, one tap from its source, and always editable, retryable and undoable.</div>
+  <div><b>Effortless hosting</b>The planner shows "work after guests arrive" as a number and tries to drive it down.</div>
+</div>
+
+<h2>iPhone</h2>
+<p class="prose muted">Five tabs: Cook, Recipes, Books, Plan, and a trailing Search tab, as the HIG now recommends. The profile button at the top trailing edge opens Kitchen (tools, pantry, guests, settings).</p>
+
+<div class="gallery">
+
+<!-- 1 Cook / Today -->
+<figure>
+<div class="device phone"><div class="scr">
+  <div class="island"></div>
+  <div class="sb"><span>9:41</span><span class="r">●●● ▮</span></div>
+  <div class="nav"><span></span><div class="navgroup"><div class="nb">+</div><div class="nb">◉</div></div></div>
+  <div class="lt">Cook</div>
+  <div class="body pad">
+    <div class="card" style="position:relative">
+      <div class="row"><h5 style="margin:0">Sunday Supper</h5><span class="badge ok">On plan</span></div>
+      <div class="sub">Today · 8 guests · arrive 6:30 · seating 7:30</div>
+      <div class="row" style="margin-top:8px"><span class="sub">4 of 11 prep tasks done</span><span class="btn pro" style="padding:6px 12px">Start service</span></div>
+      <span class="n" style="right:-8px;top:-8px">1</span>
+    </div>
+    <div class="sec">Today's prep</div>
+    <div class="card rows">
+      <div class="row"><span style="display:flex;gap:8px;align-items:center"><i class="check on"></i>Make pasta dough, rest in fridge</span><span class="sub">9:00</span></div>
+      <div class="row"><span style="display:flex;gap:8px;align-items:center"><i class="check"></i>Braise short ribs (3 h, passive)</span><span class="sub">1:00</span></div>
+      <div class="row"><span style="display:flex;gap:8px;align-items:center"><i class="check"></i>Mise en place: all vegetables</span><span class="sub">3:30</span></div>
+      <div class="row"><span style="display:flex;gap:8px;align-items:center"><i class="check"></i>Kitchen reset before arrival</span><span class="sub">6:00</span></div>
+    </div>
+    <div class="sec">Timers</div>
+    <div class="card row" style="position:relative"><span>Short ribs · oven 300°F</span><span class="pill">2:41:08</span><span class="n" style="right:-8px;top:-8px">2</span></div>
+    <div class="sec">Cook something new <span class="badge" style="margin-left:4px">Suggested</span></div>
+    <div class="grid2" style="position:relative">
+      <div class="card rc"><div class="img"></div><div class="nm">Charred Leeks, Romesco</div><div class="sub">35 min · never cooked</div></div>
+      <div class="card rc"><div class="img"></div><div class="nm">Miso Butter Cod</div><div class="sub">25 min · never cooked</div></div>
+      <span class="n" style="right:-8px;top:-8px">3</span>
+    </div>
+  </div>
+  <div class="tabbar">
+    <div class="tabs"><div class="tab on"><i></i>Cook</div><div class="tab"><i></i>Recipes</div><div class="tab"><i></i>Books</div><div class="tab"><i></i>Plan</div></div>
+    <div class="stab"><i class="mag"></i></div>
+  </div>
+</div></div>
+<figcaption><h4>Cook (Today)</h4>
+<ol class="notes">
+<li><b>1</b>Today's event leads with one prominent action. The status chip reflects the schedule, not a mood.</li>
+<li><b>2</b>Running timers are visible on the home screen and mirrored to the Live Activity.</li>
+<li><b>3</b>Suggestions are labeled as such, drawn from never-cooked recipes that fit the evening, and refreshable.</li>
+</ol></figcaption>
+</figure>
+
+<!-- 2 Recipes -->
+<figure>
+<div class="device phone"><div class="scr">
+  <div class="island"></div>
+  <div class="sb"><span>9:41</span><span class="r">●●● ▮</span></div>
+  <div class="nav"><div class="nb">☰</div><div class="navgroup"><div class="nb">+</div><div class="nb">◉</div></div></div>
+  <div class="lt">Recipes</div>
+  <div class="chips" style="position:relative"><span class="chip on">Mains ×</span><span class="chip">Cuisine</span><span class="chip">Time</span><span class="chip">Dietary</span><span class="chip">Never cooked</span><span class="chip">Book</span><span class="n" style="right:-6px;top:-10px">1</span></div>
+  <div class="body pad" style="padding-top:4px">
+    <div class="row"><span class="kb">128 recipes</span><div class="seg" style="width:90px"><span class="on">▦</span><span>☰</span></div></div>
+    <div class="grid2">
+      <div class="card rc" style="position:relative"><div class="img"></div><div class="nm">Braised Short Ribs</div><div class="sub">3 h 30 · cooked 4×</div></div>
+      <div class="card rc" style="position:relative"><div class="img"></div><div class="nm">Ravioli, Brown Butter</div><div class="sub">2 h · <span class="badge new">Never cooked</span></div><span class="n" style="right:-8px;top:-8px">2</span></div>
+      <div class="card rc"><div class="img"></div><div class="nm">Roast Chicken, Leeks</div><div class="sub">1 h 30 · cooked 9×</div></div>
+      <div class="card rc" style="position:relative"><div class="img"></div><div class="nm">Lamb Shoulder, Harissa</div><div class="sub">5 h · 📖 Ottolenghi p. 142</div><span class="n" style="right:-8px;bottom:-8px">3</span></div>
+      <div class="card rc"><div class="img"></div><div class="nm">Cacio e Pepe</div><div class="sub">20 min · cooked 22×</div></div>
+      <div class="card rc"><div class="img"></div><div class="nm">Coq au Vin</div><div class="sub">2 h 45 · cooked 2×</div></div>
+    </div>
+  </div>
+  <div class="tabbar">
+    <div class="tabs"><div class="tab"><i></i>Cook</div><div class="tab on"><i></i>Recipes</div><div class="tab"><i></i>Books</div><div class="tab"><i></i>Plan</div></div>
+    <div class="stab"><i class="mag"></i></div>
+  </div>
+</div></div>
+<figcaption><h4>Recipes</h4>
+<ol class="notes">
+<li><b>1</b>Filter chips act on the view and show active filters as removable tokens. Search is the Search tab, so there is one place to search.</li>
+<li><b>2</b>"Never cooked" is a first-class state. The grid and list toggle in a segmented control; cards use concentric corners.</li>
+<li><b>3</b>Scanned recipes show their book and page; imported ones show the site. Images scroll under the floating bars with a scroll edge effect.</li>
+</ol></figcaption>
+</figure>
+
+<!-- 3 Recipe detail -->
+<figure>
+<div class="device phone"><div class="scr">
+  <div class="island"></div>
+  <div class="img" style="position:absolute;top:0;left:0;right:0;height:210px;border-radius:0"></div>
+  <div class="sb" style="position:relative;z-index:2"><span>9:41</span><span class="r">●●● ▮</span></div>
+  <div class="nav" style="position:relative;z-index:2"><div class="nb">‹</div><div class="navgroup"><div class="nb">⇧</div><div class="nb">⋯</div></div></div>
+  <div class="body pad" style="margin-top:118px;position:relative;z-index:2">
+    <div class="card" style="position:relative">
+      <h5 style="font-size:17px">Ravioli with Brown Butter and Sage</h5>
+      <div class="row" style="margin-top:4px"><span style="display:flex;gap:6px;align-items:center"><i class="cover" style="width:16px;height:22px"></i><span class="sub">The Pasta Codex · p. 112</span></span><span class="badge new">Never cooked</span></div>
+      <div class="row" style="margin-top:8px;color:var(--ios-2)"><span>⏱ 2 h stated</span><span>Yield 4 · ★ 4.6</span><span>Hard</span></div>
+      <span class="n" style="right:-8px;top:-8px">1</span>
+    </div>
+    <div class="card row" style="position:relative"><span>Servings</span><span style="display:flex;gap:10px;align-items:center"><span class="btn" style="padding:4px 10px">−</span><b>8</b><span class="btn" style="padding:4px 10px">+</span></span><span class="badge">US · g</span><span class="n" style="right:-8px;top:-8px">2</span></div>
+    <div class="sec">Ingredients</div>
+    <div class="card rows" style="position:relative">
+      <div class="row"><span style="display:flex;gap:8px;align-items:center"><i class="check"></i><b>1 lb</b> Pasta Dough <span class="badge">↗ sub-recipe</span></span></div>
+      <div class="row"><span style="display:flex;gap:8px;align-items:center"><i class="check"></i><b>1 cup</b> ricotta, drained</span></div>
+      <div class="row"><span style="display:flex;gap:8px;align-items:center"><i class="check"></i><b>½ cup</b> unsalted butter <span class="sub">(was 4 tbsp)</span></span></div>
+      <div class="row"><span style="display:flex;gap:8px;align-items:center"><i class="check"></i><b>12</b> sage leaves</span></div>
+      <span class="n" style="right:-8px;top:-8px">3</span>
+    </div>
+    <div class="sec">Steps</div>
+    <div class="card"><b>1.</b> Roll the dough to setting 6. Cut into 3-inch squares. Cover with a damp towel for <span class="pill">10 min</span>.</div>
+    <div class="card row" style="position:relative"><span class="sub">Headnote · Reader tips · Nutrition (estimate) · Versions · Cook log</span><span>›</span><span class="n" style="right:-8px;top:-8px">4</span></div>
+  </div>
+  <div class="bottombar"><div class="grp"><div class="nb">⇧</div><div class="nb">☰+</div></div><div class="btn pro">Cook</div></div>
+</div></div>
+<figcaption><h4>Recipe detail</h4>
+<ol class="notes">
+<li><b>1</b>Hero extends under the navigation bar. Source badge shows the book and page, or the site. Stated and observed times appear side by side once cooked.</li>
+<li><b>2</b>Servings stepper rescales live with friendly rounding (4 tbsp becomes ½ cup at double) and a US/metric toggle.</li>
+<li><b>3</b>Sub-recipes appear inline with a link to their own record. Checkboxes serve mise en place and shopping.</li>
+<li><b>4</b>Headnote, reader tips, nutrition, versions and the cook log are collapsed. Cook is the single prominent action.</li>
+</ol></figcaption>
+</figure>
+
+<!-- 4 Scan page -->
+<figure>
+<div class="device phone"><div class="scr dark">
+  <div class="island"></div>
+  <div class="sb"><span>9:41</span><span class="r">●●● ▮</span></div>
+  <div class="nav"><div class="nb">✕</div><div class="navgroup"><div class="nb wide">Auto</div><div class="nb">⚡︎</div></div></div>
+  <div class="cam" style="margin-top:6px;position:relative">
+    <div class="page"><h6>Ravioli with Brown Butter and Sage</h6><div class="ln"></div><div class="ln s"></div><div class="ln"></div><div class="ln s"></div><div class="ln"></div><div class="ln"></div><div class="ln s"></div><div class="ln"></div><div class="ln"></div><div class="ln s"></div><div class="ln"></div><div class="ln"></div><div class="ln"></div><div class="ln s"></div>
+      <div class="outline"></div></div>
+    <div style="position:absolute;top:12px;left:50%;transform:translateX(-50%);background:rgba(255,255,255,.92);color:var(--ios-green);font-size:11px" class="badge ok">● Sharp</div>
+    <span class="n" style="left:50%;top:-6px;margin-left:44px">1</span>
+    <div style="position:absolute;bottom:14px;left:14px;display:flex;align-items:flex-end;gap:4px"><div style="width:34px;height:46px;background:#f6f1e6;border-radius:3px;box-shadow:2px 2px 0 #cfc6b4"></div><span class="badge" style="background:rgba(255,255,255,.2);color:#fff">2 pages</span></div>
+    <div style="position:absolute;bottom:10px;left:50%;transform:translateX(-50%);width:66px;height:66px;border-radius:50%;border:4px solid #fff;display:grid;place-items:center"><div style="width:52px;height:52px;border-radius:50%;background:#fff"></div></div>
+    <div style="position:absolute;bottom:22px;right:14px;font-size:11px" class="btn">Add next page</div>
+    <span class="n" style="right:4px;bottom:62px">2</span>
+    <span class="n" style="left:40px;bottom:66px">3</span>
+  </div>
+</div></div>
+<figcaption><h4>Scan page</h4>
+<ol class="notes">
+<li><b>1</b>Live quality pill: Sharp, Hold still, or Clean the lens, driven by sharpness and Vision's lens-smudge detection. Captures are blocked while it is amber.</li>
+<li><b>2</b>"Add next page" is one tap because cookbook recipes run over the page break.</li>
+<li><b>3</b>Captured pages stack with a count. Controls sit on clear glass over the viewfinder with a dim layer for legibility.</li>
+</ol></figcaption>
+</figure>
+
+<!-- 5 Scan review -->
+<figure>
+<div class="device phone"><div class="scr">
+  <div class="island"></div>
+  <div class="sb"><span>9:41</span><span class="r">●●● ▮</span></div>
+  <div class="nav"><div class="nb">✕</div><span class="t">Review</span><div class="nb">⋯</div></div>
+  <div class="body pad" style="margin-top:6px">
+    <div class="card" style="position:relative;flex:none">
+      <h5>Ravioli with Brown Butter and Sage</h5>
+      <div class="sub">Yield 4 · 2 h · The Pasta Codex p. 112–113</div>
+      <div style="margin-top:6px;font-size:10.5px"><b style="color:var(--ios-blue)">Ingredients (9)</b> · 1 lb pasta dough · 1 cup ricotta · 4 tbsp butter · 12 sage leaves …</div>
+      <div style="margin-top:4px;font-size:10.5px"><b style="color:var(--ios-green)">Steps (7)</b> · Roll the dough to setting 6 …</div>
+      <span class="n" style="right:-8px;top:-8px">1</span>
+    </div>
+    <div class="card" style="position:relative;flex:none;background:#fff8ec;border:1px solid rgba(192,122,18,.35)">
+      <div class="row"><span><b>Pasta Dough</b> is on page 84</span><span class="btn" style="padding:4px 9px;font-size:10px">Link</span><span class="btn" style="padding:4px 9px;font-size:10px">To-scan list</span></div>
+      <span class="n" style="right:-8px;top:-8px">2</span>
+    </div>
+    <div style="flex:1;min-height:0;position:relative;background:#f6f1e6;border-radius:12px;padding:10px;font-family:Georgia,serif;font-size:7px;color:#333;line-height:1.5;overflow:hidden">
+      <div class="rg ttl" style="left:8px;right:40%;top:8px;height:16px"><small>Title</small></div>
+      <div class="rg hd" style="left:8px;right:8px;top:30px;height:34px"><small>Headnote</small></div>
+      <div class="rg ing" style="left:8px;width:42%;top:72px;height:110px"><small>Ingredients</small></div>
+      <div class="rg stp" style="left:50%;right:8px;top:72px;height:150px"><small>Steps</small></div>
+      <div style="position:absolute;left:8px;width:42%;top:190px;height:30px;border:1.5px dashed #999;border-radius:3px"></div>
+      <span class="n" style="left:36%;top:196px">3</span>
+    </div>
+    <div class="seg" style="flex:none;position:relative"><span>Title</span><span>Yield</span><span class="on" style="color:var(--ios-blue)">Ingred.</span><span>Step</span><span>Headnote</span><span>Ignore</span><span class="n" style="right:-8px;top:-10px">4</span></div>
+  </div>
+  <div class="bottombar"><div class="grp"><div class="nb">↶</div><div class="nb">⟲</div></div><div class="btn pro">Save</div></div>
+</div></div>
+<figcaption><h4>Scan review</h4>
+<ol class="notes">
+<li><b>1</b>The structured result reads first. Tapping an item flashes the region it came from.</li>
+<li><b>2</b>Detected cross-references offer Link, add to the book's to-scan list, or Ignore. Nothing is auto-linked without a tap.</li>
+<li><b>3</b>Colored regions are typed by role and labeled, so color is never the only cue. Unassigned text is dashed; tap it to assign.</li>
+<li><b>4</b>The assignment control floats above the page image; on iPad an Apple Pencil lasso does the same job. Undo is always available.</li>
+</ol></figcaption>
+</figure>
+
+<!-- 6 Book detail -->
+<figure>
+<div class="device phone"><div class="scr">
+  <div class="island"></div>
+  <div class="sb"><span>9:41</span><span class="r">●●● ▮</span></div>
+  <div class="nav"><div class="nb">‹</div><div class="navgroup"><div class="nb">⇧</div><div class="nb">⋯</div></div></div>
+  <div class="body pad" style="margin-top:6px">
+    <div class="card" style="display:flex;gap:12px;align-items:center;position:relative">
+      <i class="cover"></i>
+      <div style="flex:1"><h5 style="margin:0">The Pasta Codex</h5><div class="sub">M. Bianchi · 2024 · 978-1-4000-0000-1</div><div class="sub" style="margin-top:4px">Italian · 112 recipes</div></div>
+      <div class="ring"><i>42%</i></div>
+      <span class="n" style="right:-8px;top:-8px">1</span>
+    </div>
+    <div class="card row" style="position:relative"><span><b>47 of 112</b> captured · <span class="badge warn">3 need review</span></span><span class="sub">65 to scan</span><span class="n" style="right:-8px;top:-8px">2</span></div>
+    <div class="seg"><span class="on">Sections</span><span>Index</span><span>Missing</span></div>
+    <div class="card rows" style="position:relative">
+      <div class="row"><span>Doughs</span><span class="sub">8 of 8 <span class="badge ok">done</span></span></div>
+      <div class="row"><span>Filled pasta</span><span class="sub">12 of 20</span></div>
+      <div class="row" style="padding-left:14px"><span>Ravioli, Brown Butter · p. 112</span><span class="badge ok">captured</span></div>
+      <div class="row" style="padding-left:14px"><span>Agnolotti del Plin · p. 118</span><span class="btn" style="padding:3px 9px;font-size:10px">Scan</span></div>
+      <div class="row" style="padding-left:14px"><span>Tortellini in Brodo · p. 124</span><span class="badge warn">review</span></div>
+      <div class="row"><span>Sauces</span><span class="sub">14 of 31</span></div>
+      <div class="row"><span>Baked</span><span class="sub">0 of 12</span></div>
+      <span class="n" style="right:-8px;top:52px">3</span>
+    </div>
+  </div>
+  <div class="bottombar"><div class="grp"><div class="nb">☰</div></div><div class="btn pro">Continue scanning</div></div>
+</div></div>
+<figcaption><h4>Book detail</h4>
+<ol class="notes">
+<li><b>1</b>Metadata from the ISBN lookup (Open Library, Google Books) with manual override. The ring is completeness.</li>
+<li><b>2</b>An incomplete book says exactly what is missing and what needs review.</li>
+<li><b>3</b>Sections come from the contents scan. An uncaptured recipe offers "Scan" with its page number; a captured one opens.</li>
+</ol></figcaption>
+</figure>
+
+<!-- 7 Menu builder -->
+<figure>
+<div class="device phone"><div class="scr">
+  <div class="island"></div>
+  <div class="sb"><span>9:41</span><span class="r">●●● ▮</span></div>
+  <div class="nav"><div class="nb">‹</div><span class="t">Sunday Supper</span><div class="nb">⋯</div></div>
+  <div class="body pad" style="margin-top:6px">
+    <div class="card" style="position:relative">
+      <div class="row"><span>Sun Oct 26 · arrive 6:30 · seat 7:30</span><span class="sub">Home kitchen</span></div>
+      <div class="chips" style="margin-top:6px;padding:0"><span class="chip">8 guests</span><span class="chip" style="color:var(--ios-warn)">Rosa · gluten-free</span><span class="chip">Sam · no alcohol</span></div>
+      <span class="n" style="right:-8px;top:-8px">1</span>
+    </div>
+    <div class="sec">Starter</div>
+    <div class="card rows">
+      <div class="row"><span style="display:flex;gap:8px;align-items:center"><i class="check on"></i>Charred Leeks, Romesco <span class="badge new">never cooked</span></span><span class="sub">×8</span></div>
+      <div class="row"><span style="display:flex;gap:8px;align-items:center"><i class="check"></i>Burrata, Roasted Grapes</span><span class="sub">×8</span></div>
+    </div>
+    <div class="sec">Main</div>
+    <div class="card rows" style="position:relative">
+      <div class="row"><span style="display:flex;gap:8px;align-items:center"><i class="check on"></i>Ravioli, Brown Butter</span><span class="sub">×10</span></div>
+      <div class="row" style="padding-left:18px"><span class="sub">↳ Pasta Dough <span class="badge">sub-recipe</span></span><span class="sub">×10</span></div>
+      <div class="row" style="padding:4px 0 2px 18px"><span class="badge warn">Contains flour · Rosa</span>&nbsp;<span class="badge warn">Oven conflict with gratin</span></div>
+      <span class="n" style="right:-8px;top:-8px">2</span>
+    </div>
+    <div class="sec">Sides · Dessert · Drinks</div>
+    <div class="card row"><span class="sub">Potato Gratin ×8 · Panna Cotta ×8 · Mocktail: Pear &amp; Thyme</span><span>›</span></div>
+    <div class="card" style="position:relative">
+      <div class="row"><h5 style="margin:0">Balance</h5><span class="badge ok">Food for 8</span></div>
+      <div class="row sub" style="margin-top:4px"><span>Veg ●●○ · Starch ●● · Protein ●</span><span>Load: high</span></div>
+      <div class="row sub"><span>Work after guests arrive</span><b style="color:var(--ios-label)">35 min</b></div>
+      <span class="n" style="right:-8px;top:-8px">3</span>
+    </div>
+  </div>
+  <div class="bottombar"><div class="grp"><div class="nb">✦</div><div class="nb">🛒</div></div><div class="btn pro">Finalize</div><span class="n" style="left:8px;top:-10px">4</span></div>
+</div></div>
+<figcaption><h4>Event and menu builder</h4>
+<ol class="notes">
+<li><b>1</b>Guests come from profiles; restrictions merge into the event and drive the warnings below.</li>
+<li><b>2</b>Sub-recipes attach automatically. Warnings are inline notes under the dish, never alerts. Several candidates per slot are fine until Finalize.</li>
+<li><b>3</b>Balance summarizes coverage, servings against guests, complexity load, and the host-presence number.</li>
+<li><b>4</b>Ask Codex (✦) opens the conversational planner as a sheet. Finalize is prominent and generates the list and schedule.</li>
+</ol></figcaption>
+</figure>
+
+<!-- 8 Shopping list -->
+<figure>
+<div class="device phone"><div class="scr">
+  <div class="island"></div>
+  <div class="sb"><span>9:41</span><span class="r">●●● ▮</span></div>
+  <div class="nav"><div class="nb">‹</div><span class="t">Shopping · Sunday Supper</span><div class="nb">⇧</div></div>
+  <div class="body pad" style="margin-top:6px">
+    <div class="seg" style="position:relative"><span class="on">Whole Foods · 14</span><span>Butcher · 2</span><span>Fish · 1</span><span class="n" style="right:-8px;top:-10px">1</span></div>
+    <div class="sec">Produce</div>
+    <div class="card rows" style="position:relative">
+      <div class="row"><span style="display:flex;gap:8px;align-items:center"><i class="check on"></i><s style="color:var(--ios-2)">6 leeks</s></span></div>
+      <div class="row"><span style="display:flex;gap:8px;align-items:center"><i class="check"></i><b>3 lb</b> Yukon Gold potatoes</span></div>
+      <div class="row"><span style="display:flex;gap:8px;align-items:center"><i class="check"></i><b>2 bunches</b> sage <span class="badge">2 recipes</span></span></div>
+      <div class="row"><span style="display:flex;gap:8px;align-items:center"><i class="check"></i><b>1 lb</b> red grapes</span></div>
+      <span class="n" style="right:-8px;top:40px">2</span>
+    </div>
+    <div class="sec">Dairy</div>
+    <div class="card rows">
+      <div class="row"><span style="display:flex;gap:8px;align-items:center"><i class="check"></i><b>1 lb</b> unsalted butter <span class="badge">3 recipes</span></span></div>
+      <div class="row"><span style="display:flex;gap:8px;align-items:center"><i class="check"></i><b>1 cup + 2 tbsp</b> heavy cream</span></div>
+      <div class="row"><span style="display:flex;gap:8px;align-items:center"><i class="check"></i><b>8 oz</b> ricotta</span></div>
+    </div>
+    <div class="sec">Pantry</div>
+    <div class="card rows"><div class="row"><span style="display:flex;gap:8px;align-items:center"><i class="check"></i><b>500 g</b> 00 flour</span></div></div>
+    <div class="card row" style="position:relative"><span class="sub">Have at home (8) · eggs, olive oil, kosher salt, black pepper …</span><span>›</span><span class="n" style="right:-8px;top:-8px">3</span></div>
+  </div>
+  <div class="tabbar">
+    <div class="tabs"><div class="tab"><i></i>Cook</div><div class="tab"><i></i>Recipes</div><div class="tab"><i></i>Books</div><div class="tab on"><i></i>Plan</div></div>
+    <div class="stab"><i class="mag"></i></div>
+  </div>
+</div></div>
+<figcaption><h4>Shopping list</h4>
+<ol class="notes">
+<li><b>1</b>Stops first (Whole Foods, butcher, fishmonger), sections within each. Specialty items route to specialty stops by category, with your overrides remembered.</li>
+<li><b>2</b>Aggregated quantities carry a badge when several recipes contribute; long-press shows the breakdown. Check-offs sync between devices.</li>
+<li><b>3</b>Pantry items you have are hidden, not deleted. Swipe one back onto the list if you're out.</li>
+</ol></figcaption>
+</figure>
+
+<!-- 9 Schedule -->
+<figure>
+<div class="device phone"><div class="scr">
+  <div class="island"></div>
+  <div class="sb"><span>9:41</span><span class="r">●●● ▮</span></div>
+  <div class="nav"><div class="nb">‹</div><span class="t">Schedule</span><div class="navgroup"><div class="nb">+</div><div class="nb">⋯</div></div></div>
+  <div class="body pad" style="margin-top:6px">
+    <div class="card row" style="position:relative"><span><b>6 h 40 m</b> total · Fri, Sat, Sun</span><span>After arrival: <b>35 m</b></span><span class="n" style="right:-8px;top:-8px">1</span></div>
+    <div class="seg"><span>Fri</span><span>Sat</span><span class="on">Sun</span></div>
+    <div class="hours" style="flex:1;min-height:0;position:relative">
+      <div class="h">9:00</div><div class="d"></div><div class="task pas c2">Pasta dough → fridge <span class="sub">20 m active · rest 2 h+</span></div>
+      <div class="h">1:00</div><div class="d"></div><div class="task pas">Short ribs into oven, 300°F <span class="sub">15 m active · 3 h passive</span></div>
+      <div class="h">3:30</div><div class="d hi"></div><div class="task c3">Mise en place: leeks, potatoes, sage, grapes <span class="sub">45 m · batched across 3 recipes</span></div>
+      <div class="h">4:15</div><div class="d hi"></div><div class="task c4">Panna cotta → fridge <span class="sub">20 m · set 3 h min</span></div>
+      <div class="h">4:45</div><div class="d max"></div><div class="task c2 warn">Fill &amp; shape ravioli <span class="sub">⚠ Overloaded hour. Move to 3:00? Dough is ready from 11:00.</span></div>
+      <div class="h">6:00</div><div class="d"></div><div class="task c5">Kitchen reset · set table <span class="sub">30 m</span></div>
+      <div class="h">6:30</div><div class="d"></div><div class="task" style="border-left-color:#999">Guests arrive</div>
+      <div class="h">7:15</div><div class="d"></div><div class="task c2">Boil ravioli, brown butter <span class="sub">12 m · serve within 3 m</span></div>
+      <span class="n" style="left:28px;top:150px">2</span>
+      <span class="n" style="right:-8px;top:196px">3</span>
+    </div>
+    <div class="card row"><span class="sub">Reserve tasks for helpers (3) · pick herbs, set table, open wine</span><span>›</span></div>
+  </div>
+  <div class="bottombar"><div class="grp"><div class="nb">⟲</div><div class="nb">⇧</div></div><div class="btn pro">Replan</div></div>
+</div></div>
+<figcaption><h4>Workback schedule</h4>
+<ol class="notes">
+<li><b>1</b>Summary before detail: total work, the days involved, and the host-presence number.</li>
+<li><b>2</b>A density bar per hour shows load against your concurrency limit (from proficiency). Striped cards are passive time.</li>
+<li><b>3</b>Infeasible or overloaded placements explain themselves in place and propose a fix. Dragging a card snaps when valid and turns amber when not.</li>
+</ol></figcaption>
+</figure>
+
+<!-- 10 Service mode -->
+<figure>
+<div class="device phone"><div class="scr">
+  <div class="island"></div>
+  <div class="sb"><span>7:12</span><span class="r">●●● ▮</span></div>
+  <div class="nav"><div class="nb">✕</div><span class="t">Sunday Supper</span><div class="nb">⋯</div></div>
+  <div class="status" style="margin-top:4px;position:relative"><span>Seating 7:30</span><span class="badge warn">12 min behind</span><span class="n" style="right:-8px;top:-10px">1</span></div>
+  <div class="body" style="padding-bottom:96px;margin-top:2px">
+    <div class="sec">Now · Ravioli, Brown Butter · step 5 of 7</div>
+    <div class="card" style="position:relative">
+      <div class="step">Melt the butter over medium heat. Add the sage and cook until the butter foams and turns nut-brown, <span class="tm">3–4 min</span>.</div>
+      <div class="row" style="margin-top:8px"><span class="sub">½ cup butter · 12 sage leaves</span><span class="sub">Next: boil ravioli 3 min</span></div>
+      <span class="n" style="right:-8px;top:-8px">2</span>
+    </div>
+    <div class="sec">Watch</div>
+    <div class="card rows" style="position:relative">
+      <div class="row"><span>Gratin · oven 375°F</span><span class="pill">18:40</span></div>
+      <div class="row"><span>Short ribs · resting, foil</span><span class="pill">until 7:25</span></div>
+      <div class="row" style="background:#fff8ec;margin:0 -12px;padding:8px 12px;border-radius:0 0 12px 12px"><span><b>Check the ribs.</b> Should be near 200°F.</span><span class="btn" style="padding:4px 10px;font-size:10px">Enter temp</span></div>
+      <span class="n" style="right:-8px;top:-8px">3</span>
+    </div>
+    <div class="sec">Next</div>
+    <div class="card row"><span class="sub">Plate leeks · 5 m</span><span class="sub">Toss ravioli in butter · 2 m</span></div>
+  </div>
+  <div class="bottombar" style="position:absolute;bottom:12px;gap:8px"><div class="btn" style="height:56px;border-radius:18px;padding:0 18px;font-size:15px">Back</div><div class="btn pro big">Done</div><span class="n" style="right:-6px;top:-10px">4</span></div>
+</div></div>
+<figcaption><h4>Service mode</h4>
+<ol class="notes">
+<li><b>1</b>Lateness against seating is a number with a color. Falling behind offers Replan, which previews the new order before applying it.</li>
+<li><b>2</b>The current step in large type, its ingredients beneath, times as tappable pills that start AlarmKit timers. The next step is always visible.</li>
+<li><b>3</b>The Watch lane holds passive tasks and timers. Proactive checks appear here; entering a reading returns "about 9 more minutes" and schedules the next check.</li>
+<li><b>4</b>Done and Back are at least 56 pt tall and bottom-anchored. Knuckle mode makes Done the bottom third of the screen. Siri, the Action button and voice phrases do the same.</li>
+</ol></figcaption>
+</figure>
+
+<!-- 11 Now cooking accessory -->
+<figure>
+<div class="device phone"><div class="scr">
+  <div class="island"></div>
+  <div class="sb"><span>7:12</span><span class="r">●●● ▮</span></div>
+  <div class="nav"><div class="nb">☰</div><div class="navgroup"><div class="nb">+</div><div class="nb">◉</div></div></div>
+  <div class="lt" style="font-size:17px;padding-bottom:4px">Recipes</div>
+  <div class="body pad">
+    <div class="grid2">
+      <div class="card rc"><div class="img"></div><div class="nm">Braised Short Ribs</div><div class="sub">3 h 30</div></div>
+      <div class="card rc"><div class="img"></div><div class="nm">Ravioli, Brown Butter</div><div class="sub">2 h</div></div>
+      <div class="card rc"><div class="img"></div><div class="nm">Roast Chicken</div><div class="sub">1 h 30</div></div>
+      <div class="card rc"><div class="img"></div><div class="nm">Lamb Shoulder</div><div class="sub">5 h</div></div>
+      <div class="card rc"><div class="img"></div><div class="nm">Cacio e Pepe</div><div class="sub">20 min</div></div>
+      <div class="card rc"><div class="img"></div><div class="nm">Coq au Vin</div><div class="sub">2 h 45</div></div>
+    </div>
+  </div>
+  <div class="tabbar min">
+    <div class="tabs"><div class="tab on"><i></i></div></div>
+    <div class="acc"><div class="tx"><b>Brown the butter, 3–4 min</b><span>Ravioli · step 5 of 7 · gratin 18:40</span></div><span class="btn pro" style="padding:8px 14px">Next</span></div>
+    <span class="n" style="left:-6px;top:-10px">1</span><span class="n" style="right:-6px;top:-10px">2</span>
+  </div>
+</div></div>
+<figcaption><h4>Now Cooking accessory</h4>
+<ol class="notes">
+<li><b>1</b>While a session runs, scrolling any list minimizes the tab bar into the current tab, the Music MiniPlayer pattern (TabBarMinimizeBehavior with a bottom accessory).</li>
+<li><b>2</b>The accessory carries the current step, the soonest timer and a Next button; tapping it expands to the full session. It ends when the session ends.</li>
+</ol></figcaption>
+</figure>
+
+<!-- 12 Search -->
+<figure>
+<div class="device phone"><div class="scr">
+  <div class="island"></div>
+  <div class="sb"><span>9:41</span><span class="r">●●● ▮</span></div>
+  <div class="nav"><span></span><div class="nb">◉</div></div>
+  <div class="lt">Search</div>
+  <div class="body pad">
+    <div class="chips" style="position:relative"><span class="chip on">vegetable ×</span><span class="chip on">side ×</span><span class="chip on">Seattle ×</span><span class="chip on">Jan–Apr 2026 ×</span><span class="n" style="right:-6px;top:-10px">1</span></div>
+    <div class="sec">Recipes · 3</div>
+    <div class="card rows" style="position:relative">
+      <div class="row"><span style="display:flex;gap:8px;align-items:center"><i class="img" style="width:34px;height:34px"></i><span><b>Charred Cabbage, Miso Butter</b><br><span class="sub">cooked Feb 15, Seattle · ★ 5</span></span></span></div>
+      <div class="row"><span style="display:flex;gap:8px;align-items:center"><i class="img" style="width:34px;height:34px"></i><span><b>Roasted Carrots, Harissa Yogurt</b><br><span class="sub">cooked Mar 2, Seattle · ★ 4</span></span></span></div>
+      <div class="row"><span style="display:flex;gap:8px;align-items:center"><i class="img" style="width:34px;height:34px"></i><span><b>Braised Leeks, Vinaigrette</b><br><span class="sub">cooked Jan 19, Seattle</span></span></span></div>
+      <span class="n" style="right:-8px;top:-8px">2</span>
+    </div>
+    <div class="sec">Events · 1</div>
+    <div class="card row"><span>Sunday Supper · Feb 15, 2026 · 9 guests</span><span>›</span></div>
+    <div class="sec">Suggestions</div>
+    <div class="chips"><span class="chip">Never cooked</span><span class="chip">Under 30 min</span><span class="chip">Ottolenghi</span><span class="chip">Braises</span></div>
+  </div>
+  <div style="position:absolute;bottom:70px;left:12px;right:12px;height:44px;border-radius:22px;background:var(--ios-glass);backdrop-filter:blur(14px);box-shadow:0 2px 10px rgba(0,0,0,.14);display:flex;align-items:center;gap:8px;padding:0 14px;font-size:12px;color:var(--ios-2)"><i class="mag" style="margin:0"></i><span style="color:var(--ios-label)">that vegetable dish I made in Seattle this spring</span><span class="n" style="right:-6px;top:-10px">3</span></div>
+  <div class="tabbar">
+    <div class="tabs"><div class="tab"><i></i>Cook</div><div class="tab"><i></i>Recipes</div><div class="tab"><i></i>Books</div><div class="tab"><i></i>Plan</div></div>
+    <div class="stab" style="color:var(--ios-tint)"><i class="mag"></i></div>
+  </div>
+</div></div>
+<figcaption><h4>Search</h4>
+<ol class="notes">
+<li><b>1</b>A natural-language phrase is interpreted into filter tokens you can remove one at a time, so the model's reading is visible and correctable.</li>
+<li><b>2</b>Results group by type and show the cook-history facts that matched (date, place, rating).</li>
+<li><b>3</b>The search field sits at the bottom on iPhone where it is reachable; suggestions appear before typing.</li>
+</ol></figcaption>
+</figure>
+
+</div><!-- /gallery -->
+
+<h3>Live Activity</h3>
+<p class="prose muted">One Live Activity per session, starting with the iPhone design and adapting to the Lock Screen, StandBy, the Apple Watch Smart Stack and the Mac menu bar. Text is medium weight or heavier, content hugs the camera cutout, and the limited-width variant is the soonest timer alone.</p>
+<div class="la">
+  <figure><div class="di c"><span>18:40</span><i></i><span>Step 5</span></div><figcaption><h4>Compact</h4><p class="muted">Leading: soonest timer. Trailing: current step number, or a flame glyph when an oven task is running.</p></figcaption></figure>
+  <figure><div class="di x"><div class="r1"><span>Sunday Supper</span><span style="color:#e0a949">12 min behind</span></div><div class="r2">Brown the butter with sage, 3–4 min</div><div class="r3"><span>Gratin 18:40</span><span>Ribs rest 7:25</span><b>Next</b></div></div><figcaption><h4>Expanded</h4><p class="muted">Current step in two lines, up to three timers, one Next button. Buttons are limited to one so a glance never mis-taps.</p></figcaption></figure>
+  <figure><div class="ls"><div class="r1"><span>Recipe Codex · Sunday Supper</span><span>12 min behind</span></div><div class="r2">Brown the butter with sage, 3–4 min</div><div class="r3"><span>Gratin 18:40</span><span>Ribs until 7:25</span><b>Next</b></div></div><figcaption><h4>Lock Screen and StandBy</h4><p class="muted">Same layout with 14-pt margins. In StandBy it scales 2× with the default background so it blends with the bezel.</p></figcaption></figure>
+</div>
+
+<h2>iPad</h2>
+<p class="prose muted">The same five tabs in a top tab bar that converts to a sidebar. Recipes and Books use three-column split views; Plan uses two. Cook and service mode can open in their own window on a stand. Scroll sideways to see all frames.</p>
+
+<div class="scroller"><div class="gallery">
+
+<!-- iPad 1: Library -->
+<figure>
+<div class="device ipad"><div class="scr">
+  <div class="sb"><span>9:41 Sun Oct 19</span><span class="r">●●● ▮</span></div>
+  <div class="toptabs"><div class="nb">☰</div><div class="tabs"><div class="tab">Cook</div><div class="tab on">Recipes</div><div class="tab">Books</div><div class="tab">Plan</div></div><div class="stab"><i class="mag"></i></div><div class="right"><div class="nb">+</div><div class="nb">◉</div></div></div>
+  <div class="cols" style="grid-template-columns:150px 200px 1fr;position:relative">
+    <div class="col side">
+      <div class="sec">Library</div><div class="row on">All recipes <span>128</span></div><div class="row">Favorites <span>24</span></div><div class="row">Never cooked <span>31</span></div><div class="row">Recently cooked</div>
+      <div class="sec">Collections</div><div class="row">Sunday suppers</div><div class="row">Weeknight</div><div class="row">Holiday baking</div>
+      <div class="sec">Smart</div><div class="row">Under 30 min</div><div class="row">Needs stand mixer</div>
+      <div class="sec">Kitchen</div><div class="row">Pantry · Tools · Guests</div>
+      <span class="n" style="left:-6px;top:-6px">1</span>
+    </div>
+    <div class="col list">
+      <div class="chips" style="padding:0"><span class="chip on">Mains</span><span class="chip">Time</span><span class="chip">Dietary</span></div>
+      <div class="row"><i class="img"></i><span><b>Braised Short Ribs</b><br><span class="sub">3 h 30 · cooked 4×</span></span></div>
+      <div class="row on"><i class="img"></i><span><b>Ravioli, Brown Butter</b><br><span class="sub">2 h · never cooked</span></span></div>
+      <div class="row"><i class="img"></i><span><b>Roast Chicken, Leeks</b><br><span class="sub">1 h 30 · cooked 9×</span></span></div>
+      <div class="row"><i class="img"></i><span><b>Lamb Shoulder, Harissa</b><br><span class="sub">5 h · Ottolenghi p. 142</span></span></div>
+      <div class="row"><i class="img"></i><span><b>Cacio e Pepe</b><br><span class="sub">20 min · cooked 22×</span></span></div>
+      <div class="row"><i class="img"></i><span><b>Coq au Vin</b><br><span class="sub">2 h 45</span></span></div>
+    </div>
+    <div class="col" style="position:relative">
+      <div class="img" style="height:120px"></div>
+      <div class="row"><h5 style="font-size:16px;margin:0">Ravioli with Brown Butter and Sage</h5><span class="btn pro" style="padding:6px 14px">Cook</span></div>
+      <div class="row sub" style="font-size:11px"><span>The Pasta Codex p. 112 · 2 h · Yield 4 · Hard</span><span class="badge new">Never cooked</span></div>
+      <div style="display:grid;grid-template-columns:1fr 1.4fr;gap:8px;flex:1;min-height:0">
+        <div class="card rows" style="font-size:10.5px"><div class="sec" style="padding:0 0 4px">Ingredients · 8 servings</div><div class="row"><span>1 lb Pasta Dough ↗</span></div><div class="row"><span>1 cup ricotta</span></div><div class="row"><span>½ cup butter</span></div><div class="row"><span>12 sage leaves</span></div><div class="row"><span>Parmesan, nutmeg, salt</span></div></div>
+        <div class="card" style="font-size:10.5px"><div class="sec" style="padding:0 0 4px">Steps</div><b>1.</b> Roll the dough to setting 6; cut 3-inch squares. Rest <span class="pill">10 min</span>.<br><b>2.</b> Mix ricotta, Parmesan, nutmeg. Pipe 1 tsp per square.<br><b>3.</b> Fold, seal, trim. Hold on semolina, uncovered.<br><span class="sub">Headnote · Reader tips · Nutrition · Versions · Cook log ›</span></div>
+      </div>
+      <span class="n" style="right:-6px;top:-6px">2</span>
+    </div>
+    <span class="n" style="left:50%;top:-14px;margin-left:-100px">3</span>
+  </div>
+</div></div>
+<figcaption><h4>Recipes on iPad: three columns</h4>
+<ol class="notes">
+<li><b>1</b>The sidebar (converted from the tab bar) holds library views, user collections, smart collections and Kitchen. Content extends beneath it with a background extension effect.</li>
+<li><b>2</b>Detail shows ingredients and steps side by side at regular width; the hero is smaller than on iPhone. Drag a recipe from the list into a collection or into a menu in another window.</li>
+<li><b>3</b>The top tab bar floats on glass with the search tab at its trailing end; Add and profile sit top trailing. A menu bar provides File, Recipe and Plan commands with keyboard shortcuts.</li>
+</ol></figcaption>
+</figure>
+
+<!-- iPad 2: Scanning session -->
+<figure>
+<div class="device ipad"><div class="scr dark">
+  <div class="sb"><span>9:41 Sun Oct 19</span><span class="r">●●● ▮</span></div>
+  <div class="nav" style="margin-top:4px"><div class="nb">✕</div><span class="t" style="color:#fff">The Pasta Codex · scanning</span><div class="navgroup"><div class="nb wide">Pause</div><div class="nb">⋯</div></div></div>
+  <div class="cols" style="grid-template-columns:190px 1fr 190px;padding-top:10px;position:relative">
+    <div class="col punch" style="background:rgba(255,255,255,.08);border-radius:14px;padding:8px;color:#fff">
+      <div class="sec" style="color:#bbb">Filled pasta · 12 of 20</div>
+      <div class="row"><span style="display:flex;gap:6px;align-items:center"><i class="dot ok"></i>Ravioli, Brown Butter</span><span>112</span></div>
+      <div class="row"><span style="display:flex;gap:6px;align-items:center"><i class="dot rev"></i>Tortellini in Brodo</span><span>124</span></div>
+      <div class="row on" style="background:rgba(59,111,214,.35)"><span style="display:flex;gap:6px;align-items:center"><i class="dot cur"></i>Agnolotti del Plin</span><span>118</span></div>
+      <div class="row"><span style="display:flex;gap:6px;align-items:center"><i class="dot"></i>Cappelletti</span><span>130</span></div>
+      <div class="row"><span style="display:flex;gap:6px;align-items:center"><i class="dot"></i>Culurgiones</span><span>134</span></div>
+      <div class="row"><span style="display:flex;gap:6px;align-items:center"><i class="dot"></i>Pansotti</span><span>138</span></div>
+      <div class="sec" style="color:#bbb">Sauces · 14 of 31</div>
+      <div class="row"><span style="display:flex;gap:6px;align-items:center"><i class="dot ok"></i>Brown Butter</span><span>160</span></div>
+      <div class="row"><span style="display:flex;gap:6px;align-items:center"><i class="dot"></i>Ragù Bolognese</span><span>164</span></div>
+      <span class="n" style="left:-6px;top:-6px">1</span>
+    </div>
+    <div class="cam" style="border-radius:14px;position:relative">
+      <div class="page" style="left:16%;right:16%;top:10%;bottom:12%"><h6>Agnolotti del Plin</h6><div class="ln"></div><div class="ln s"></div><div class="ln"></div><div class="ln"></div><div class="ln s"></div><div class="ln"></div><div class="ln"></div><div class="ln s"></div><div class="ln"></div><div class="outline"></div></div>
+      <div style="position:absolute;top:10px;left:50%;transform:translateX(-50%);background:rgba(255,255,255,.92);font-size:11px" class="badge warn">● Hold still</div>
+      <div style="position:absolute;bottom:10px;left:50%;transform:translateX(-50%);width:56px;height:56px;border-radius:50%;border:4px solid #fff;display:grid;place-items:center"><div style="width:44px;height:44px;border-radius:50%;background:#fff"></div></div>
+      <div style="position:absolute;bottom:18px;right:12px" class="btn">Add next page</div>
+      <div style="position:absolute;bottom:18px;left:12px;color:#fff;font-size:11px">p. 118 detected · item matched</div>
+      <span class="n" style="left:12px;bottom:40px">2</span>
+    </div>
+    <div class="col" style="background:rgba(255,255,255,.08);border-radius:14px;padding:8px;color:#fff;font-size:10.5px">
+      <div class="sec" style="color:#bbb">Last capture · Tortellini in Brodo</div>
+      <div><b style="color:#9fd0ff">Ingredients 11</b> · 1 lb pasta dough · ½ lb pork loin · mortadella · Parmesan …</div>
+      <div><b style="color:#9fe0b0">Steps 9</b> · Roll the dough thin …</div>
+      <div class="badge warn" style="margin-top:4px">Low confidence: 2 lines</div>
+      <div style="margin-top:auto;display:flex;gap:6px"><span class="btn" style="font-size:10px;padding:5px 10px">Review now</span><span class="btn" style="font-size:10px;padding:5px 10px">Later</span></div>
+      <span class="n" style="right:-6px;top:-6px">3</span>
+    </div>
+  </div>
+  <div class="status" style="padding:0 14px 10px;color:#ccc;font-size:11px"><span>12 captured · 9 processed · 2 need review</span><span>Battery 64% · processing in background</span></div>
+</div></div>
+<figcaption><h4>Book scanning session</h4>
+<ol class="notes">
+<li><b>1</b>The punchlist comes from the contents scan. Status dots: captured, needs review, current, not yet. Tapping any item jumps to it.</li>
+<li><b>2</b>The camera reads the printed page number and keeps the list in step. The quality pill blocks a soft capture. Pausing keeps your place.</li>
+<li><b>3</b>The last capture's structure appears at once so a bad read is caught before you turn the page. OCR and structuring run in a background queue.</li>
+</ol></figcaption>
+</figure>
+
+<!-- iPad 3: Schedule planner -->
+<figure>
+<div class="device ipad"><div class="scr">
+  <div class="sb"><span>9:41 Sun Oct 19</span><span class="r">●●● ▮</span></div>
+  <div class="toptabs"><div class="nb">☰</div><div class="tabs"><div class="tab">Cook</div><div class="tab">Recipes</div><div class="tab">Books</div><div class="tab on">Plan</div></div><div class="stab"><i class="mag"></i></div><div class="right"><div class="nb wide">Replan</div><div class="nb">⇧</div></div></div>
+  <div class="cols" style="grid-template-columns:1fr 190px;position:relative">
+    <div class="col">
+      <div class="row"><b style="font-size:14px">Sunday Supper · schedule</b><span class="sub">6 h 40 m total · after arrival <b>35 m</b></span></div>
+      <div class="days">
+        <div></div><div class="hd">Fri</div><div class="hd">Sat</div><div class="hd">Sun</div>
+        <div class="hcol"><span>9</span><span>12</span><span>3</span><span>6</span><span>7:30</span></div>
+        <div class="dcol"><div class="task pas c4" style="margin-top:30px">Panna cotta base → fridge <span class="sub">20 m</span></div><div class="task pas c2" style="margin-top:40px">Pasta dough → fridge <span class="sub">rest 24 h min</span></div></div>
+        <div class="dcol"><div class="task pas" style="margin-top:14px">Short ribs braise <span class="sub">3 h passive</span></div><div class="task c3" style="margin-top:24px">Romesco <span class="sub">25 m · holds 2 days</span></div><div class="task c5" style="margin-top:50px">Shop: butcher, fishmonger</div></div>
+        <div class="dcol"><div class="task c3" style="margin-top:46px">Mise en place, all veg <span class="sub">45 m</span></div><div class="task c2 warn">Fill &amp; shape ravioli <span class="sub">⚠ overloaded 4–5 PM</span></div><div class="task c5">Kitchen reset · table <span class="sub">30 m</span></div><div class="task" style="border-left-color:#999">Guests arrive 6:30</div><div class="task c2">Boil ravioli · brown butter <span class="sub">serve within 3 m</span></div></div>
+      </div>
+      <span class="n" style="left:40%;top:40px">1</span>
+    </div>
+    <div class="col" style="position:relative">
+      <div class="card" style="font-size:10.5px"><h5>Fill &amp; shape ravioli</h5><div class="sub">Ravioli, Brown Butter · 50 m active</div>
+        <div style="margin-top:6px"><b>Needs</b> Pasta dough rested ≥ 2 h (ready Sat 11:00)</div>
+        <div><b>Feeds</b> Boil ravioli (Sun 7:15)</div>
+        <div><b>Holds</b> up to 8 h on semolina, uncovered, fridge</div>
+        <div style="margin-top:6px;color:var(--ios-warn)"><b>⚠ Overloaded hour.</b> Move to Sun 3:00 or Sat evening. Both are feasible.</div>
+        <div style="display:flex;gap:6px;margin-top:8px"><span class="btn" style="font-size:10px;padding:5px 9px">Sun 3:00</span><span class="btn" style="font-size:10px;padding:5px 9px">Sat 8 PM</span></div>
+      </div>
+      <div class="card" style="font-size:10.5px"><h5>Reserve tasks</h5><div class="sub">For a guest who insists on helping</div><div>· Pick sage, strip thyme<br>· Set the table<br>· Open and decant wine</div></div>
+      <span class="n" style="right:-6px;top:-6px">2</span>
+    </div>
+  </div>
+</div></div>
+<figcaption><h4>Schedule planner</h4>
+<ol class="notes">
+<li><b>1</b>Days as columns, hours as rows, recipe colors as stripes, passive time striped. Drag with snapping; arrow keys nudge by 15 minutes; the scheduler re-validates every move.</li>
+<li><b>2</b>The inspector names every constraint behind the selected task (needs, feeds, holds) and offers concrete feasible fixes. Reserve tasks are the helper list from your hosting notes.</li>
+</ol></figcaption>
+</figure>
+
+<!-- iPad 4: Service mode -->
+<figure>
+<div class="device ipad"><div class="scr">
+  <div class="sb"><span>7:12 Sun Oct 26</span><span class="r">●●● ▮</span></div>
+  <div class="nav" style="margin-top:4px"><div class="nb">✕</div><span class="t">Sunday Supper · seating 7:30 · <span class="badge warn">12 min behind</span></span><div class="navgroup"><div class="nb wide">Replan</div><div class="nb">⋯</div></div></div>
+  <div class="cols" style="grid-template-columns:170px 1fr 190px;padding-top:10px;position:relative">
+    <div class="col lane">
+      <div class="sec">Timeline</div>
+      <div class="task c3" style="opacity:.5">Plate leeks, romesco <span class="sub">done 6:58</span></div>
+      <div class="task c2" style="outline:2px solid var(--ios-tint)">Brown butter, sage <span class="sub">now · 3–4 m</span></div>
+      <div class="task c2">Boil ravioli <span class="sub">7:15 · 3 m</span></div>
+      <div class="task c2">Toss, plate, serve <span class="sub">7:20</span></div>
+      <div class="task pas">Gratin out, rest <span class="sub">7:31</span></div>
+      <div class="task c4">Panna cotta: unmold <span class="sub">8:40</span></div>
+      <span class="n" style="left:-6px;top:-6px">1</span>
+    </div>
+    <div class="col" style="justify-content:center;gap:14px;position:relative">
+      <div class="sub" style="font-size:12px">Ravioli, Brown Butter · step 5 of 7</div>
+      <div class="step" style="font-size:26px">Melt the butter over medium heat. Add the sage and cook until the butter foams and turns nut-brown, <span class="tm">3–4 min</span>.</div>
+      <div class="nextstep">Next: boil the ravioli in salted water, 3 minutes, then straight into the butter.</div>
+      <div style="display:flex;gap:10px;margin-top:auto"><div class="btn" style="height:56px;border-radius:18px;padding:0 24px;font-size:15px">Back</div><div class="btn pro big">Done</div></div>
+      <span class="n" style="right:-6px;top:-6px">2</span>
+    </div>
+    <div class="col" style="position:relative">
+      <div class="sec">Watch</div>
+      <div class="card row" style="font-size:11px"><span>Gratin · 375°F</span><span class="pill">18:40</span></div>
+      <div class="card row" style="font-size:11px"><span>Ribs resting</span><span class="pill">until 7:25</span></div>
+      <div class="card" style="font-size:11px;background:#fff8ec"><b>Check the ribs.</b> Should be near 200°F.<div style="display:flex;gap:6px;margin-top:6px"><span class="btn" style="font-size:10px;padding:5px 10px">Enter temp</span><span class="btn" style="font-size:10px;padding:5px 10px">Probe: 196°F</span></div></div>
+      <div class="sec">This step</div>
+      <div class="card" style="font-size:11px">½ cup unsalted butter<br>12 sage leaves<br><span class="sub">Pan: 12-inch skillet (from your tools)</span></div>
+      <span class="n" style="right:-6px;top:-6px">3</span>
+    </div>
+  </div>
+</div></div>
+<figcaption><h4>Service mode on a stand</h4>
+<ol class="notes">
+<li><b>1</b>The compressed timeline shows done, now and next across all dishes, with the schedule's time marker.</li>
+<li><b>2</b>The current step in very large type readable from the counter, next step beneath, Done and Back at the bottom. Space bar, Siri, the Action button on the paired iPhone and voice phrases also advance.</li>
+<li><b>3</b>Watch lane with timers, proactive checks (manual entry or a Combustion probe reading), this step's ingredients and the suggested vessel from your tools.</li>
+</ol></figcaption>
+</figure>
+
+<!-- iPad 5: Menu builder + Ask Codex -->
+<figure>
+<div class="device ipad"><div class="scr">
+  <div class="sb"><span>9:41 Sun Oct 19</span><span class="r">●●● ▮</span></div>
+  <div class="toptabs"><div class="nb">☰</div><div class="tabs"><div class="tab">Cook</div><div class="tab">Recipes</div><div class="tab">Books</div><div class="tab on">Plan</div></div><div class="stab"><i class="mag"></i></div><div class="right"><div class="nb wide" style="color:var(--ios-tint)">Finalize</div><div class="nb">⋯</div></div></div>
+  <div class="cols" style="grid-template-columns:1fr 250px;position:relative">
+    <div class="col">
+      <div class="card" style="font-size:11px"><div class="row"><b style="font-size:13px">Sunday Supper</b><span class="sub">Sun Oct 26 · arrive 6:30 · seat 7:30 · Home kitchen</span></div><div class="chips" style="padding:0;margin-top:6px"><span class="chip">8 guests</span><span class="chip" style="color:var(--ios-warn)">Rosa · gluten-free</span><span class="chip">Sam · no alcohol</span><span class="chip">Priya · loved the braise</span></div></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;flex:1;min-height:0">
+        <div class="card rows" style="font-size:11px"><div class="sec" style="padding:0 0 4px">Starter</div><div class="row"><span><i class="check on" style="display:inline-block;vertical-align:middle;margin-right:6px"></i>Charred Leeks, Romesco <span class="badge new">never cooked</span></span><span class="sub">×8</span></div><div class="row"><span><i class="check" style="display:inline-block;vertical-align:middle;margin-right:6px"></i>Burrata, Roasted Grapes</span><span class="sub">×8</span></div></div>
+        <div class="card rows" style="font-size:11px"><div class="sec" style="padding:0 0 4px">Main</div><div class="row"><span><i class="check on" style="display:inline-block;vertical-align:middle;margin-right:6px"></i>Ravioli, Brown Butter</span><span class="sub">×10</span></div><div class="row" style="padding-left:20px"><span class="sub">↳ Pasta Dough · sub-recipe</span></div><div class="row"><span class="badge warn">Contains flour · Rosa</span></div></div>
+        <div class="card rows" style="font-size:11px"><div class="sec" style="padding:0 0 4px">Sides</div><div class="row"><span><i class="check on" style="display:inline-block;vertical-align:middle;margin-right:6px"></i>Potato Gratin</span><span class="sub">×8</span></div><div class="row"><span class="badge warn">Oven 375°F conflicts with ribs 300°F</span></div><div class="row"><span class="sub">+ Add a vegetable side (suggested)</span></div></div>
+        <div class="card rows" style="font-size:11px"><div class="sec" style="padding:0 0 4px">Dessert · Drinks</div><div class="row"><span><i class="check on" style="display:inline-block;vertical-align:middle;margin-right:6px"></i>Panna Cotta, Fig</span><span class="sub">×8</span></div><div class="row"><span><i class="check on" style="display:inline-block;vertical-align:middle;margin-right:6px"></i>Pear &amp; Thyme mocktail</span><span class="sub">Sam</span></div></div>
+      </div>
+      <span class="n" style="left:50%;top:60px">1</span>
+    </div>
+    <div class="col chat" style="position:relative;font-size:10.5px">
+      <div class="row"><b>Ask Codex</b><span class="badge">Apple cloud model · shares menu summary</span></div>
+      <div class="bub me">Cozy fall dinner for 8, Rosa is gluten-free, nothing I haven't cooked except one dish.</div>
+      <div class="bub ai"><b>Proposal</b><br>Starter · Charred Leeks, Romesco <span class="sub">(the one new dish; 35 m, holds well)</span><br>Main · Braised Short Ribs <span class="sub">cooked 4×, GF</span><br>Side · Potato Gratin <span class="sub">GF</span>, Bitter Greens Salad<br>Dessert · Panna Cotta <span class="sub">GF, set the day before</span><br>Drinks · Pear &amp; Thyme mocktail for Sam<br><span class="sub">Ravioli swapped out: flour, and two never-cooked dishes would overload the evening.</span></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap"><span class="btn" style="font-size:10px;padding:5px 9px">Apply</span><span class="btn" style="font-size:10px;padding:5px 9px">Swap the side</span><span class="btn ghost" style="font-size:10px;padding:5px 6px">👍 👎</span></div>
+      <div class="row" style="margin-top:auto;border-radius:12px;background:#f2f2f7;padding:8px 10px"><span class="sub">Ask for a change…</span><span class="btn pro" style="padding:4px 10px;font-size:10px">↑</span></div>
+      <span class="n" style="right:-6px;top:-6px">2</span>
+    </div>
+  </div>
+</div></div>
+<figcaption><h4>Menu builder with Ask Codex</h4>
+<ol class="notes">
+<li><b>1</b>Slots as cards with candidates, sub-recipes, inline warnings and rule-based suggestions ("add a vegetable side"). Drag from a Recipes window into a slot.</li>
+<li><b>2</b>The conversational planner names the model in use and what is shared, proposes only recipes from your library with reasons and cooked counts, lets you apply or swap per dish, and takes feedback. The balance rules remain the non-AI path.</li>
+</ol></figcaption>
+</figure>
+
+</div></div><!-- /scroller -->
+
+<h2>Flow maps</h2>
+<div class="prose">
+<h3>Add a whole cookbook</h3>
+<div class="flowmap"><span>Books · Add</span><i>→</i><span>Scan ISBN</span><i>→</i><span>Confirm book card</span><i>→</i><span>Scan contents / index</span><i>→</i><span class="ai">Extract punchlist (on-device model)</span><i>→</i><span>Correct list</span><i>→</i><span>Scanning session</span><i>→</i><span class="ai">Background OCR + structuring</span><i>→</i><span>Review queue</span><i>→</i><span>Book shows completeness</span></div>
+<h3>Plan and run an event</h3>
+<div class="flowmap"><span>Plan · New event</span><i>→</i><span>Guests, times, kitchen</span><i>→</i><span>Menu slots + candidates</span><i>→</i><span class="ai">Ask Codex (optional)</span><i>→</i><span>Balance + warnings</span><i>→</i><span>Finalize</span><i>→</i><span>Shopping list by stop</span><i>→</i><span>Workback schedule</span><i>→</i><span>Daily prep on Cook</span><i>→</i><span>Service mode</span><i>→</i><span>Debrief</span></div>
+<p class="muted" style="font-size:13px">Dashed boxes are model-assisted steps; each has a rules-only fallback and an edit step after it.</p>
+</div>
+
+<h2>HIG checklist</h2>
+<div class="tablewrap"><table>
+<tr><th>Guideline</th><th>Where it applies</th></tr>
+<tr><td>Tab bar for navigation only; few tabs; search as a trailing tab; minimize with an accessory</td><td>Five tabs; Now Cooking accessory</td></tr>
+<tr><td>Liquid Glass only in the navigation layer; standard materials in content</td><td>Bars, sidebar, accessory, camera controls (clear variant with dim layer)</td></tr>
+<tr><td>Toolbars: symbols over text, at most three groups, one prominent action on the trailing edge</td><td>Cook, Finalize, Save, Continue scanning, Replan</td></tr>
+<tr><td>Large titles that collapse on scroll</td><td>Cook, Recipes, Books, Plan, Search</td></tr>
+<tr><td>Sidebar adaptable from the tab bar on iPad; content extends beneath it</td><td>All iPad screens</td></tr>
+<tr><td>Snippets under 400 pt; visual, not dialogue-dependent</td><td>"Next step" result; "Start service?" confirmation</td></tr>
+<tr><td>Live Activities: heavy text, concentric margins, one interactive element, limited-width variant, end promptly</td><td>Session Live Activity</td></tr>
+<tr><td>Generative AI: label it, specific progress text, refine and undo, non-AI fallback, disclose what is shared with a server model</td><td>Import fallback, scan structuring, Ask Codex, natural-language search</td></tr>
+<tr><td>Accessibility: Dynamic Type, VoiceOver labels, Reduce Transparency, Increase Contrast, Reduce Motion</td><td>Everywhere; kitchen theme tested at AX sizes</td></tr>
+</table></div>
+</div>
+
+</body></html>
