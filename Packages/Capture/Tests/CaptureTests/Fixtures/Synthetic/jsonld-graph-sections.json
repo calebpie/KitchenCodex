@@ -1,0 +1,49 @@
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    { "@type": "WebSite", "@id": "https://example.test/#site", "name": "Test Kitchen Notes" },
+    { "@type": "Person", "@id": "https://example.test/#cook", "name": "Pat Example" },
+    { "@type": "ImageObject", "@id": "https://example.test/#hero", "url": "https://example.test/img/hero-16x9.jpg" },
+    {
+      "@type": ["Recipe"],
+      "name": "Sheet-Pan Chicken &amp; Potatoes",
+      "author": { "@id": "https://example.test/#cook" },
+      "publisher": { "@id": "https://example.test/#site" },
+      "image": [
+        { "@id": "https://example.test/#hero" },
+        "https://example.test/img/hero-1x1.jpg"
+      ],
+      "recipeYield": 4,
+      "prepTime": "P0Y0M0DT0H20M0.000S",
+      "cookTime": "PT1H5M",
+      "totalTime": "PT1H25M",
+      "recipeCategory": ["Main Course", "Dinner"],
+      "recipeCuisine": "American",
+      "recipeIngredient": [
+        "2 lb chicken thighs",
+        "1 1/2 lb small potatoes, halved",
+        "Salt &amp; pepper",
+        "For the glaze:",
+        "2 Tbsp. honey",
+        "1 tbsp Dijon mustard"
+      ],
+      "recipeInstructions": [
+        {
+          "@type": "HowToSection",
+          "name": "Roast",
+          "itemListElement": [
+            { "@type": "HowToStep", "text": "Heat the oven to 425°F." },
+            { "@type": "HowToStep", "text": "Toss the chicken and potatoes with salt and pepper and roast for 45 minutes." }
+          ]
+        },
+        {
+          "@type": "HowToSection",
+          "name": "Glaze",
+          "itemListElement": [
+            { "@type": "HowToStep", "name": "Brush with the honey and mustard, then roast 20 minutes more." }
+          ]
+        }
+      ]
+    }
+  ]
+}

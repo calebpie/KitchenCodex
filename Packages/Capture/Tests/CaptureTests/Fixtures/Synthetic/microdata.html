@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <title>Simple Pancakes - Microdata Test</title>
+  <meta property="og:site_name" content="Microdata Test">
+</head>
+<body>
+  <article itemscope itemtype="https://schema.org/Recipe">
+    <h1 itemprop="name">Simple Pancakes</h1>
+    <img itemprop="image" src="/img/pancakes.jpg" alt="">
+    <p>By <span itemprop="author">Lee Sample</span></p>
+    <p>Serves <span itemprop="recipeYield">4</span>, ready in <time itemprop="totalTime" datetime="PT25M">25 minutes</time></p>
+    <h2>Ingredients</h2>
+    <ul>
+      <li itemprop="recipeIngredient"><span>1 1/2</span> <span>cups</span> flour</li>
+      <li itemprop="recipeIngredient">2 tsp baking powder</li>
+      <li itemprop="recipeIngredient">1 1/4 cups milk</li>
+      <li itemprop="recipeIngredient">1 egg</li>
+    </ul>
+    <h2>Method</h2>
+    <ol itemprop="recipeInstructions">
+      <li>Whisk the dry ingredients together.</li>
+      <li>Beat in the milk and egg until just combined.</li>
+      <li>Cook on a hot griddle until bubbles form, then flip.</li>
+    </ol>
+  </article>
+</body>
+</html>

@@ -42,7 +42,7 @@
 
 ## Left for the rest of Phase 1
 
-- **Capture paths:** Share Extension import through `JSONLDRecipeParser` and `IngredientParser`, with the on-device model fallback and the import preview sheet (03 §3.4); in-app browser import; **Paprika and Mela import** (More menu item not added yet).
+- **Capture paths:** web import landed in slice 2 (below); what is left of it is listed there. **Paprika and Mela import** (More menu item not added yet).
 - **Library:** collections, smart collections, recents; the other filter chips (Cuisine, Time, Dietary, Book, Tags) and the filter sheet with tokens; Select mode; Add to menu and Share in the context menu; ingredient checkboxes, ingredient groups, headnote, provenance and "View page" on detail; viewing or restoring an older version.
 - **Exports:** PDF, plain text and Markdown.
 - **iPad:** three-column `NavigationSplitView` for Recipes, sidebar sections, keyboard shortcuts (⌘N new recipe, ⌘F search), drag and drop into collections and photos onto a recipe.
@@ -55,3 +55,90 @@
 - No volume ↔ mass conversion (cups of flour to grams) until ingredient densities exist; flour in metric shows milliliters.
 - Count items aren't pluralized ("1 1/2 large egg"), and sizes stay in the item text ("large eggs").
 - Title, course and photo edits are not versioned (see decisions above).
+
+## Slice 2: importing from the web
+
+*Oct 17, 2026. Flow A (02 §2) through the Share Extension and from inside the app, with the import preview from 03 §3.4.*
+
+### What landed
+
+| Area | Where | What it does |
+|---|---|---|
+| HTML reading | `Packages/Capture/Sources/Capture/HTMLTokenizer.swift`, `HTMLPage.swift` | A byte-level HTML tokenizer (no WebKit) and a page model: `<title>`, `<meta>` (Open Graph, author), canonical link, every `application/ld+json` block, microdata properties, and the visible text as lines that follow block elements. Scripts, styles, `<nav>`, `<footer>`, SVG and anything `hidden`, `aria-hidden`, `display: none` or screen-reader-only are skipped; adjacent inline elements get a space ("Pekin duck" + "whole"). Entities decode, including the fraction ones. Reads a 1.2 MB page in under 70 ms. |
+| Importer | `WebRecipeImporter.swift`, `JSONLDRecipeParser.swift`, `PageTextReader.swift`, `ImportText.swift` | `WebRecipeImporter.extract(html:url:)` tries JSON-LD, then microdata, then the page's text (details below). Ingredients go through `IngredientParser` (with dual measures such as "1 ¼ cups\|284 ml" rewritten to "1 ¼ cups (284 ml)" first) and instructions through `StepSplitter`. Provenance: page URL (canonical when on the same host), site name, author, cover image URL, yield, prep/cook/total times, category and cuisine, ingredient groups. |
+| Fetching | `WebPageFetcher.swift` | `URLSession` with Safari's iPhone user agent, charset from HTTP or `<meta>`, Windows Latin 1 fallback; error messages worded for the cook (offline, 403, 404, not a web page). `webURL(from:)` turns pasted text into a link. Image downloads send the page as referrer. |
+| Model fallback | `Packages/Intelligence/Sources/Intelligence/OnDeviceRecipeStructurer.swift` | `@Generable GeneratedRecipe` (title, ingredient lines, steps) through `LanguageModelSession` with greedy sampling, told to copy lines rather than rewrite them. Behind `RecipeStructuring`, which gained `isAvailable` (default true); `DeterministicRecipeStructurer` and test stubs stand in for it. Input is capped from the model's `contextSize`. |
+| Share Extension | `RecipeCodexShare/ShareViewController.swift`, `GetPageSource.js`, `Info.plist` | `NSExtensionJavaScriptPreprocessingFile` returns `outerHTML`, `document.title` and `location.href`, so JavaScript-built pages arrive rendered. A shared link from another app is fetched instead. Compact preview (cover, title, site and author, yield and time, counts, status line), Save and Cancel; "Use Page Reading" skips the model wait. Save writes to the App Group store without CloudKit. |
+| In-app import | `RecipeCodex/Import/WebImportView.swift`, `Tabs/RecipesView.swift` | Recipes → Add → Import from Web: type or paste (`PasteButton`, no paste prompt) a link; "Reading the page…", then "Reading ingredients…" while the model works. The preview sheet is editable: title, course, servings, yield, times, ingredients with the editor's "Reads As" rows, steps, source link. Save opens the new recipe. On failure: the reason, **Add Manually Instead** (same form, prefilled with the page title, link kept as the source) and Try Again. |
+| One save path | `RecipeCodex/Import/ImportedRecipe+Draft.swift`, `ImportSummaryView.swift` | `RecipeDraft(imported:)` and `RecipeDraft.saveImport(_:in:)` save through slice 1's `RecipeDraft.save` (Recipe, version 1, Ingredients, Steps, cover `RecipeImage` plus the 900 px card copy), then set `Recipe.source` (`SourceInfo`: URL, author, site name, `importedAt`), `captureConfidence`, `needsReview`, `Ingredient.group`, and cuisine. Change summary "Imported from Serious Eats". `recipeCategory` maps to the standard courses ("Condiments and Sauces" → Sauce, "Dinner, Main Course" → Main). |
+
+### Import paths and confidence
+
+| Path | When | Confidence | Review |
+|---|---|---|---|
+| JSON-LD | Any `Recipe` node in any ld+json block: bare, in arrays, in `@graph`, under `mainEntity`; `@id` references resolved for authors, publishers and images. Several recipes: the one whose name matches the page title, else the first. | 0.95 | no |
+| JSON-LD, page list | The page text holds a clearly longer ingredient list (at least 3 more lines and 1.5×) containing most of the structured lines: the page's list is used (Barefoot Contessa's JSON-LD lists only its last group). | 0.85 | no |
+| JSON-LD, page steps | No instructions in the structured data; steps come from the page. | 0.75 | no |
+| Microdata | `itemprop="recipeIngredient"` (or `ingredients`) inside a `schema.org/Recipe` scope, at least 2 lines. | 0.85 | no |
+| Page text | The densest run of lines `IngredientParser` reads as ingredients, with a bonus under an "Ingredients" heading; group headings and short unparsed lines ("Kosher salt") allowed inside. Amounts split into their own elements are rejoined ("6.5 g" + "Szechuan pepper" + "whole, divided"). Steps: under a Directions/Method/Instructions heading after the list, else a numbered sequence (titles joined to their paragraphs, per-step ingredient lists skipped), else such a heading above the list, else the paragraphs after it. Yield and times from "Serves 4", "Prep time: 25 minutes" lines. | 0.3, +0.1 under an Ingredients heading, +0.1 for steps found by heading or numbering | yes |
+| Model | The deterministic result is missing or below 0.7 and the on-device model is available. Its reading replaces the page-text one only if it keeps at least 80% of the ingredient lines; group headings carry over by line. | at most 0.6 | yes |
+
+Anything below 0.7 is saved with `needsReview = true`. Every result records `ImportedRecipe.method`.
+
+### Fixture results
+
+The 18 saved pages (19 HTML files: ChefSteps has both its saved source and a rendered copy) are checked by `PrivateFixtureTests` against `Packages/Capture/Tests/CaptureTests/Fixtures/private-fixtures.json` (titles and counts only). The suite finds `Docs/Fixtures/Private/HTML` by walking up from the test file and skips, with the reason recorded, when it is absent; verified by running the package from a copy outside the repository. Hand-written fixtures in `Fixtures/Synthetic` cover `@graph` with `@id` references, `HowToSection`, image arrays, ISO 8601 durations ("P0Y0M0DT0H20M0.000S"), yield as number, string or array, ingredient strings with packed lines and group headings, HTML instructions, multiple recipes, microdata, truncated JSON-LD, and three page-text layouts.
+
+| Site | Title | Path | Ingredients | Steps |
+|---|---|---|---|---|
+| Barefoot Contessa | Orzo with Roasted Vegetables | JSON-LD (page list) | 17 | 4 |
+| Food.com | Boeuf Bourguignon a La Julia Child | JSON-LD | 25 | 44 |
+| Alison Roman | Caramelized Shallot Pasta | JSON-LD | 10 | 5 |
+| Mission Food Adventure | Confit Byaldi (Thomas Keller's Ratatouille) | JSON-LD | 23 | 10 |
+| BBC Good Food | Gordon's Christmas roast goose | JSON-LD | 8 | 12 |
+| Food Network | Chinese Chicken Salad | JSON-LD | 19 | 4 |
+| VICE | Korean Barbecue Short Ribs | page text | 25 | 4 |
+| Bon Appétit | Lamb Tartare | JSON-LD | 11 | 3 |
+| Rouxbe | Lasagne alla Bolognese al Forno | JSON-LD | 30 | 8 |
+| America's Test Kitchen | Macarons with Semisweet Chocolate Ganache | JSON-LD | 11 | 9 |
+| Eric Ripert | My Tuna Carpaccio | page text | 7 | 6 |
+| America's Test Kitchen | Olive Oil Cake | JSON-LD | 8 | 4 |
+| Serious Eats | Pear and Ginger Cranberry Sauce | JSON-LD | 9 | 1 (the page has one method paragraph) |
+| Avec Eric | Poached Daikon with Kimchi Broth | page text | 8 | 4 |
+| NYT Cooking | Rishia Zimmern’s Chicken With Shallots | JSON-LD | 10 | 5 |
+| Food Network | Spinach Gratin | JSON-LD | 11 | 2 |
+| Serious Eats | The Best Crispy Roast Potatoes Ever | JSON-LD | 8 | 5 |
+| ChefSteps (rendered) | Ultimate Peking Duck | page text | 15 | 23 |
+| ChefSteps (saved source) | none | none | 0 | 0 (empty Next.js shell; the extension gets the rendered DOM) |
+
+**The four page-text pages, read by eye:** VICE has every line in its four groups ("for the beef", the two pickles, "to serve"), dual measures cleaned, and the four directions; the newsletter line after them is left out. Eric Ripert's has all seven, with "cut 1⁄2 inch thick" as its own line because the page breaks the tuna line in two; its six steps are found under "Instructions" past the essay between them. Avec Eric's is complete, with its directions found above the ingredients. ChefSteps' rendered page gives all 15 ingredients ("6.5 g Szechuan pepper, whole, divided") and 23 numbered steps, each title joined to its paragraph ("Make Chinese five-spice powder. In a spice grinder…"); "Tip" labels and section titles such as "Day 5: Two hours active" are skipped, though a day's introductory paragraph is appended to the step before it.
+
+**The on-device model on the same four** (macOS host, Apple Intelligence on): VICE 25 ingredients and 4 steps, Eric Ripert 5 and 6 (joined the broken tuna line but dropped the baguette line, so the 80% rule keeps the page reading), Avec Eric 8 and 4, ChefSteps refused by the model's safety filter (the page text contains a censored expletive), so the page reading stands. Each took 11 to 16 seconds, slower than the 2 to 6 seconds Flow A planned; on the simulator the VICE model step took about 12 seconds. The page-text reading is already as good on these pages, which is why the extension and the sheet offer **Use Page Reading** during the wait.
+
+### Decisions made in this slice
+
+- **One save path for all three entries.** `RecipeDraft.swift`, `ImportedRecipe+Draft.swift`, `ImportSummaryView.swift`, `LibraryOptions.swift` and `RecipeCoverImage.swift` (for `ImageProcessing`) are compiled into the Share Extension through a membership exception on the `RecipeCodex` synchronized folder. The extension target also gained the Units and Intelligence products and the app's `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`. No capability, entitlement or signing change.
+- **Editor components shared.** `NumberField`, `PlaceholderTextEditor` and `ParsedIngredientRow` in `RecipeEditorView.swift` went from `private` to internal so the import preview reuses them; nothing else in that file changed.
+- **Safari's JavaScript result.** Safari registers it only as `com.apple.property-list`, and `loadDataRepresentation` returns nothing for it; `loadItem(forTypeIdentifier:)` is the only reader and is deprecated in iOS 27. It is called through a one-method protocol so the build has no warnings.
+- **`captureConfidence` is set for web imports.** RecipeModel's doc comment says it is nil for web import; with import confidence now meaningful, that comment is stale (RecipeModel was out of scope here).
+- **Servings ranges** read as the low end with the wording kept: "Servings: 4-6" saves 4 servings and the yield "Serves 4–6".
+- **Shared recipes appear in the running app.** A recipe saved by the extension showed up in Recipes without relaunching the app (same process before and after), so no history observer was needed for this.
+
+### Verified
+
+- `swift test`: **Capture** 44 tests, including 19 saved-page cases, 10 synthetic-page tests, 5 model-fallback tests with stub structurers, and text-helper tests (yields, ISO and written durations, titles, entities, the empty-comment tokenizer case that hid Food.com's JSON-LD at first). **Intelligence** 9 tests; the real on-device model test ran here (Apple Intelligence is on) and passed in about 2.4 seconds. Without the private pages: 44 pass, the saved-page suite skipped with its reason.
+- `xcodebuild build` for the iPhone 17 Pro simulator: **BUILD SUCCEEDED**, no warnings; `GetPageSource.js` is in `RecipeCodexShare.appex`.
+- On the iPhone 17 Pro simulator: **in-app**, Import from Web with `https://www.seriouseats.com/the-best-roast-potatoes-ever-recipe`: preview with cover, "Serious Eats · J. Kenji López-Alt", serves 8, 1 hr 25 min, 8 ingredients and 5 steps, course Side; Save opened the recipe with its hero photo. `example.com` gave "No recipe was found on this page." with Add Manually Instead, which opened the form titled "Example Domain" with the link kept (discarded, not saved). **Share from Safari**: the VICE short ribs page arrived as the rendered DOM (374,729 bytes), was read from the page text, refined by the model in about 12 seconds (25 ingredients, 4 steps), previewed with cover and the Apple Intelligence status line, saved, and appeared in Recipes with its cover. The Serious Eats cranberry sauce page imported instantly by JSON-LD and appeared in the already-running app; opened, it shows the hero, source line, Sauce, Serves 8 and the amounts. In the store: change summaries "Imported from Serious Eats" and "Imported from VICE", `needsReview` 0 and 1, `captureConfidence` 0.95 and 0.6, source URL, site and author set, one cover `RecipeImage` each.
+- The live ChefSteps page shows its recipe only to members; shared signed out, the extension reported "No recipe was found on this page." cleanly. The rendered-DOM reading of ChefSteps is covered by the rendered fixture.
+
+### Not verified
+
+- Sharing a link from an app other than Safari (the fetch path in the extension; the same fetcher is verified in-app). iPad, a device, dark mode, Dynamic Type, VoiceOver. Group headings saved on ingredients for the VICE share were lost before the carry-over fix; the fix is covered by a unit test, not re-checked on the simulator.
+
+### Left for Phase 1 (web import)
+
+- **In-app import of JavaScript-built pages.** The in-app sheet fetches HTML, so ChefSteps-style pages come back as an empty shell there; rendering in a `WKWebView` (or an in-app browser with a Save button, as 04's "in-app browser import" says) would match the extension.
+- **Review surfaces:** the "1 new recipe needs a look" row on Cook (Flow A step 5) and the detail's "Check 2 ingredients" row (03 §3.3) for `needsReview` recipes; showing ingredient groups, provenance and "View page" on detail; the "Reader tips" placeholder.
+- **Model speed:** 11 to 16 seconds per page against Flow A's 2 to 6. Options: show the page reading at once and let the model refine in place, or ask the model only when the page reading lacks headings.
+- Sentence-per-step sites (Food.com's 44 steps) could be merged into paragraphs; section names from `HowToSection` are dropped.
+- "Open in app" from the extension (Flow A step 2) needs a supported way to open the containing app.

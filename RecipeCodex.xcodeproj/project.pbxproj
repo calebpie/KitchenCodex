@@ -17,6 +17,8 @@
 		A0000000000000000000000F /* RecipeModel in Frameworks */ = {isa = PBXBuildFile; productRef = A00000000000000000000010 /* RecipeModel */; };
 		A00000000000000000000011 /* Capture in Frameworks */ = {isa = PBXBuildFile; productRef = A00000000000000000000012 /* Capture */; };
 		A00000000000000000000013 /* RecipeModel in Frameworks */ = {isa = PBXBuildFile; productRef = A00000000000000000000014 /* RecipeModel */; };
+		A00000000000000000000048 /* Units in Frameworks */ = {isa = PBXBuildFile; productRef = A00000000000000000000049 /* Units */; };
+		A0000000000000000000004A /* Intelligence in Frameworks */ = {isa = PBXBuildFile; productRef = A0000000000000000000004B /* Intelligence */; };
 		A00000000000000000000015 /* RecipeCodexShare.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A00000000000000000000016 /* RecipeCodexShare.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		A00000000000000000000017 /* RecipeCodexWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A00000000000000000000018 /* RecipeCodexWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
@@ -60,6 +62,17 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		A0000000000000000000004C /* Exceptions for "RecipeCodex" folder in "RecipeCodexShare" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				"Import/ImportedRecipe+Draft.swift",
+				Import/ImportSummaryView.swift,
+				Library/LibraryOptions.swift,
+				Library/RecipeCoverImage.swift,
+				Library/RecipeDraft.swift,
+			);
+			target = A0000000000000000000001B /* RecipeCodexShare */;
+		};
 		A00000000000000000000020 /* Exceptions for "RecipeCodexShare" folder in "RecipeCodexShare" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -79,6 +92,9 @@
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		A00000000000000000000022 /* RecipeCodex */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				A0000000000000000000004C /* Exceptions for "RecipeCodex" folder in "RecipeCodexShare" target */,
+			);
 			path = RecipeCodex;
 			sourceTree = "<group>";
 		};
@@ -126,6 +142,8 @@
 			files = (
 				A0000000000000000000000F /* RecipeModel in Frameworks */,
 				A00000000000000000000011 /* Capture in Frameworks */,
+				A00000000000000000000048 /* Units in Frameworks */,
+				A0000000000000000000004A /* Intelligence in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -224,6 +242,8 @@
 			packageProductDependencies = (
 				A00000000000000000000010 /* RecipeModel */,
 				A00000000000000000000012 /* Capture */,
+				A00000000000000000000049 /* Units */,
+				A0000000000000000000004B /* Intelligence */,
 			);
 			productName = RecipeCodexShare;
 			productReference = A00000000000000000000016 /* RecipeCodexShare.appex */;
@@ -578,6 +598,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.calebpietrafesa.RecipeCodex.Share;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -602,6 +623,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.calebpietrafesa.RecipeCodex.Share;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -767,6 +789,14 @@
 		A00000000000000000000014 /* RecipeModel */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = RecipeModel;
+		};
+		A00000000000000000000049 /* Units */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Units;
+		};
+		A0000000000000000000004B /* Intelligence */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Intelligence;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

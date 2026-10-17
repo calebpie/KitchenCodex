@@ -17,9 +17,17 @@ public struct StructuredRecipeDraft: Sendable, Codable, Equatable {
     }
 }
 
-/// Anything that can turn free text (OCR output, pasted text) into a recipe draft.
+/// Anything that can turn free text (OCR output, pasted text, a web page's visible text) into a
+/// recipe draft.
 public protocol RecipeStructuring: Sendable {
+    /// Whether `structure` can run right now. A model-backed structurer answers false when the model
+    /// is unavailable, so callers keep their deterministic result instead of waiting on an error.
+    var isAvailable: Bool { get }
     func structure(_ text: String) async throws -> StructuredRecipeDraft
+}
+
+extension RecipeStructuring {
+    public var isAvailable: Bool { true }
 }
 
 /// The non-model path. Splits on "Ingredients" / "Method|Directions|Instructions|Steps" headings.

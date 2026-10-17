@@ -1,0 +1,17 @@
+[
+  { "@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [] },
+  {
+    "@context": "https://schema.org",
+    "@type": "Recipe",
+    "name": "Brown Butter Cookies | Recipes",
+    "author": "Sam Baker",
+    "image": "/images/cookies.jpg",
+    "recipeYield": ["24", "Makes 24 cookies"],
+    "totalTime": "PT0S",
+    "recipeIngredient": [
+      "For the dough:\n\t2 1/4 cups flour\n\t1 tsp baking soda\n1 cup butter, browned",
+      "To finish:\n\tflaky salt"
+    ],
+    "recipeInstructions": "<p>Brown the butter and let it cool.</p>\n\n<p>Whisk the flour and baking soda.</p>\n\n\n\n<p>Mix, scoop and bake at 350&deg;F for 11 minutes.</p>"
+  }
+]

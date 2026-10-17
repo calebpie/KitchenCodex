@@ -16,12 +16,16 @@ struct RecipesView: View {
     @AppStorage("recipes.sort") private var sort: RecipeSort = .title
     @State private var filter = RecipeFilter()
     @State private var isAddingRecipe = false
+    @State private var isImportingFromWeb = false
+    @State private var path: [Recipe] = []
+    /// Set by the import sheet; opened once the sheet has gone.
+    @State private var importedRecipe: Recipe?
 
     /// Unsorted; used for the empty state and the Course chip's options. The collection runs its own sorted query.
     @Query private var allRecipes: [Recipe]
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             Group {
                 switch libraryView {
                 case .recipes:
@@ -68,9 +72,10 @@ struct RecipesView: View {
                     Menu {
                         switch libraryView {
                         case .recipes:
-                            // Capture flows (import, scan) arrive later in Phases 1 and 2.
-                            Button("Import from Web", systemImage: "link") {}
-                                .disabled(true)
+                            Button("Import from Web", systemImage: "link") {
+                                isImportingFromWeb = true
+                            }
+                            // Scanning arrives in Phase 2.
                             Button("Scan Page", systemImage: "text.viewfinder") {}
                                 .disabled(true)
                             Button("New Recipe", systemImage: "square.and.pencil") {
@@ -121,6 +126,9 @@ struct RecipesView: View {
             }
             .sheet(isPresented: $isAddingRecipe) {
                 RecipeEditorView(recipe: nil)
+            }
+            .sheet(isPresented: $isImportingFromWeb, onDismiss: openImportedRecipe) {
+                WebImportView { recipe in importedRecipe = recipe }
             }
         }
     }
@@ -293,6 +301,15 @@ private struct ChipLabel: View {
         // The capsule is 36 pt; the hit area keeps the 44 pt minimum.
         .padding(.vertical, 4)
         .contentShape(.rect)
+    }
+}
+
+extension RecipesView {
+    private func openImportedRecipe() {
+        guard let recipe = importedRecipe else { return }
+        importedRecipe = nil
+        libraryView = .recipes
+        path = [recipe]
     }
 }
 

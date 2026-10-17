@@ -201,7 +201,7 @@ struct RecipeEditorView: View {
 }
 
 /// A labelled whole-number field. Tapping anywhere in the row focuses it.
-private struct NumberField: View {
+struct NumberField: View {
     let title: String
     @Binding var text: String
     var unit: String?
@@ -230,7 +230,7 @@ private struct NumberField: View {
 }
 
 /// `TextEditor` with a placeholder, for the multi-line fields.
-private struct PlaceholderTextEditor: View {
+struct PlaceholderTextEditor: View {
     @Binding var text: String
     let placeholder: String
 
@@ -251,7 +251,7 @@ private struct PlaceholderTextEditor: View {
 }
 
 /// How the parser read one line: amount and unit in bold, then the item and preparation.
-private struct ParsedIngredientRow: View {
+struct ParsedIngredientRow: View {
     let parsed: ParsedIngredient
 
     var body: some View {

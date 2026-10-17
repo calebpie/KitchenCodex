@@ -24,8 +24,10 @@ let package = Package(
             name: "CaptureTests",
             dependencies: [
                 "Capture",
+                .product(name: "Intelligence", package: "Intelligence"),
                 .product(name: "Units", package: "Units"),
             ],
+            resources: [.copy("Fixtures")],
             swiftSettings: [.enableUpcomingFeature("ApproachableConcurrency")]
         ),
     ],
