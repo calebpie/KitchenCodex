@@ -96,6 +96,50 @@ struct IngredientParserTests {
         #expect(parsed.unit == nil)
         #expect(parsed.item == "L'Antica ricotta")
     }
+
+    /// The slice 7 finding: a cookbook writes the measure's preparation before the comma.
+    struct LeadingPreparationCase: CustomTestStringConvertible, Sendable {
+        let line: String
+        let quantity: Rational
+        let unit: CookingUnit?
+        let item: String
+        var preparation: String? = nil
+        var note: String? = nil
+        var form: NoteForm? = nil
+
+        var testDescription: String { line }
+    }
+
+    @Test(arguments: [
+        // One preparation word before the comma: the clause after it is the item.
+        LeadingPreparationCase(line: "1 cup packed, fresh spinach leaves (3.5 ounces)", quantity: Rational(1), unit: .cup, item: "fresh spinach leaves", preparation: "packed", note: "3.5 ounces", form: .parenthetical),
+        LeadingPreparationCase(line: "2 cups chopped, fresh parsley", quantity: Rational(2), unit: .cup, item: "fresh parsley", preparation: "chopped"),
+        // An adverb and a preparation word.
+        LeadingPreparationCase(line: "1 cup loosely packed, fresh basil leaves", quantity: Rational(1), unit: .cup, item: "fresh basil leaves", preparation: "loosely packed"),
+        LeadingPreparationCase(line: "1/2 cup finely chopped, fresh cilantro", quantity: Rational(1, 2), unit: .cup, item: "fresh cilantro", preparation: "finely chopped"),
+        LeadingPreparationCase(line: "1 teaspoon Freshly Ground, black pepper", quantity: Rational(1), unit: .teaspoon, item: "black pepper", preparation: "Freshly Ground"),
+        // Later clauses stay with the preparation, and a closing clause is still the note.
+        LeadingPreparationCase(line: "1 cup packed, fresh spinach, plus more for serving", quantity: Rational(1), unit: .cup, item: "fresh spinach", preparation: "packed", note: "plus more for serving", form: .clause),
+        LeadingPreparationCase(line: "2 cups cooked, shredded chicken, cooled", quantity: Rational(2), unit: .cup, item: "shredded chicken", preparation: "cooked, cooled"),
+        // Controls: without a comma, and with the preparation after the comma, lines read as before.
+        LeadingPreparationCase(line: "1 cup packed brown sugar", quantity: Rational(1), unit: .cup, item: "packed brown sugar"),
+        LeadingPreparationCase(line: "2 cloves garlic, minced", quantity: Rational(2), unit: nil, item: "cloves garlic", preparation: "minced"),
+        LeadingPreparationCase(line: "4 tablespoons unsalted butter, melted", quantity: Rational(4), unit: .tablespoon, item: "unsalted butter", preparation: "melted"),
+        // The clause after the comma must name a thing: a note clause or more preparation does not.
+        LeadingPreparationCase(line: "1 cup chopped, plus more for garnish", quantity: Rational(1), unit: .cup, item: "chopped", note: "plus more for garnish", form: .clause),
+        LeadingPreparationCase(line: "1 cup packed, sifted", quantity: Rational(1), unit: .cup, item: "packed", preparation: "sifted"),
+    ])
+    func readsALeadingPreparation(_ expected: LeadingPreparationCase) {
+        let parsed = IngredientParser.parse(expected.line)
+        #expect(parsed.quantity == expected.quantity)
+        #expect(parsed.unit == expected.unit)
+        #expect(parsed.item == expected.item)
+        #expect(parsed.preparation == expected.preparation)
+        #expect(parsed.note == expected.note)
+        #expect(parsed.noteForm == expected.form)
+        #expect(parsed.equivalent == nil)
+        #expect(parsed.rawText == expected.line)
+    }
 }
 
 /// 04 §5.1 Liquid ounces: ounces of a liquid are fluid ounces; a parenthetical decides first.

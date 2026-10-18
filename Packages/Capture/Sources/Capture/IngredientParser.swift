@@ -39,7 +39,8 @@ public struct ParsedIngredient: Sendable, Equatable {
     /// `nil` for counted items ("3 large eggs"); `.toTaste` when the line says so and gives no amount.
     public var unit: CookingUnit?
     public var item: String
-    /// Whatever follows the first comma: "finely chopped", "divided", "at room temperature".
+    /// Whatever follows the first comma: "finely chopped", "divided", "at room temperature". Or
+    /// the preparation a cookbook writes before it: "packed" in "1 cup packed, fresh spinach leaves".
     public var preparation: String?
     /// Trailing asides that are neither preparation nor a unit equivalent, without their
     /// parentheses: "about 3 oranges", "plus more for the pan", "ask your butcher to do this".
@@ -82,10 +83,11 @@ public struct ParsedIngredient: Sendable, Equatable {
 ///
 /// Reads a leading amount (whole numbers, fractions, mixed numbers, decimals, Unicode fractions,
 /// "1-1/2", ranges such as "2-3" or "2 to 3", which keep the low end), an optional unit from
-/// `CookingUnit`, then the item, with anything after the first comma as preparation.
-/// "to taste" and "(optional)" are recognised anywhere in the line. Trailing parentheticals and
-/// closing clauses such as "plus more for the pan" are the note, and a note that counts produce
-/// ("about 3 oranges") also gives the equivalent.
+/// `CookingUnit`, then the item, with anything after the first comma as preparation; when only a
+/// preparation word stands before the comma ("1 cup packed, fresh spinach leaves") the item is the
+/// clause after it. "to taste" and "(optional)" are recognised anywhere in the line. Trailing
+/// parentheticals and closing clauses such as "plus more for the pan" are the note, and a note
+/// that counts produce ("about 3 oranges") also gives the equivalent.
 public enum IngredientParser {
     /// Parses each non-blank line of `text`.
     public static func parseLines(_ text: String) -> [ParsedIngredient] {
@@ -131,6 +133,11 @@ public enum IngredientParser {
         tokens.skip(word: "of")
 
         var (item, preparation) = splitPreparation(tokens.remainder)
+        // "1 cup packed, fresh spinach leaves": the measure's preparation, written before the comma.
+        if quantity != nil, let prep = preparation, let swapped = leadingPreparation(item, before: prep) {
+            item = swapped.item
+            preparation = swapped.preparation
+        }
         // Ounces of a liquid are fluid ounces, "fl" or not (04 §5.1 Liquid ounces).
         if unit == .ounce, LiquidIngredients.ouncesAreFluid(item: item, equivalent: equivalentUnit) {
             unit = .fluidOunce
@@ -363,6 +370,54 @@ public enum IngredientParser {
         return commas
     }
 
+    /// `text` split at its top-level commas: each clause trimmed, with where it starts.
+    private static func clauses(of text: String) -> [(start: String.Index, text: String)] {
+        var start = text.startIndex
+        var result: [(start: String.Index, text: String)] = []
+        for comma in topLevelCommas(in: text) + [text.endIndex] {
+            result.append((start, text[start..<comma].trimmingCharacters(in: .whitespaces)))
+            if comma < text.endIndex { start = text.index(after: comma) }
+        }
+        return result
+    }
+
+    /// How a measure is taken or its contents readied, which a cookbook may write before the
+    /// comma: "1 cup packed, fresh spinach leaves". Participles only; `preparationAdverbs` qualify them.
+    private static let preparationWords: Set<String> = [
+        "packed", "heaping", "heaped", "chopped", "sifted", "melted", "softened", "cooked", "drained",
+        "rinsed", "minced", "grated", "shredded", "sliced", "diced", "crushed", "toasted", "beaten",
+        "peeled", "cubed", "crumbled", "mashed", "ground", "torn", "trimmed", "thawed", "pitted",
+        "seeded", "cored", "halved", "quartered", "roasted", "blanched", "cooled", "chilled", "warmed",
+    ]
+
+    /// "loosely packed", "finely chopped", "well drained": what may qualify a preparation word.
+    private static let preparationAdverbs: Set<String> = [
+        "loosely", "lightly", "firmly", "tightly", "finely", "coarsely", "roughly", "thinly", "thickly",
+        "freshly", "well", "very",
+    ]
+
+    private static func isPreparationWord(_ word: String) -> Bool {
+        preparationWords.contains(word) || preparationAdverbs.contains(word)
+    }
+
+    /// "1 cup packed, fresh spinach leaves (3.5 ounces)", "2 cups chopped, fresh parsley": a cookbook
+    /// puts the preparation before the comma when it says how the measure is taken. When the words
+    /// between the measure and the first comma are one preparation word, or an adverb and one, the
+    /// clause after the comma is the item and those words are the preparation; later clauses stay
+    /// with the preparation, so "plus more for serving" is still a note. Nil, so the line reads as
+    /// it did, when the words before the comma are not a preparation ("2 cloves garlic, minced")
+    /// or the clause after it names no thing: a note clause, or preparation words only.
+    private static func leadingPreparation(_ item: String, before preparation: String) -> (item: String, preparation: String)? {
+        let words = item.split(separator: " ").map { $0.lowercased() }
+        guard let last = words.last, preparationWords.contains(last),
+              words.count == 1 || (words.count == 2 && preparationAdverbs.contains(words[0])) else { return nil }
+        let rest = clauses(of: preparation).map { $0.text }.filter { !$0.isEmpty }
+        guard let first = rest.first,
+              first.range(of: noteClause, options: [.regularExpression, .caseInsensitive]) == nil,
+              first.split(separator: " ").contains(where: { !isPreparationWord($0.lowercased()) }) else { return nil }
+        return (item: first, preparation: ([item] + rest.dropFirst()).joined(separator: ", "))
+    }
+
     // MARK: - Notes
 
     /// Removes the parentheticals that end `text` ("orange juice (about 3 oranges)") and returns
@@ -400,14 +455,8 @@ public enum IngredientParser {
     /// Removes the closing run of note clauses from a preparation ("softened, plus more for the
     /// pan" keeps "softened") and returns them as written.
     private static func takeNoteClauses(_ preparation: inout String) -> String? {
-        var start = preparation.startIndex
-        var clauses: [(start: String.Index, text: String)] = []
-        for comma in topLevelCommas(in: preparation) + [preparation.endIndex] {
-            clauses.append((start, preparation[start..<comma].trimmingCharacters(in: .whitespaces)))
-            if comma < preparation.endIndex { start = preparation.index(after: comma) }
-        }
         var first: String.Index?
-        for clause in clauses.reversed() {
+        for clause in clauses(of: preparation).reversed() {
             guard clause.text.range(of: noteClause, options: [.regularExpression, .caseInsensitive]) != nil else { break }
             first = clause.start
         }
