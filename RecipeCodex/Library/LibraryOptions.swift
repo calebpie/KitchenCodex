@@ -1,5 +1,6 @@
 import Foundation
 import RecipeModel
+import SwiftData
 
 /// How the Recipes view lays out the library (More → View as).
 enum RecipeLayout: String, CaseIterable, Identifiable {
@@ -59,15 +60,18 @@ enum CookedFilter: String, CaseIterable, Identifiable {
 }
 
 /// The library's view filter. Not a search: search is the Search tab (03 §3.2).
-/// This slice has Course and Cooked state; Cuisine, Time, Dietary, Book and Tags come later in Phase 1.
+/// Course, Cooked state and, on iPhone, one of the cook's collections (iPad picks collections in the
+/// sidebar); Cuisine, Time, Dietary, Book and Tags come later.
 struct RecipeFilter: Equatable {
     var course: String?
     var cooked: CookedFilter = .any
+    var collection: PersistentIdentifier?
 
-    var isActive: Bool { course != nil || cooked != .any }
+    var isActive: Bool { course != nil || cooked != .any || collection != nil }
 
     func matches(_ recipe: Recipe) -> Bool {
         if let course, recipe.course != course { return false }
+        if let collection, recipe.collections?.contains(where: { $0.persistentModelID == collection }) != true { return false }
         switch cooked {
         case .any: return true
         case .neverCooked: return recipe.isNeverCooked

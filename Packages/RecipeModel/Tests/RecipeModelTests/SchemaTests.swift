@@ -18,7 +18,7 @@ struct SchemaTests {
             Book(title: "Six Seasons"), BookSection(title: "Spring"), BookEntry(title: "Peas", page: 12),
             Recipe(title: "Roast Chicken"), RecipeVersion(), Ingredient(item: "chicken", rawText: "1 whole chicken"),
             Step(text: "Salt it."), RecipeLink(), Tag(name: "weeknight"), CookSession(), SourceInfo(),
-            NutritionEstimate(), RecipeImage(role: .pageScan, imageData: Data([0xFF, 0xD8])),
+            NutritionEstimate(), RecipeImage(role: .pageScan, imageData: Data([0xFF, 0xD8])), RecipeCollection(name: "Sunday Suppers"),
             Event(name: "Sunday Supper", guestCount: 8), Guest(name: "Rosa", restrictions: ["gluten-free"]),
             EventMenu(), Slot(name: "Main"), Candidate(servings: 8), Pairing(role: .wine, text: "a dry Riesling"),
             ShoppingList(), ShoppingItem(normalizedIngredient: "chicken"),
@@ -113,6 +113,43 @@ struct SchemaTests {
         context.delete(step)
         try context.save()
         #expect(try count(of: RecipeImage.self, in: context) == 0)
+    }
+
+    /// A recipe can sit in several collections and a collection holds many recipes. Deleting a
+    /// collection leaves its recipes; deleting a recipe takes it out of its collections.
+    @Test func collectionsHoldRecipesBothWays() throws {
+        let container = try RecipeStore.makeContainer(inMemory: true)
+        let context = ModelContext(container)
+
+        let supper = RecipeCollection(name: "Sunday Suppers", sortOrder: 0)
+        let weeknight = RecipeCollection(name: "Weeknights", sortOrder: 1)
+        let chicken = Recipe(title: "Roast Chicken")
+        let soup = Recipe(title: "Leek Soup")
+        for model in [supper, weeknight, chicken, soup] as [any PersistentModel] { context.insert(model) }
+        chicken.toggleMembership(in: supper)
+        chicken.toggleMembership(in: weeknight)
+        soup.toggleMembership(in: weeknight)
+        try context.save()
+
+        #expect(chicken.collections?.count == 2)
+        #expect(Set(weeknight.recipes?.map(\.title) ?? []) == ["Roast Chicken", "Leek Soup"])
+        #expect(supper.recipes?.map(\.title) == ["Roast Chicken"])
+        #expect(RecipeCollection.nextSortOrder(after: [supper, weeknight]) == 2)
+
+        chicken.toggleMembership(in: weeknight)
+        try context.save()
+        #expect(!chicken.isIn(weeknight))
+        #expect(weeknight.recipes?.map(\.title) == ["Leek Soup"])
+
+        context.delete(supper)
+        try context.save()
+        #expect(try count(of: Recipe.self, in: context) == 2)
+        #expect(chicken.collections?.isEmpty == true)
+
+        context.delete(soup)
+        try context.save()
+        #expect(weeknight.recipes?.isEmpty == true)
+        #expect(try count(of: RecipeCollection.self, in: context) == 1)
     }
 
     /// 02 §4.2: every relationship optional with an inverse, no unique constraints,

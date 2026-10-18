@@ -85,6 +85,7 @@ extension RecipeSchemaV1 {
         @Relationship(deleteRule: .cascade, inverse: \RecipeLink.parent) public var links: [RecipeLink]?
         @Relationship(deleteRule: .nullify, inverse: \RecipeLink.subRecipe) public var linkedFrom: [RecipeLink]?
         @Relationship(deleteRule: .nullify, inverse: \Tag.recipes) public var tags: [Tag]?
+        @Relationship(deleteRule: .nullify, inverse: \RecipeCollection.recipes) public var collections: [RecipeCollection]?
         @Relationship(deleteRule: .cascade, inverse: \CookSession.recipe) public var cookSessions: [CookSession]?
         @Relationship(deleteRule: .cascade, inverse: \SourceInfo.recipe) public var source: SourceInfo?
         @Relationship(deleteRule: .cascade, inverse: \NutritionEstimate.recipe) public var nutrition: NutritionEstimate?
@@ -202,6 +203,25 @@ extension RecipeSchemaV1 {
         public init(name: String = "", kind: String? = nil) {
             self.name = name
             self.kind = kind
+        }
+    }
+
+    /// A collection the cook made ("Sunday Suppers", "Weeknights"): any recipes, in no particular
+    /// order, shown in the iPad sidebar below the smart collections (03 §3.2, §4). A recipe can be in
+    /// several; deleting a collection leaves its recipes in the library.
+    @Model
+    public final class RecipeCollection {
+        public var id: UUID = UUID()
+        public var name: String = ""
+        /// Position among the collections, lowest first.
+        public var sortOrder: Int = 0
+        public var createdAt: Date = Date.now
+
+        public var recipes: [Recipe]?
+
+        public init(name: String = "", sortOrder: Int = 0) {
+            self.name = name
+            self.sortOrder = sortOrder
         }
     }
 

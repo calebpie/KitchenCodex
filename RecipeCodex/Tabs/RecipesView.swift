@@ -30,11 +30,15 @@ struct RecipesView: View {
     @State private var selectedRecipeID: PersistentIdentifier?
     /// Set by the import sheet; opened once the sheet has gone.
     @State private var importedRecipe: Recipe?
+    @State private var isCreatingCollection = false
+    @State private var isRenamingCollection = false
+    @State private var isConfirmingCollectionDeletion = false
 
     /// Unsorted; used for the empty state, the Course chip's options and resolving the selection.
     /// The collection runs its own sorted query.
     @Query private var allRecipes: [Recipe]
     @Query private var books: [Book]
+    @Query(sort: CollectionActions.sortDescriptors) private var collections: [RecipeCollection]
 
     private var isSplit: Bool { sizeClass == .regular }
 
@@ -42,6 +46,17 @@ struct RecipesView: View {
     private var activeView: LibraryView {
         if isSplit { return scope == .shelf ? .books : .recipes }
         return libraryView
+    }
+
+    /// The collection on screen: the sidebar's on iPad, the Collection chip's on iPhone.
+    private var currentCollection: RecipeCollection? {
+        let id: PersistentIdentifier?
+        if isSplit, case let .collection(scopeID)? = scope {
+            id = scopeID
+        } else {
+            id = filter.collection
+        }
+        return id.flatMap { id in collections.first { $0.persistentModelID == id } }
     }
 
     var body: some View {
@@ -56,6 +71,23 @@ struct RecipesView: View {
         }
         .sheet(isPresented: $isImportingLibrary) {
             LibraryImportView()
+        }
+        .collectionNamePrompt("New Collection", isPresented: $isCreatingCollection, actionTitle: "Create") { name in
+            show(CollectionActions.create(named: name, in: modelContext))
+        }
+        .collectionNamePrompt("Rename Collection", isPresented: $isRenamingCollection, initialName: currentCollection?.name ?? "") { name in
+            currentCollection?.name = name
+            try? modelContext.save()
+        }
+        .confirmationDialog(
+            "Delete “\(currentCollection?.name ?? "")”?",
+            isPresented: $isConfirmingCollectionDeletion,
+            titleVisibility: .visible,
+            presenting: currentCollection
+        ) { collection in
+            Button("Delete Collection", role: .destructive) { deleteCollection(collection) }
+        } message: { _ in
+            Text("The recipes stay in your library.")
         }
         .onChange(of: router.requestedRecipeID, initial: true) { _, id in
             guard let id else { return }
@@ -84,7 +116,7 @@ struct RecipesView: View {
                         .padding(.horizontal)
 
                         if libraryView == .recipes, !allRecipes.isEmpty {
-                            FilterChips(filter: $filter, courses: RecipeCourse.options(including: allRecipes))
+                            FilterChips(filter: $filter, courses: RecipeCourse.options(including: allRecipes), collections: collections)
                         }
                     }
                     .padding(.bottom, 8)
@@ -102,10 +134,12 @@ struct RecipesView: View {
         } content: {
             let scope = scope ?? .all
             libraryContent(scope: scope, selection: $selectedRecipeID)
-                .navigationTitle(LibrarySidebar.title(for: scope, books: books))
+                .navigationTitle(LibrarySidebar.title(for: scope, books: books, collections: collections))
                 .safeAreaInset(edge: .top) {
                     if scope != .shelf, !allRecipes.isEmpty {
-                        FilterChips(filter: $filter, courses: RecipeCourse.options(including: allRecipes))
+                        // Collections are picked in the sidebar here; the chip only shows to clear one
+                        // chosen in a compact window.
+                        FilterChips(filter: $filter, courses: RecipeCourse.options(including: allRecipes), collections: filter.collection == nil ? [] : collections)
                             .padding(.bottom, 8)
                     }
                 }
@@ -149,7 +183,7 @@ struct RecipesView: View {
                 Text("Share a recipe from Safari, scan a cookbook page, or add one by hand.")
             }
         } else {
-            RecipeCollection(sort: sort, layout: layout, scope: scope, filter: $filter, selection: selection)
+            LibraryRecipes(sort: sort, layout: layout, scope: scope, filter: $filter, collections: collections, selection: selection)
         }
     }
 
@@ -205,6 +239,18 @@ struct RecipesView: View {
                     Button("Select", systemImage: "checkmark.circle") {}
                         .disabled(true)
                     Divider()
+                    Button("New Collection…", systemImage: "rectangle.stack.badge.plus") {
+                        isCreatingCollection = true
+                    }
+                    if let collection = currentCollection {
+                        Button("Rename “\(collection.name)”…", systemImage: "pencil") {
+                            isRenamingCollection = true
+                        }
+                        Button("Delete “\(collection.name)”…", systemImage: "trash", role: .destructive) {
+                            isConfirmingCollectionDeletion = true
+                        }
+                    }
+                    Divider()
                     Button("Import Library…", systemImage: "tray.and.arrow.down") {
                         isImportingLibrary = true
                     }
@@ -229,6 +275,23 @@ struct RecipesView: View {
         }
     }
 
+    /// A new collection: selected in the sidebar on iPad, chosen in the Collection chip on iPhone.
+    private func show(_ collection: RecipeCollection) {
+        if isSplit {
+            scope = .collection(collection.persistentModelID)
+        } else {
+            libraryView = .recipes
+            filter.collection = collection.persistentModelID
+        }
+    }
+
+    private func deleteCollection(_ collection: RecipeCollection) {
+        let id = collection.persistentModelID
+        if scope == .collection(id) { scope = .all }
+        if filter.collection == id { filter.collection = nil }
+        CollectionActions.delete(collection, in: modelContext)
+    }
+
     private func openImportedRecipe() {
         guard let recipe = importedRecipe else { return }
         importedRecipe = nil
@@ -248,23 +311,35 @@ struct RecipesView: View {
 }
 
 /// The filtered, sorted recipes as a grid or a list. With a `selection` (iPad) a tap selects the
-/// recipe for the detail column; without one (iPhone) it pushes the recipe.
-private struct RecipeCollection: View {
+/// recipe for the detail column and a recipe can be dragged onto a sidebar collection; without one
+/// (iPhone) a tap pushes the recipe.
+private struct LibraryRecipes: View {
     @Query private var recipes: [Recipe]
     let layout: RecipeLayout
     let scope: LibraryScope
     @Binding var filter: RecipeFilter
+    let collections: [RecipeCollection]
     let selection: Binding<PersistentIdentifier?>?
 
     @Environment(\.modelContext) private var modelContext
     @State private var pendingDeletion: Recipe?
+    /// Long-press → Add to Collection → New Collection…: the recipe to put in it once named.
+    @State private var collectingRecipe: Recipe?
 
-    init(sort: RecipeSort, layout: RecipeLayout, scope: LibraryScope, filter: Binding<RecipeFilter>, selection: Binding<PersistentIdentifier?>?) {
+    init(sort: RecipeSort, layout: RecipeLayout, scope: LibraryScope, filter: Binding<RecipeFilter>, collections: [RecipeCollection], selection: Binding<PersistentIdentifier?>?) {
         _recipes = Query(sort: sort.descriptors, animation: .default)
         self.layout = layout
         self.scope = scope
         _filter = filter
+        self.collections = collections
         self.selection = selection
+    }
+
+    /// The collection being shown, by the sidebar or by the chip, for its empty state.
+    private var shownCollection: RecipeCollection? {
+        var id = filter.collection
+        if case let .collection(scopeID) = scope { id = scopeID }
+        return id.flatMap { id in collections.first { $0.persistentModelID == id } }
     }
 
     var body: some View {
@@ -278,7 +353,15 @@ private struct RecipeCollection: View {
         }
         .overlay {
             if visible.isEmpty {
-                if filter.isActive {
+                if let collection = shownCollection, filter.course == nil, filter.cooked == .any {
+                    ContentUnavailableView {
+                        Label("Nothing in “\(collection.name)” yet", systemImage: "rectangle.stack")
+                    } description: {
+                        Text(selection == nil
+                            ? "Add a recipe from its long-press menu: Add to Collection."
+                            : "Drag recipes onto the collection in the sidebar, or use Add to Collection in their long-press menu.")
+                    }
+                } else if filter.isActive {
                     ContentUnavailableView {
                         Label("No matching recipes", systemImage: "line.3.horizontal.decrease.circle")
                     } description: {
@@ -305,6 +388,13 @@ private struct RecipeCollection: View {
         } message: { _ in
             Text("The recipe and all its versions will be deleted.")
         }
+        .collectionNamePrompt(
+            "New Collection",
+            isPresented: Binding { collectingRecipe != nil } set: { if !$0 { collectingRecipe = nil } },
+            actionTitle: "Create"
+        ) { name in
+            CollectionActions.create(named: name, adding: collectingRecipe, in: modelContext)
+        }
     }
 
     private static func emptyDescription(for scope: LibraryScope) -> String {
@@ -312,6 +402,7 @@ private struct RecipeCollection: View {
         case .favorites: "Favorite a recipe from its long-press menu or by swiping its row."
         case .neverCooked: "Every recipe here has been cooked."
         case .needsReview: "No imported recipe is waiting for a check."
+        case .collection: "Add recipes from their long-press menu."
         case .book: "No recipes from this book are in the library yet."
         case .all, .shelf: "No recipes yet."
         }
@@ -344,6 +435,7 @@ private struct RecipeCollection: View {
                     }
                     .buttonStyle(.plain)
                     .contextMenu { actions(for: recipe) }
+                    .modifier(RecipeDragSource(recipe: recipe, isEnabled: selection != nil))
                 }
             }
             .padding(.horizontal)
@@ -359,6 +451,7 @@ private struct RecipeCollection: View {
                     RecipeRow(recipe: recipe)
                         .tag(recipe.persistentModelID)
                         .contextMenu { actions(for: recipe) }
+                        .draggable(RecipeDragItem(id: recipe.id)) { RecipeRow(recipe: recipe).frame(width: 320) }
                         .swipeActions(edge: .leading, allowsFullSwipe: true) { favoriteSwipe(recipe) }
                 }
             }
@@ -384,7 +477,8 @@ private struct RecipeCollection: View {
         .tint(.accentColor)
     }
 
-    /// Long-press actions (03 §2 Menus): Cook, Favorite, Share, Delete. Add to menu arrives with Plan.
+    /// Long-press actions (03 §2 Menus): Cook, Favorite, Add to Collection, Share, Delete. Add to menu
+    /// arrives with Plan.
     @ViewBuilder
     private func actions(for recipe: Recipe) -> some View {
         Button("Cook", systemImage: "frying.pan") {}
@@ -392,6 +486,7 @@ private struct RecipeCollection: View {
         Button(recipe.isFavorite ? "Unfavorite" : "Favorite", systemImage: recipe.isFavorite ? "heart.slash" : "heart") {
             recipe.isFavorite.toggle()
         }
+        AddToCollectionMenu(recipe: recipe) { collectingRecipe = recipe }
         ShareRecipeMenu(recipe: recipe)
         Divider()
         Button("Delete", systemImage: "trash", role: .destructive) {
@@ -409,11 +504,28 @@ private struct RecipeCollection: View {
     }
 }
 
-/// Course and Cooked state chips under the view switch. Each chip is a menu; an active chip is
-/// filled and names its value.
+/// iPad: a card can be dragged onto a collection in the sidebar.
+private struct RecipeDragSource: ViewModifier {
+    let recipe: Recipe
+    let isEnabled: Bool
+
+    func body(content: Content) -> some View {
+        if isEnabled {
+            content.draggable(RecipeDragItem(id: recipe.id)) {
+                RecipeCard(recipe: recipe).frame(width: 180)
+            }
+        } else {
+            content
+        }
+    }
+}
+
+/// Course, Cooked state and Collection chips under the view switch. Each chip is a menu; an active
+/// chip is filled and names its value. The Collection chip shows once there is a collection.
 private struct FilterChips: View {
     @Binding var filter: RecipeFilter
     let courses: [String]
+    let collections: [RecipeCollection]
 
     var body: some View {
         ScrollView(.horizontal) {
@@ -437,6 +549,20 @@ private struct FilterChips: View {
                     }
                 } label: {
                     ChipLabel(title: filter.cooked == .any ? "Cooked" : filter.cooked.title, isActive: filter.cooked != .any)
+                }
+
+                if !collections.isEmpty {
+                    Menu {
+                        Picker("Collection", selection: $filter.collection) {
+                            Text("Any Collection").tag(PersistentIdentifier?.none)
+                            ForEach(collections) { collection in
+                                Text(collection.name).tag(Optional(collection.persistentModelID))
+                            }
+                        }
+                    } label: {
+                        let name = collections.first { $0.persistentModelID == filter.collection }?.name
+                        ChipLabel(title: name ?? "Collection", isActive: filter.collection != nil)
+                    }
                 }
 
                 if filter.isActive {

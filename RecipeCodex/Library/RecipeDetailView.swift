@@ -28,6 +28,7 @@ struct RecipeDetailView: View {
     @State private var isDeleting = false
     @State private var showsNavigationTitle = false
     @State private var viewedStepPhotos: StepPhotoSelection?
+    @State private var isNamingCollection = false
     @State private var contentWidth: CGFloat = 0
 
     private static let batchSteps: [Rational] = [Rational(1, 4), Rational(1, 2), Rational(3, 4), .one, Rational(3, 2), Rational(2), Rational(3), Rational(4)]
@@ -118,6 +119,7 @@ struct RecipeDetailView: View {
                     Button(recipe.isFavorite ? "Unfavorite" : "Favorite", systemImage: recipe.isFavorite ? "heart.slash" : "heart") {
                         recipe.isFavorite.toggle()
                     }
+                    AddToCollectionMenu(recipe: recipe) { isNamingCollection = true }
                     Divider()
                     Button("Delete", systemImage: "trash", role: .destructive) {
                         isConfirmingDelete = true
@@ -172,6 +174,9 @@ struct RecipeDetailView: View {
         }
         .fullScreenCover(item: $viewedStepPhotos) { selection in
             StepPhotoViewer(selection: selection)
+        }
+        .collectionNamePrompt("New Collection", isPresented: $isNamingCollection, actionTitle: "Create") { name in
+            CollectionActions.create(named: name, adding: recipe, in: modelContext)
         }
         .onChange(of: version?.servings) {
             // A new version may have a different yield; start again from it.

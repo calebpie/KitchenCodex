@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 
 // Conveniences over the library models. No stored properties: these read and write the schema v1
 // fields and relationships only.
@@ -29,6 +30,27 @@ extension RecipeSchemaV1.Recipe {
 
     public var cookCount: Int { cookSessions?.count ?? 0 }
     public var isNeverCooked: Bool { cookCount == 0 }
+
+    public func isIn(_ collection: RecipeCollection) -> Bool {
+        (collections ?? []).contains { $0.persistentModelID == collection.persistentModelID }
+    }
+
+    /// Adds the recipe to `collection`, or takes it out when it is already there. Both models must be
+    /// in the same context.
+    public func toggleMembership(in collection: RecipeCollection) {
+        if isIn(collection) {
+            collections = (collections ?? []).filter { $0.persistentModelID != collection.persistentModelID }
+        } else {
+            collections = (collections ?? []) + [collection]
+        }
+    }
+}
+
+extension RecipeSchemaV1.RecipeCollection {
+    /// The order a new collection takes: after every existing one.
+    public static func nextSortOrder(after collections: [RecipeCollection]) -> Int {
+        (collections.map(\.sortOrder).max() ?? -1) + 1
+    }
 }
 
 extension RecipeSchemaV1.Step {
