@@ -70,7 +70,7 @@ public struct WebRecipeImporter: Sendable {
     public static func extract(html: String, url: URL?) -> WebPageExtraction {
         let page = HTMLPage(html: html)
         let metadata = PageMetadata(page: page, url: url)
-        let reader = PageTextReader(page: page)
+        let reader = PageTextReader(page: page, base: metadata.sourceURL)
         let reading = reader.read()
 
         var extraction = WebPageExtraction(
@@ -91,6 +91,7 @@ public struct WebRecipeImporter: Sendable {
         }
         if var recipe = choose(structured, pageTitle: metadata.documentTitle) {
             reconcile(&recipe, with: reading)
+            borrowHeadings(&recipe, from: reader)
             if extraction.siteName == nil { extraction.siteName = recipe.siteName }
             finish(&recipe, metadata: metadata, extraction: extraction)
             if recipe.ingredients.count >= 2, !recipe.steps.isEmpty {
@@ -103,6 +104,7 @@ public struct WebRecipeImporter: Sendable {
         // 2. Microdata.
         if var recipe = MicrodataRecipe.read(page.microdata, base: metadata.sourceURL) {
             reconcile(&recipe, with: reading)
+            borrowHeadings(&recipe, from: reader)
             finish(&recipe, metadata: metadata, extraction: extraction)
             if recipe.ingredients.count >= 2, !recipe.steps.isEmpty {
                 extraction.recipe = recipe
@@ -119,8 +121,8 @@ public struct WebRecipeImporter: Sendable {
                 recipe.ingredients = ingredients.lines
                 recipe.ingredientGroups = ingredients.groups.merging(reading.groups) { first, _ in first }
             }
-            if recipe.steps.isEmpty { recipe.steps = reading.steps.map(ImportText.dualMeasures) }
-            if recipe.yield == nil { recipe.yield = metadata.yield(near: reading.span, in: reader.lines) }
+            if recipe.steps.isEmpty { recipe.steps = reading.importedSteps.map { ImportedStep(text: ImportText.dualMeasures($0.text), imageURL: $0.imageURL) } }
+            if recipe.yield == nil { recipe.yield = metadata.yield(near: reading.span, in: reader.lines).map(YieldText.strippingLabel) }
             let times = metadata.times(in: reader.lines)
             recipe.prepTime = recipe.prepTime ?? times.prep
             recipe.cookTime = recipe.cookTime ?? times.cook
@@ -169,6 +171,7 @@ public struct WebRecipeImporter: Sendable {
         guard let draft = try? await structurer.structure(extraction.recipeText) else { return nil }
         let ingredients = ImportText.ingredientList(draft.ingredients)
         let steps = draft.steps.flatMap(ImportText.steps(from:)).map(ImportText.dualMeasures)
+            .map { ImportedStep(text: $0, imageURL: Self.imageURL(forStep: $0, in: extraction.recipe)) }
         guard ingredients.lines.count >= 2, !steps.isEmpty else { return nil }
         if let existing = extraction.recipe,
            Double(ingredients.lines.count) < Double(existing.ingredients.count) * Self.modelKeepsShare {
@@ -185,6 +188,7 @@ public struct WebRecipeImporter: Sendable {
         recipe.ingredients = ingredients.lines
         recipe.ingredientGroups = groups
         recipe.steps = steps
+        recipe.movingAsidesToNotes()
         recipe.method = .model
         recipe.confidence = min(draft.confidence, 0.6)
         recipe.siteName = recipe.siteName ?? extraction.siteName
@@ -203,6 +207,13 @@ public struct WebRecipeImporter: Sendable {
     }
 
     // MARK: - Helpers
+
+    /// The photo the page reading attached to a step with the same text, so a model reading that
+    /// copies a step keeps its photo.
+    static func imageURL(forStep text: String, in recipe: ImportedRecipe?) -> URL? {
+        let key = ImportText.normalizedForComparison(text)
+        return recipe?.steps.first { $0.imageURL != nil && ImportText.normalizedForComparison($0.text) == key }?.imageURL
+    }
 
     /// `recipe`'s group headings re-keyed to where their first lines sit in `lines`.
     static func carryGroups(from recipe: ImportedRecipe, to lines: [String]) -> [Int: String] {
@@ -254,7 +265,7 @@ public struct WebRecipeImporter: Sendable {
             }
         }
         if recipe.steps.isEmpty, !reading.steps.isEmpty {
-            recipe.steps = reading.steps
+            recipe.steps = reading.importedSteps
             recipe.confidence = min(recipe.confidence, 0.75)
         }
     }
@@ -270,6 +281,44 @@ public struct WebRecipeImporter: Sendable {
         if recipe.ingredients.count < 2 || recipe.steps.isEmpty {
             recipe.confidence = min(recipe.confidence, 0.5)
         }
+        recipe.movingAsidesToNotes()
+    }
+
+    /// Structured data with a flat ingredient list on a page that shows the same lines under
+    /// headings (Rouxbe's lasagne: "Making the Ragu", "Making the Besciamella"…): the page's headings
+    /// become the groups. Applies only when most structured lines (80%) are found on the page in
+    /// order, each heading sits just above the line it names (at most three lines up, past an
+    /// "Ingredients" label), and at least two groups result.
+    static func borrowHeadings(_ recipe: inout ImportedRecipe, from reader: PageTextReader) {
+        guard recipe.ingredientGroups.isEmpty, recipe.ingredients.count >= 4 else { return }
+        let keys = recipe.ingredients.map(ImportText.normalizedForComparison)
+        let title = ImportText.normalizedForComparison(recipe.title)
+        var groups: [Int: String] = [:]
+        var next = 0
+        var matched = 0
+        var heading: (index: Int, name: String)?
+        for (index, line) in reader.lines.enumerated() where next < keys.count {
+            let kind = PageTextReader.kind(of: line)
+            if kind == .groupHeading || (line.isHeading && kind == .aside) {
+                let name = ImportText.groupName(line.text)
+                let key = ImportText.normalizedForComparison(name)
+                if !key.isEmpty, key != title, name.count <= 50, name.first?.isNumber == false {
+                    heading = (index, name)
+                }
+                continue
+            }
+            let key = ImportText.normalizedForComparison(ImportText.ingredientLine(line.text))
+            // Lines may be skipped (the page can drop one), but never reordered.
+            guard let position = keys[next...].firstIndex(of: key), position - next <= 2 else { continue }
+            if let found = heading, index - found.index <= 3 {
+                groups[position] = found.name
+            }
+            heading = nil
+            matched += 1
+            next = position + 1
+        }
+        guard Double(matched) >= Double(keys.count) * 0.8, Set(groups.values).count >= 2 else { return }
+        recipe.ingredientGroups = groups
     }
 
     private static func modelText(reader: PageTextReader, reading: PageTextReader.Reading?, title: String) -> String {
@@ -409,8 +458,8 @@ enum MicrodataRecipe {
         return ImportedRecipe(
             title: first("name").map(ImportText.inline) ?? "",
             ingredients: ingredients.lines,
-            steps: steps,
-            yield: first("recipeYield").map(ImportText.inline),
+            steps: steps.map { ImportedStep(text: $0) },
+            yield: first("recipeYield").map(YieldText.strippingLabel),
             author: author.map(ImportText.inline),
             imageURL: ImportText.url(first("image"), relativeTo: base),
             prepTime: duration("prepTime"),

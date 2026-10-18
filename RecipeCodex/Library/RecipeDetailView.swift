@@ -20,6 +20,7 @@ struct RecipeDetailView: View {
     @State private var isConfirmingDelete = false
     @State private var isDeleting = false
     @State private var showsNavigationTitle = false
+    @State private var viewedStepPhotos: StepPhotoSelection?
 
     private static let batchSteps: [Rational] = [Rational(1, 4), Rational(1, 2), Rational(3, 4), .one, Rational(3, 2), Rational(2), Rational(3), Rational(4)]
     private let heroHeight: CGFloat = 320
@@ -39,6 +40,9 @@ struct RecipeDetailView: View {
 
                 VStack(alignment: .leading, spacing: 28) {
                     header
+                    if !recipe.headnote.isEmpty {
+                        headnoteSection
+                    }
                     if let version {
                         scalingControls(for: version)
                         ingredientsSection(for: version)
@@ -108,6 +112,9 @@ struct RecipeDetailView: View {
         .toolbarVisibility(.hidden, for: .tabBar)
         .sheet(isPresented: $isEditing) {
             RecipeEditorView(recipe: recipe)
+        }
+        .fullScreenCover(item: $viewedStepPhotos) { selection in
+            StepPhotoViewer(selection: selection)
         }
         .onChange(of: version?.servings) {
             // A new version may have a different yield; start again from it.
@@ -238,10 +245,34 @@ struct RecipeDetailView: View {
             if version.sortedIngredients.isEmpty {
                 Text("No ingredients yet.").foregroundStyle(.secondary)
             }
-            ForEach(version.sortedIngredients) { ingredient in
-                IngredientLine(ingredient: ingredient, factor: factor, system: unitSystem)
+            ForEach(Self.ingredientGroups(version.sortedIngredients), id: \.offset) { group in
+                VStack(alignment: .leading, spacing: 12) {
+                    if let name = group.name {
+                        Text(name)
+                            .font(.headline)
+                            .padding(.top, group.offset == 0 ? 0 : 8)
+                            .accessibilityAddTraits(.isHeader)
+                    }
+                    ForEach(group.ingredients) { ingredient in
+                        IngredientLine(ingredient: ingredient, factor: factor, system: unitSystem)
+                    }
+                }
             }
         }
+    }
+
+    /// Runs of ingredients that share a group heading, in order (03 §3.3: grouped by component).
+    static func ingredientGroups(_ ingredients: [Ingredient]) -> [(offset: Int, name: String?, ingredients: [Ingredient])] {
+        var groups: [(offset: Int, name: String?, ingredients: [Ingredient])] = []
+        for ingredient in ingredients {
+            let name = ingredient.group.flatMap { $0.isEmpty ? nil : $0 }
+            if let last = groups.last, last.name == name {
+                groups[groups.count - 1].ingredients.append(ingredient)
+            } else {
+                groups.append((groups.count, name, [ingredient]))
+            }
+        }
+        return groups
     }
 
     private func stepsSection(for version: RecipeVersion) -> some View {
@@ -251,18 +282,43 @@ struct RecipeDetailView: View {
                 Text("No steps yet.").foregroundStyle(.secondary)
             }
             ForEach(Array(version.sortedSteps.enumerated()), id: \.element.id) { index, step in
-                HStack(alignment: .firstTextBaseline, spacing: 12) {
-                    Text("\(index + 1)")
-                        .font(.headline)
-                        .monospacedDigit()
-                        .foregroundStyle(.tint)
-                        .frame(minWidth: 24, alignment: .trailing)
-                    Text(step.text)
-                        .fixedSize(horizontal: false, vertical: true)
+                HStack(alignment: .top, spacing: 12) {
+                    HStack(alignment: .firstTextBaseline, spacing: 12) {
+                        Text("\(index + 1)")
+                            .font(.headline)
+                            .monospacedDigit()
+                            .foregroundStyle(.tint)
+                            .frame(minWidth: 24, alignment: .trailing)
+                        Text(step.text)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("Step \(index + 1). \(step.text)")
+
+                    let photos = step.sortedPhotos
+                    if !photos.isEmpty {
+                        Button {
+                            viewedStepPhotos = StepPhotoSelection(step: step, stepNumber: index + 1)
+                        } label: {
+                            StepPhotoThumbnail(photos: photos, stepNumber: index + 1)
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel("Step \(index + 1). \(step.text)")
             }
+        }
+    }
+
+    private var headnoteSection: some View {
+        DisclosureGroup {
+            Text(recipe.headnote)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } label: {
+            Text("Headnote")
+                .font(.headline)
         }
     }
 

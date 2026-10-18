@@ -11,6 +11,25 @@ public enum ImportMethod: String, Sendable, Codable, CaseIterable {
     case pageText
     /// The on-device model structuring the page's visible text.
     case model
+    /// Another recipe app's export (Paprika, Mela): already structured by the cook.
+    case libraryFile
+}
+
+/// One instruction as the source wrote it, with the photo the source shows for it, if any.
+public struct ImportedStep: Sendable, Equatable, Hashable, ExpressibleByStringLiteral, CustomStringConvertible {
+    public var text: String
+    public var imageURL: URL?
+
+    public init(text: String, imageURL: URL? = nil) {
+        self.text = text
+        self.imageURL = imageURL
+    }
+
+    public init(stringLiteral text: String) {
+        self.init(text: text)
+    }
+
+    public var description: String { text }
 }
 
 /// A recipe as it arrives from the outside world, before it becomes a RecipeModel object.
@@ -18,7 +37,12 @@ public struct ImportedRecipe: Sendable, Equatable {
     public var title: String
     /// Ingredient lines as written, one per entry, group headings removed (see `ingredientGroups`).
     public var ingredients: [String]
-    public var steps: [String]
+    public var steps: [ImportedStep]
+    /// Notes as separate paragraphs, in the source's order: a library export's notes, and asides the
+    /// source posted as steps ("DO AHEAD: …", "Tip: …"), which `movingAsidesToNotes()` moves here.
+    public var notes: [String] = []
+    /// The introduction above the recipe, when the source keeps one apart (Mela's `text`).
+    public var headnote: String?
     /// The yield as the page states it ("Serves 6", "Makes 30 cookies", "4"). See `servings`.
     public var yield: String?
     public var author: String?
@@ -36,6 +60,14 @@ public struct ImportedRecipe: Sendable, Equatable {
     public var method: ImportMethod?
     /// 0…1. JSON-LD is high, the page-text reading low; below `reviewThreshold` the recipe needs a look.
     public var confidence: Double
+    /// Set by library imports that carry the cook's favorite flag.
+    public var isFavorite = false
+    /// The cover's bytes when the source embeds them (Paprika's `photo_data`, Mela's `images`).
+    public var imageData: Data?
+    /// When the recipe was first added in the app it came from.
+    public var createdAt: Date?
+    /// The app an export came from ("Paprika", "Mela"), for the change summary. Nil for the web.
+    public var importedFrom: String?
 
     /// Imports below this confidence are saved with `needsReview` set.
     public static let reviewThreshold = 0.7
@@ -43,7 +75,7 @@ public struct ImportedRecipe: Sendable, Equatable {
     public init(
         title: String,
         ingredients: [String] = [],
-        steps: [String] = [],
+        steps: [ImportedStep] = [],
         yield: String? = nil,
         author: String? = nil,
         siteName: String? = nil,
@@ -77,7 +109,7 @@ public struct ImportedRecipe: Sendable, Equatable {
     }
 
     public init(draft: StructuredRecipeDraft, sourceURL: URL? = nil) {
-        self.init(title: draft.title, ingredients: draft.ingredients, steps: draft.steps, sourceURL: sourceURL, confidence: draft.confidence)
+        self.init(title: draft.title, ingredients: draft.ingredients, steps: draft.steps.map { ImportedStep(text: $0) }, sourceURL: sourceURL, confidence: draft.confidence)
     }
 
     public var needsReview: Bool { confidence < Self.reviewThreshold }
@@ -95,4 +127,30 @@ public struct ImportedRecipe: Sendable, Equatable {
 
     /// `yield` when it says more than a servings count ("Makes 30 cookies", "Serves 8 to 10"), else nil.
     public var yieldDescription: String? { YieldText.parse(yield).description }
+
+    /// Steps that carry a photo URL from the source.
+    public var stepImageCount: Int { steps.count(where: { $0.imageURL != nil }) }
+
+    /// Moves asides the source posted as steps ("DO AHEAD: Lamb can be cut 2 hours ahead.",
+    /// "Tip: …", "Make ahead: …", "Note: …") to the end of `notes`, keeping their order. Steps are
+    /// never split or merged; a recipe whose every step is an aside keeps them as steps.
+    public mutating func movingAsidesToNotes() {
+        let asides = steps.filter { Self.isAside($0.text) }
+        guard !asides.isEmpty, asides.count < steps.count else { return }
+        steps.removeAll { Self.isAside($0.text) }
+        notes += asides.map(\.text).filter { !notes.contains($0) }
+    }
+
+    /// "DO AHEAD", "Do Ahead:", "Make-ahead:", "Note:", "Tip:", "TIP " at the start of a step. "Note"
+    /// and "Tip" need a colon (or capitals), so "Tip the batter into the pan" stays a step.
+    static func isAside(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespaces)
+        if trimmed.range(of: #"^(do|make)[\s-]+ahead\b"#, options: [.regularExpression, .caseInsensitive]) != nil {
+            return true
+        }
+        if trimmed.range(of: #"^(notes?|tips?|cook'?s note)\s*[:—–]"#, options: [.regularExpression, .caseInsensitive]) != nil {
+            return true
+        }
+        return trimmed.range(of: #"^(NOTES?|TIPS?)\b"#, options: .regularExpression) != nil
+    }
 }

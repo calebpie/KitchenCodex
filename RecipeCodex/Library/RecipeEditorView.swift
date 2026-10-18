@@ -66,14 +66,12 @@ struct RecipeEditorView: View {
                 } header: {
                     Text("Ingredients")
                 } footer: {
-                    Text("One ingredient per line. Amounts and units are read automatically so the recipe can scale.")
+                    Text("One ingredient per line. Amounts and units are read automatically so the recipe can scale. A line ending with a colon, like “For the dressing:”, starts a group.")
                 }
 
                 if !draft.parsedIngredients.isEmpty {
                     Section("Reads As") {
-                        ForEach(Array(draft.parsedIngredients.enumerated()), id: \.offset) { _, parsed in
-                            ParsedIngredientRow(parsed: parsed)
-                        }
+                        ReadsAsRows(draft: draft)
                     }
                 }
 
@@ -84,6 +82,10 @@ struct RecipeEditorView: View {
                     Text("Steps")
                 } footer: {
                     Text("One step per paragraph. Leave a blank line between steps; numbering is added for you.")
+                }
+
+                if let recipe, !stepPhotos(of: recipe).isEmpty {
+                    stepPhotosSection(recipe)
                 }
 
                 Section("Notes") {
@@ -186,6 +188,46 @@ struct RecipeEditorView: View {
         photoPreview = await ImageProcessing.thumbnail(from: cover, maxPixelSize: 600)
     }
 
+    // MARK: - Step photos
+
+    /// Each current step that has photos, with its number.
+    private func stepPhotos(of recipe: Recipe) -> [(number: Int, photos: [RecipeImage])] {
+        (recipe.currentVersion?.sortedSteps ?? []).enumerated().compactMap { index, step in
+            let photos = step.sortedPhotos
+            return photos.isEmpty ? nil : (index + 1, photos)
+        }
+    }
+
+    /// Read-only for now: taking your own step photos arrives with Cook mode (Phase 3).
+    private func stepPhotosSection(_ recipe: Recipe) -> some View {
+        Section {
+            ScrollView(.horizontal) {
+                HStack(spacing: 12) {
+                    ForEach(stepPhotos(of: recipe), id: \.number) { entry in
+                        ForEach(entry.photos) { photo in
+                            VStack(spacing: 4) {
+                                StepPhotoImage(image: photo, pointSize: 72)
+                                    .frame(width: 72, height: 72)
+                                    .clipShape(.rect(cornerRadius: 10))
+                                Text("Step \(entry.number)")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .accessibilityElement(children: .combine)
+                            .accessibilityLabel("Photo of step \(entry.number)")
+                        }
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+            .scrollIndicators(.hidden)
+        } header: {
+            Text("Step Photos")
+        } footer: {
+            Text("A photo stays with its step when you edit, as long as the step's text or its place in the list stays the same.")
+        }
+    }
+
     // MARK: - Saving
 
     private var courseOptions: [String] {
@@ -247,6 +289,24 @@ struct PlaceholderTextEditor: View {
                 }
             }
             .accessibilityHint(placeholder)
+    }
+}
+
+/// The "Reads As" rows: each parsed line, under its group heading when it has one.
+struct ReadsAsRows: View {
+    let draft: RecipeDraft
+
+    var body: some View {
+        let lines = draft.groupedIngredients
+        ForEach(Array(lines.enumerated()), id: \.offset) { index, line in
+            if let group = line.group, index == 0 || lines[index - 1].group != group {
+                Text(group)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .accessibilityAddTraits(.isHeader)
+            }
+            ParsedIngredientRow(parsed: line.parsed)
+        }
     }
 }
 

@@ -219,6 +219,22 @@ enum YieldText {
         return Reading(servings: number, description: upper.map { "Serves \(number)–\($0)" })
     }
 
+    /// The statement without a label that only names the field: "YIELD — 4 servings" → "4 servings",
+    /// "Yield: 6" → "6", "Servings: 4-6" → "4-6". "Serves" and "Makes" are part of the statement and
+    /// stay, losing only a separator: "Serves: 4" → "Serves 4".
+    static func strippingLabel(_ text: String) -> String {
+        let cleaned = ImportText.inline(text)
+        let label = #"^(yields?|servings?|portions?)\s*([:—–-]\s*|\s+)(?=\S)"#
+        if let range = cleaned.range(of: label, options: [.regularExpression, .caseInsensitive]) {
+            return String(cleaned[range.upperBound...])
+        }
+        return cleaned.replacingOccurrences(
+            of: #"^(serves|makes)\s*[:—–-]\s*"#,
+            with: "$1 ",
+            options: [.regularExpression, .caseInsensitive]
+        )
+    }
+
     /// Picks the best statement from schema.org's string-or-number-or-array `recipeYield`.
     static func best(_ candidates: [String]) -> String? {
         let cleaned = candidates.map(ImportText.inline).filter { !$0.isEmpty }

@@ -14,21 +14,30 @@ struct PageTextReader {
         var ingredients: [String]
         var groups: [Int: String]
         var steps: [String]
+        /// Photo URLs keyed by step index: the one content image inside a numbered step's block.
+        var stepImages: [Int: URL] = [:]
         /// Index range in `lines` the recipe was read from, for the model's context.
         var span: ClosedRange<Int>
         var foundIngredientHeading: Bool
         var foundStepsStructure: Bool
+
+        var importedSteps: [ImportedStep] {
+            steps.enumerated().map { ImportedStep(text: $0.element, imageURL: stepImages[$0.offset]) }
+        }
     }
 
     let lines: [PageLine]
+    /// Resolves relative image sources.
+    let base: URL?
     private let kinds: [Kind]
 
-    init(page: HTMLPage) {
-        self.init(lines: page.lines)
+    init(page: HTMLPage, base: URL? = nil) {
+        self.init(lines: page.lines, base: base)
     }
 
-    init(lines: [PageLine]) {
+    init(lines: [PageLine], base: URL? = nil) {
         self.lines = Self.mergeSplitIngredients(lines)
+        self.base = base
         kinds = self.lines.map(Self.kind(of:))
     }
 
@@ -174,7 +183,7 @@ struct PageTextReader {
 
             if let next, !next.isHeading, isStepNumber(line.text), looksLikeSentence(next.text) {
                 let number = line.text.filter(\.isNumber)
-                merged.append(PageLine(text: "\(number). \(next.text)", tag: next.tag, headingLevel: nil, listID: next.listID))
+                merged.append(PageLine(text: "\(number). \(next.text)", tag: next.tag, headingLevel: nil, listID: next.listID, images: line.images + next.images))
                 index += 2
                 continue
             }
@@ -182,7 +191,14 @@ struct PageTextReader {
             if let next, !line.isHeading, !next.isHeading, isAmountOnly(line.text), next.text.count <= 80,
                !isAmountOnly(next.text), next.text.contains(where: \.isLetter) {
                 let isDash = line.text.allSatisfy { "-–—•".contains($0) || $0.isWhitespace }
-                var text = isDash ? "- \(next.text)" : "\(line.text) \(next.text)"
+                var images = line.images + next.images
+                var text: String
+                if !isDash, let (item, modifier) = itemAndModifier(next.segments) {
+                    // The name and the note sit side by side in one block: "Pekin duck" + "whole".
+                    text = "\(line.text) \(item), \(modifier)"
+                } else {
+                    text = isDash ? "- \(next.text)" : "\(line.text) \(next.text)"
+                }
                 index += 2
                 // A short lowercase note after the name: "whole, divided", "fresh, peeled".
                 if index < lines.count {
@@ -190,10 +206,11 @@ struct PageTextReader {
                     if !note.isHeading, note.text.count <= 60, note.text.first?.isLowercase == true,
                        !isAmountOnly(note.text) {
                         text += ", \(note.text)"
+                        images += note.images
                         index += 1
                     }
                 }
-                merged.append(PageLine(text: text, tag: next.tag, headingLevel: nil, listID: next.listID ?? line.listID))
+                merged.append(PageLine(text: text, tag: next.tag, headingLevel: nil, listID: next.listID ?? line.listID, images: images))
                 continue
             }
 
@@ -201,6 +218,17 @@ struct PageTextReader {
             index += 1
         }
         return merged
+    }
+
+    /// An ingredient's name and its note when they arrive as sibling elements of one line: a
+    /// capitalized name ("Pekin duck") then a short lowercase note ("whole"). Nil otherwise.
+    static func itemAndModifier(_ segments: [String]) -> (item: String, modifier: String)? {
+        guard segments.count >= 2, let modifier = segments.last,
+              modifier.count <= 40, modifier.first?.isLowercase == true, !isAmountOnly(modifier),
+              segments[0].first?.isUppercase == true else { return nil }
+        let item = segments.dropLast().joined(separator: " ")
+        guard !item.hasSuffix(",") else { return nil }
+        return (item, modifier)
     }
 
     /// "6.5 g", "1", "2 L", "1/2 cup", "-": an amount with nothing after it.
@@ -243,6 +271,7 @@ struct PageTextReader {
             ingredients: run.items,
             groups: run.groups,
             steps: stepsResult?.steps ?? [],
+            stepImages: stepsResult?.images ?? [:],
             span: lower...upper,
             foundIngredientHeading: run.underHeading,
             foundStepsStructure: stepsResult?.structured ?? false
@@ -394,6 +423,7 @@ struct PageTextReader {
         var range: ClosedRange<Int>
         /// Found under a heading or as a numbered sequence, rather than guessed from position.
         var structured: Bool
+        var images: [Int: URL] = [:]
     }
 
     func findSteps(after run: Run) -> StepsResult? {
@@ -484,6 +514,8 @@ struct PageTextReader {
     /// ingredient lines in between (per-step ingredient lists) are skipped.
     private func collectNumberedSteps(from start: Int, limit: Int) -> StepsResult? {
         var steps: [String] = []
+        /// Each step's numbered line and the last line read into it.
+        var spans: [(title: Int, last: Int)] = []
         var expected = 1
         var last = start
         var bodyTag: String?
@@ -494,6 +526,7 @@ struct PageTextReader {
             let line = lines[index]
             if let (number, text) = Self.numberedStep(line.text), number == expected {
                 steps.append(text)
+                spans.append((index, index))
                 expected += 1
                 bodyTag = nil
                 last = index
@@ -519,7 +552,22 @@ struct PageTextReader {
             steps[steps.count - 1] += separator + line.text
             bodyTag = bodyTag ?? line.tag
             last = index
+            spans[spans.count - 1].last = index
         }
-        return steps.isEmpty ? nil : StepsResult(steps: steps, range: start...last, structured: true)
+        guard !steps.isEmpty else { return nil }
+        return StepsResult(steps: steps, range: start...last, structured: true, images: stepImages(spans))
+    }
+
+    /// The photo inside each numbered step's block: images that appear after the step's numbered
+    /// line and up to its last body line (per-step ingredient lists included). A step with none, or
+    /// with two different ones, gets none.
+    private func stepImages(_ spans: [(title: Int, last: Int)]) -> [Int: URL] {
+        var images: [Int: URL] = [:]
+        for (step, span) in spans.enumerated() where span.last > span.title {
+            let sources = Set(lines[(span.title + 1)...span.last].flatMap(\.images))
+            guard sources.count == 1, let url = ImportText.url(sources.first, relativeTo: base) else { continue }
+            images[step] = url
+        }
+        return images
     }
 }

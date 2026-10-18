@@ -187,9 +187,7 @@ struct WebImportView: View {
 
             if !draft.parsedIngredients.isEmpty {
                 Section("Reads As") {
-                    ForEach(Array(draft.parsedIngredients.enumerated()), id: \.offset) { _, parsed in
-                        ParsedIngredientRow(parsed: parsed)
-                    }
+                    ReadsAsRows(draft: draft)
                 }
             }
 
@@ -218,7 +216,7 @@ struct WebImportView: View {
         var summary = imported
         summary.title = draft.title
         summary.ingredients = draft.parsedIngredients.map(\.rawText)
-        summary.steps = StepSplitter.steps(from: draft.stepsText)
+        summary.steps = StepSplitter.steps(from: draft.stepsText).map { ImportedStep(text: $0) }
         return summary
     }
 

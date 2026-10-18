@@ -18,8 +18,9 @@ extension RecipeDraft {
         prepMinutes = imported.prepTime.map(Self.minutesText) ?? ""
         cookMinutes = imported.cookTime.map(Self.minutesText) ?? ""
         totalMinutes = imported.totalTime.map(Self.minutesText) ?? ""
-        ingredientsText = imported.ingredients.joined(separator: "\n")
-        stepsText = imported.steps.joined(separator: "\n\n")
+        ingredientsText = Self.ingredientsText(imported.ingredients.enumerated().map { (imported.group(forIngredientAt: $0.offset), $0.element) })
+        stepsText = imported.steps.map(\.text).joined(separator: "\n\n")
+        notes = imported.notes.joined(separator: "\n\n")
     }
 
     private static func minutesText(_ duration: Duration) -> String {
@@ -27,16 +28,24 @@ extension RecipeDraft {
     }
 
     /// Saves a new recipe from an import (or a manual entry started from a failed one), then records
-    /// where it came from: the source line, the capture confidence, the review flag and the
-    /// ingredient groups. `imported.method == nil` means the cook typed it in.
+    /// where it came from: the source line, the capture confidence and the review flag. Ingredient
+    /// groups travel in the ingredients text as "Heading:" lines. `imported.method == nil` means the
+    /// cook typed it in. Step photos the source shows are downloaded after the save and attached as
+    /// they arrive (see `attachStepPhotos`).
     @discardableResult
     func saveImport(_ imported: ImportedRecipe, in context: ModelContext) -> Recipe {
         var draft = self
         if draft.changeSummary.trimmed.isEmpty {
-            draft.changeSummary = imported.method == nil ? "Added by hand" : "Imported from \(imported.sourceName)"
+            draft.changeSummary = imported.method == nil ? "Added by hand" : "Imported from \(imported.importedFrom ?? imported.sourceName)"
         }
         let recipe = draft.save(to: nil, comparedWith: RecipeDraft(), in: context)
         recipe.cuisine = recipe.cuisine ?? imported.cuisine
+        recipe.isFavorite = imported.isFavorite
+        if let headnote = imported.headnote?.trimmed, !headnote.isEmpty { recipe.headnote = headnote }
+        if let created = imported.createdAt {
+            recipe.createdAt = created
+            recipe.currentVersion?.createdAt = created
+        }
 
         let source = SourceInfo(url: imported.sourceURL, author: imported.author)
         source.siteName = imported.siteName ?? imported.sourceURL?.host()
@@ -47,28 +56,84 @@ extension RecipeDraft {
         if let version = recipe.currentVersion, imported.method != nil {
             version.captureConfidence = imported.confidence
             version.needsReview = imported.needsReview
-            // Groups follow the line they started on, so edits in the preview don't shift them.
-            let groupByLine = Dictionary(
-                imported.ingredients.enumerated().map { ($0.element, imported.group(forIngredientAt: $0.offset)) },
-                uniquingKeysWith: { first, _ in first }
-            )
-            for ingredient in version.sortedIngredients {
-                ingredient.group = groupByLine[ingredient.rawText] ?? nil
-            }
         }
         try? context.save()
+
+        if imported.stepImageCount > 0 {
+            Task {
+                let photos = await Self.stepPhotos(for: imported)
+                Self.attachStepPhotos(photos, from: imported, to: recipe, in: context)
+            }
+        }
         return recipe
     }
 
-    /// Downloads and prepares the import's cover the way the editor prepares a picked photo.
+    /// Downloads and prepares the import's cover the way the editor prepares a picked photo. An
+    /// embedded photo (Paprika, Mela) is used as is, without a download.
     static func coverPhoto(for imported: ImportedRecipe) async -> (change: PhotoChange, preview: UIImage?) {
-        guard let url = imported.imageURL,
-              let data = try? await WebPageFetcher().fetchImage(url, referrer: imported.sourceURL),
+        var source = imported.imageData
+        if source == nil, let url = imported.imageURL {
+            source = try? await WebPageFetcher().fetchImage(url, referrer: imported.sourceURL)
+        }
+        guard let data = source,
               let photo = await ImageProcessing.jpeg(from: data, maxPixelSize: 2_400, quality: 0.85),
               let cover = await ImageProcessing.jpeg(from: data, maxPixelSize: 900, quality: 0.8) else {
             return (.unchanged, nil)
         }
         return (.replaced(photo: photo, cover: cover), await ImageProcessing.thumbnail(from: cover, maxPixelSize: 900))
+    }
+
+    /// Step photos larger than this as downloaded are skipped.
+    static let stepPhotoByteLimit = 15_000_000
+
+    /// Downloads every step photo the import names, four at a time, with the page as referrer, and
+    /// re-encodes each as JPEG with its longest side at most 1,600 px. Failures are left out.
+    static func stepPhotos(for imported: ImportedRecipe) async -> [URL: Data] {
+        let urls = Array(Set(imported.steps.compactMap(\.imageURL)))
+        let referrer = imported.sourceURL
+        let limit = stepPhotoByteLimit
+        var photos: [URL: Data] = [:]
+        await withTaskGroup(of: (URL, Data?).self) { group in
+            var next = 0
+            func enqueue() {
+                guard next < urls.count else { return }
+                let url = urls[next]
+                next += 1
+                group.addTask {
+                    guard let data = try? await WebPageFetcher().fetchImage(url, referrer: referrer),
+                          data.count <= limit else { return (url, nil) }
+                    return (url, await ImageProcessing.jpeg(from: data, maxPixelSize: 1_600, quality: 0.82))
+                }
+            }
+            for _ in 0..<4 { enqueue() }
+            while let (url, data) = await group.next() {
+                if let data { photos[url] = data }
+                enqueue()
+            }
+        }
+        return photos
+    }
+
+    /// Saves downloaded step photos as `.stepPhoto` images on the recipe's current steps, with no
+    /// cook session (they came from the source). Each photo goes to the step whose text matches the
+    /// imported step, or to the same position when the preview kept the number of steps.
+    static func attachStepPhotos(_ photos: [URL: Data], from imported: ImportedRecipe, to recipe: Recipe, in context: ModelContext) {
+        guard !photos.isEmpty, let version = recipe.currentVersion, recipe.modelContext != nil else { return }
+        let steps = version.sortedSteps
+        func key(_ text: String) -> String {
+            text.lowercased().split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        }
+        for (index, importedStep) in imported.steps.enumerated() {
+            guard let url = importedStep.imageURL, let data = photos[url] else { continue }
+            let target = steps.first { key($0.text) == key(importedStep.text) }
+                ?? (steps.count == imported.steps.count ? steps[index] : nil)
+            guard let target else { continue }
+            let image = RecipeImage(role: .stepPhoto, imageData: data)
+            context.insert(image)
+            image.step = target
+            image.recipe = recipe
+        }
+        try? context.save()
     }
 }
 
@@ -87,6 +152,8 @@ extension ImportedRecipe {
             "No recipe data on this page, so it was read from the page text. Check it before you cook."
         case .model?:
             "No recipe data on this page, so Apple Intelligence read the page text. Check it before you cook."
+        case .libraryFile?:
+            "Imported from \(importedFrom ?? "another app")."
         case nil:
             "Couldn't read a recipe from this page. Add it by hand; the link is kept."
         }

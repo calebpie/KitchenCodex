@@ -31,7 +31,7 @@ struct SyntheticImportTests {
         #expect(recipe.group(forIngredientAt: 1) == nil)
         // Two HowToSections; the last step has only a name.
         #expect(recipe.steps.count == 3)
-        #expect(recipe.steps.last?.hasPrefix("Brush with the honey") == true)
+        #expect(recipe.steps.last?.text.hasPrefix("Brush with the honey") == true)
         #expect(recipe.method == .jsonLD)
         #expect(!recipe.needsReview)
     }
@@ -118,7 +118,7 @@ struct SyntheticImportTests {
         #expect(recipe.ingredientGroups == [0: "for the marinade", 4: "to serve"])
         // The dual measure in a step reads like the ingredient lines; the newsletter line is left out.
         #expect(recipe.steps.count == 3)
-        #expect(recipe.steps.first?.contains("¼ cup (60 ml) water") == true)
+        #expect(recipe.steps.first?.text.contains("¼ cup (60 ml) water") == true)
         #expect(recipe.yield == "4-6")
         #expect(recipe.servings == 4)
         #expect(recipe.yieldDescription == "Serves 4–6")

@@ -9,6 +9,10 @@ struct PageLine: Sendable, Equatable {
     var headingLevel: Int?
     /// Identifies the `ul`/`ol` the line belongs to, if any.
     var listID: Int?
+    /// The text of sibling inline elements, when the line joins two or more ("Pekin duck", "whole").
+    var segments: [String] = []
+    /// `src` of content images that appear after the previous line and up to this one.
+    var images: [String] = []
 
     var isHeading: Bool { headingLevel != nil }
 }
@@ -129,6 +133,9 @@ private struct Builder {
     private var nextListID = 0
     private var activeCaptures: [Int: Capture] = [:]
     private var nextCaptureID = 0
+    /// Character offsets in `currentLine` where one inline element ended and a sibling began.
+    private var segmentBreaks: [Int] = []
+    private var pendingImages: [String] = []
 
     mutating func consume(_ token: HTMLTokenizer.Token) {
         switch token {
@@ -195,6 +202,10 @@ private struct Builder {
             } else if lastTokenWasInlineEnd {
                 // "</span><span>": siblings the browser would typically lay out apart.
                 separateWithSpace()
+                segmentBreaks.append(currentLine.count)
+            }
+            if name == "img", let src = Self.contentImageSource(attributes) {
+                pendingImages.append(src)
             }
         }
         lastTokenWasInlineEnd = false
@@ -303,9 +314,36 @@ private struct Builder {
             activeCaptures[id]!.startOffset = 0
         }
         let text = currentLine.collapsingWhitespace
+        var segments: [String] = []
+        if !segmentBreaks.isEmpty, !text.isEmpty {
+            let characters = Array(currentLine)
+            var start = 0
+            for end in segmentBreaks + [characters.count] where end > start && end <= characters.count {
+                segments.append(String(characters[start..<end]).collapsingWhitespace)
+                start = end
+            }
+            segments.removeAll { $0.isEmpty }
+            if segments.count < 2 { segments = [] }
+        }
         currentLine = ""
+        segmentBreaks = []
         guard !text.isEmpty else { return }
-        lines.append(PageLine(text: text, tag: currentTag, headingLevel: currentHeading, listID: currentList))
+        lines.append(PageLine(text: text, tag: currentTag, headingLevel: currentHeading, listID: currentList, segments: segments, images: pendingImages))
+        pendingImages = []
+    }
+
+    /// An `<img>` that shows content: a real source (`src`, or a lazy loader's `data-src`), not an
+    /// icon, logo, avatar, tracking pixel or inline data.
+    static func contentImageSource(_ attributes: [String: String]) -> String? {
+        guard let src = [attributes["data-src"], attributes["src"], attributes["data-lazy-src"]]
+            .compactMap({ $0?.trimmingCharacters(in: .whitespaces) })
+            .first(where: { !$0.isEmpty && !$0.hasPrefix("data:") }) else { return nil }
+        let lower = (src + " " + (attributes["class"] ?? "") + " " + (attributes["alt"] ?? "")).lowercased()
+        if ["icon", "logo", "avatar", "sprite", "pixel", "badge", "emoji", ".svg", "gravatar"].contains(where: lower.contains) { return nil }
+        for key in ["width", "height"] {
+            if let value = attributes[key].flatMap({ Int($0) }), value < 120 { return nil }
+        }
+        return src
     }
 
     private mutating func handleRawText(element: String, content: String) {

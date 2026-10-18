@@ -31,6 +31,13 @@ extension RecipeSchemaV1.Recipe {
     public var isNeverCooked: Bool { cookCount == 0 }
 }
 
+extension RecipeSchemaV1.Step {
+    /// This step's photos, oldest first: the source's, then the cook's own.
+    public var sortedPhotos: [RecipeImage] {
+        (images ?? []).filter { $0.role == .stepPhoto }.sorted { $0.createdAt < $1.createdAt }
+    }
+}
+
 extension RecipeSchemaV1.RecipeVersion {
     public var sortedIngredients: [Ingredient] {
         (ingredients ?? []).sorted { $0.sortOrder < $1.sortOrder }

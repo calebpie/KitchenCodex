@@ -70,7 +70,7 @@ struct ImportSummaryView: View {
 
     private var statusSymbol: String {
         switch recipe.method {
-        case .jsonLD?, .microdata?: "checkmark.circle"
+        case .jsonLD?, .microdata?, .libraryFile?: "checkmark.circle"
         case .model?: "apple.intelligence"
         case .pageText?: "exclamationmark.triangle"
         case nil: "square.and.pencil"

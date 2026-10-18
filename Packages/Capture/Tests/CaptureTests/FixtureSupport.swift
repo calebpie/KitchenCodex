@@ -52,6 +52,10 @@ enum Fixtures {
         var title: String?
         var ingredients: Int
         var steps: Int
+        /// Ingredient group headings, steps with a source photo, and asides moved to notes.
+        var groups: Int?
+        var stepImages: Int?
+        var notes: Int?
         /// `ImportMethod` raw value, or nil when the page should yield no recipe.
         var method: String?
         var note: String?

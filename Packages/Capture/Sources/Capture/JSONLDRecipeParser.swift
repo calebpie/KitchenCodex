@@ -100,8 +100,8 @@ public enum JSONLDRecipeParser {
         return ImportedRecipe(
             title: ImportText.inline(string(node["name"]) ?? string(node["headline"]) ?? ""),
             ingredients: ingredients.lines,
-            steps: instructions(node["recipeInstructions"], index: index),
-            yield: YieldText.best(strings(node["recipeYield"] ?? node["yield"])),
+            steps: instructions(node["recipeInstructions"], index: index, base: base),
+            yield: YieldText.best(strings(node["recipeYield"] ?? node["yield"])).map(YieldText.strippingLabel),
             author: author(node["author"] ?? node["creator"], index: index),
             siteName: name(of: node["publisher"], index: index),
             sourceURL: sourceURL ?? ImportText.url(string(node["url"]), relativeTo: nil),
@@ -145,19 +145,24 @@ public enum JSONLDRecipeParser {
         return value
     }
 
-    private static func instructions(_ value: Any?, index: [String: [String: Any]]) -> [String] {
+    private static func instructions(_ value: Any?, index: [String: [String: Any]], base: URL?) -> [ImportedStep] {
         switch resolve(value, index: index) {
         case let text as String:
-            return ImportText.steps(from: text)
+            return ImportText.steps(from: text).map { ImportedStep(text: $0) }
         case let array as [Any]:
-            return array.flatMap { instructions($0, index: index) }
+            return array.flatMap { instructions($0, index: index, base: base) }
         case let object as [String: Any]:
             // HowToSection and ItemList hold steps; HowToStep has text (or only a name).
             if let elements = object["itemListElement"] {
-                return instructions(elements, index: index)
+                return instructions(elements, index: index, base: base)
             }
             if let text = string(object["text"]) ?? string(object["description"]) ?? string(object["name"]) {
-                return ImportText.steps(from: text)
+                var steps = ImportText.steps(from: text).map { ImportedStep(text: $0) }
+                // HowToStep.image: a URL, an ImageObject, or an array of either (the first is kept).
+                if !steps.isEmpty, let url = image(object["image"], index: index, base: base) {
+                    steps[0].imageURL = url
+                }
+                return steps
             }
             return []
         default:

@@ -38,7 +38,7 @@ struct RecipeDraft: Equatable {
         prepMinutes = version.prepMinutes.map(String.init) ?? ""
         cookMinutes = version.cookMinutes.map(String.init) ?? ""
         totalMinutes = version.totalMinutes.map(String.init) ?? ""
-        ingredientsText = version.sortedIngredients.map(\.rawText).joined(separator: "\n")
+        ingredientsText = Self.ingredientsText(version.sortedIngredients.map { ($0.group, $0.rawText) })
         // Blank lines between steps, so a step typed across several lines survives a round trip.
         stepsText = version.sortedSteps.map(\.text).joined(separator: "\n\n")
         notes = version.notes
@@ -46,7 +46,44 @@ struct RecipeDraft: Equatable {
 
     var canSave: Bool { !title.trimmed.isEmpty }
 
-    var parsedIngredients: [ParsedIngredient] { IngredientParser.parseLines(ingredientsText) }
+    var parsedIngredients: [ParsedIngredient] { groupedIngredients.map(\.parsed) }
+
+    /// Each ingredient line with the group heading above it. A line ending with a colon ("For the
+    /// dressing:") is a heading, so groups survive the editor's plain-text round trip.
+    var groupedIngredients: [(group: String?, parsed: ParsedIngredient)] {
+        var group: String?
+        var result: [(group: String?, parsed: ParsedIngredient)] = []
+        for line in ingredientsText.components(separatedBy: .newlines) {
+            let text = line.trimmed
+            guard !text.isEmpty else { continue }
+            if let heading = Self.groupHeading(in: text) {
+                group = heading
+            } else {
+                result.append((group, IngredientParser.parse(text)))
+            }
+        }
+        return result
+    }
+
+    /// "For the dressing:" → "For the dressing". Nil for an ingredient line.
+    static func groupHeading(in line: String) -> String? {
+        let text = line.trimmed
+        guard text.count > 1, text.count <= 60, text.hasSuffix(":") else { return nil }
+        let name = String(text.dropLast()).trimmed
+        return name.isEmpty ? nil : name
+    }
+
+    /// Ingredient lines with a "Heading:" line wherever the group changes.
+    static func ingredientsText(_ lines: [(group: String?, rawText: String)]) -> String {
+        var text: [String] = []
+        var current: String?
+        for (group, rawText) in lines {
+            if let group, !group.isEmpty, group != current { text.append("\(group):") }
+            current = group
+            text.append(rawText)
+        }
+        return text.joined(separator: "\n")
+    }
 
     /// Whether anything that lives on `RecipeVersion` changed. Title, course and photo live on
     /// `Recipe` and change in place without a new version.
@@ -77,6 +114,9 @@ struct RecipeDraft: Equatable {
             let version = RecipeVersion(changeSummary: summary.isEmpty ? (existing == nil ? "Added by hand" : "Edited") : summary)
             context.insert(version)
             fill(version, in: context)
+            if let previous = recipe.currentVersion {
+                Self.carryStepPhotos(from: previous, to: version)
+            }
             recipe.addVersion(version)
         }
 
@@ -108,9 +148,11 @@ struct RecipeDraft: Equatable {
         version.totalMinutes = Int(totalMinutes.trimmed)
         version.notes = notes.trimmed
 
-        version.ingredients = parsedIngredients.enumerated().map { index, parsed in
+        version.ingredients = groupedIngredients.enumerated().map { index, line in
+            let parsed = line.parsed
             let ingredient = Ingredient(item: parsed.item, rawText: parsed.rawText, sortOrder: index)
             context.insert(ingredient)
+            ingredient.group = line.group
             ingredient.quantityNumerator = parsed.quantity?.numerator
             ingredient.quantityDenominator = parsed.quantity?.denominator
             ingredient.unit = parsed.unit?.rawValue
@@ -123,6 +165,21 @@ struct RecipeDraft: Equatable {
             let step = Step(text: text, sortOrder: index)
             context.insert(step)
             return step
+        }
+    }
+
+    /// Step photos follow their step into a new version: to the step with the same text, else, when
+    /// the number of steps is unchanged, to the step in the same place. The old version keeps its
+    /// text as history; a photo lives on one step at a time.
+    static func carryStepPhotos(from previous: RecipeVersion, to version: RecipeVersion) {
+        let oldSteps = previous.sortedSteps
+        let newSteps = version.sortedSteps
+        for (index, old) in oldSteps.enumerated() {
+            guard let photos = old.images, !photos.isEmpty else { continue }
+            let target = newSteps.first { $0.text == old.text }
+                ?? (oldSteps.count == newSteps.count ? newSteps[index] : nil)
+            guard let target else { continue }
+            for photo in photos { photo.step = target }
         }
     }
 

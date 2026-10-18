@@ -26,6 +26,9 @@ struct PrivateFixtureTests {
         #expect(imported.steps.count >= (expected.note == nil ? 2 : 1))
         #expect(imported.ingredients.count == expected.ingredients, hint)
         #expect(imported.steps.count == expected.steps, hint)
+        #expect(imported.ingredientGroups.count == expected.groups ?? 0, hint)
+        #expect(imported.stepImageCount == expected.stepImages ?? 0, hint)
+        #expect(imported.notes.count == expected.notes ?? 0, hint)
         // Structured data is trusted; the page-text reading always asks for a review.
         #expect(imported.needsReview == (method == ImportMethod.pageText.rawValue))
     }
@@ -44,7 +47,7 @@ struct PrivateFixtureManifestTests {
         // Titles and counts only: no entry carries ingredient or step text.
         let url = try #require(Bundle.module.url(forResource: "private-fixtures", withExtension: "json", subdirectory: "Fixtures"))
         let entries = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [[String: Any]])
-        let allowed: Set<String> = ["file", "title", "method", "ingredients", "steps", "note"]
+        let allowed: Set<String> = ["file", "title", "method", "ingredients", "steps", "groups", "stepImages", "notes", "note"]
         #expect(!entries.isEmpty)
         for entry in entries {
             #expect(Set(entry.keys).isSubset(of: allowed))
