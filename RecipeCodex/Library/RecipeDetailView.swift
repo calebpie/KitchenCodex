@@ -4,12 +4,11 @@ import SwiftData
 import SwiftUI
 import Units
 
-/// Read, scale, and start cooking (03 §3.3).
+/// Read, scale, and start cooking (03 §3.3). Pushed on iPhone and over the grid in iPad's content
+/// column, where a wide column lays ingredients beside steps. Delete pops the detail and deletes the
+/// recipe once it is gone.
 struct RecipeDetailView: View {
     let recipe: Recipe
-    /// Set by the iPad split view, which deletes the recipe and clears its selection. Without it the
-    /// detail pops itself and deletes the recipe once it is gone.
-    var onDelete: (() -> Void)?
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -33,9 +32,15 @@ struct RecipeDetailView: View {
     @State private var viewedStepPhotos: StepPhotoSelection?
     @State private var isNamingCollection = false
     @State private var contentWidth: CGFloat = 0
+    /// Side by side: the space between the bars and the columns' frame, both in global
+    /// coordinates, and the ingredients' height, which together keep the ingredients in view.
+    @State private var barsFrame: CGRect = .zero
+    @State private var columnsFrame: CGRect = .zero
+    @State private var ingredientsHeight: CGFloat = 0
 
     private static let batchSteps: [Rational] = [Rational(1, 4), Rational(1, 2), Rational(3, 4), .one, Rational(3, 2), Rational(2), Rational(3), Rational(4)]
-    private let heroHeight: CGFloat = 320
+    /// The hero is lower in the wide layout, where the photo already spans the column (03 §3.3).
+    private var heroHeight: CGFloat { isSideBySide ? 240 : 320 }
 
     private var version: RecipeVersion? { recipe.currentVersion }
     /// Pantry → Profile → Units; US until a profile exists.
@@ -56,69 +61,21 @@ struct RecipeDetailView: View {
     /// iPad with room to spare: ingredients and steps side by side (03 §3.3).
     private var isSideBySide: Bool { sizeClass == .regular && contentWidth >= 820 }
 
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                if hasHero {
-                    // The photo fills a screen-wide frame as an overlay, so a wide or tall photo
-                    // never widens the page.
-                    Color.clear
-                        .frame(maxWidth: .infinity)
-                        .frame(height: heroHeight)
-                        .overlay { RecipeCoverImage(recipe: recipe, pointSize: 440, usesFullPhoto: true) }
-                        .clipped()
-                        // iPad: the hero carries on under the sidebar (03 §3.3).
-                        .backgroundExtensionEffect(isEnabled: sizeClass == .regular)
-                }
+    /// How far the ingredients column moves down so it stays under the bar while the steps beside
+    /// it scroll, stopping where the steps end. Only when the whole column fits on screen; a longer
+    /// one scrolls with the steps.
+    private var ingredientsPin: CGFloat {
+        guard ingredientsHeight > 0, ingredientsHeight <= barsFrame.height - 32 else { return 0 }
+        return min(max(0, barsFrame.minY + 16 - columnsFrame.minY), max(0, columnsFrame.height - ingredientsHeight))
+    }
 
-                VStack(alignment: .leading, spacing: 28) {
-                    if recipe.needsReview {
-                        ReviewBanner(recipe: recipe) { isReviewing = true }
-                            .transition(.opacity)
-                    }
-                    header
-                    if !recipe.headnote.isEmpty {
-                        headnoteSection
-                    }
-                    if let version {
-                        if isSideBySide {
-                            HStack(alignment: .top, spacing: 40) {
-                                ingredientsSection(for: version)
-                                .frame(width: (min(contentWidth, 1_100) - 104) * 0.4, alignment: .leading)
-                                VStack(alignment: .leading, spacing: 28) {
-                                    stepsSection(for: version)
-                                    if !version.notes.isEmpty {
-                                        notesSection(version.notes)
-                                    }
-                                }
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                        } else {
-                            ingredientsSection(for: version)
-                            stepsSection(for: version)
-                            if !version.notes.isEmpty {
-                                notesSection(version.notes)
-                            }
-                        }
-                    }
-                    versionsSection
-                }
-                .padding(.horizontal, isSideBySide ? 32 : 16)
-                .padding(.top, hasHero ? 20 : 8)
-                .padding(.bottom, 32)
-                .frame(maxWidth: isSideBySide ? 1_100 : 720, alignment: .leading)
-                .frame(maxWidth: .infinity)
-            }
-        }
-        // The hero runs under the navigation bar; once content scrolls beneath the bar the hard edge
-        // gives the title bar a defined edge over step text (04 §5.1 Floating headers).
-        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { contentWidth = $0 }
-        .ignoresSafeArea(edges: hasHero ? .top : [])
-        .scrollEdgeEffectStyle(.hard, for: .top)
-        .onScrollGeometryChange(for: Bool.self) { geometry in
-            geometry.contentOffset.y + geometry.contentInsets.top > (hasHero ? heroHeight : 40)
-        } action: { _, isPastTitle in
-            showsNavigationTitle = isPastTitle
+    var body: some View {
+        ZStack {
+            // The space between the bars, which pinned ingredients stay inside. Measured here
+            // because the page itself runs under the bar when there is a hero.
+            Color.clear
+                .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { barsFrame = $0 }
+            page
         }
         .navigationTitle(showsNavigationTitle ? recipe.title : "")
         .navigationBarTitleDisplayMode(.inline)
@@ -157,12 +114,8 @@ struct RecipeDetailView: View {
                 }
                 .confirmationDialog("Delete “\(recipe.title)”?", isPresented: $isConfirmingDelete, titleVisibility: .visible) {
                     Button("Delete Recipe", role: .destructive) {
-                        if let onDelete {
-                            onDelete()
-                        } else {
-                            isDeleting = true
-                            dismiss()
-                        }
+                        isDeleting = true
+                        dismiss()
                     }
                 } message: {
                     Text("The recipe and all its versions will be deleted.")
@@ -209,6 +162,76 @@ struct RecipeDetailView: View {
             guard isDeleting else { return }
             modelContext.delete(recipe)
             try? modelContext.save()
+        }
+    }
+
+    /// The scrolling page: the hero, the header and the recipe.
+    private var page: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                if hasHero {
+                    // The photo fills a screen-wide frame as an overlay, so a wide or tall photo
+                    // never widens the page.
+                    Color.clear
+                        .frame(maxWidth: .infinity)
+                        .frame(height: heroHeight)
+                        .overlay { RecipeCoverImage(recipe: recipe, pointSize: 440, usesFullPhoto: true) }
+                        .clipped()
+                        // iPad: the hero carries on under the sidebar (03 §3.3).
+                        .backgroundExtensionEffect(isEnabled: sizeClass == .regular)
+                }
+
+                VStack(alignment: .leading, spacing: 28) {
+                    if recipe.needsReview {
+                        ReviewBanner(recipe: recipe) { isReviewing = true }
+                            .transition(.opacity)
+                    }
+                    header
+                    if !recipe.headnote.isEmpty {
+                        headnoteSection
+                    }
+                    if let version {
+                        if isSideBySide {
+                            HStack(alignment: .top, spacing: 40) {
+                                ingredientsSection(for: version)
+                                    .frame(width: (min(contentWidth, 1_100) - 104) * 0.4, alignment: .leading)
+                                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { ingredientsHeight = $0 }
+                                    .offset(y: ingredientsPin)
+                                VStack(alignment: .leading, spacing: 28) {
+                                    stepsSection(for: version)
+                                    if !version.notes.isEmpty {
+                                        notesSection(version.notes)
+                                    }
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { columnsFrame = $0 }
+                        } else {
+                            ingredientsSection(for: version)
+                            stepsSection(for: version)
+                            if !version.notes.isEmpty {
+                                notesSection(version.notes)
+                            }
+                        }
+                    }
+                    versionsSection
+                }
+                .padding(.horizontal, isSideBySide ? 32 : 16)
+                .padding(.top, hasHero ? 20 : 8)
+                .padding(.bottom, 32)
+                .frame(maxWidth: isSideBySide ? 1_100 : 720, alignment: .leading)
+                .frame(maxWidth: .infinity)
+            }
+        }
+        // The hero runs under the navigation bar; once content scrolls beneath the bar the hard edge
+        // gives the title bar a defined edge over step text (04 §5.1 Floating headers).
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { contentWidth = $0 }
+        .ignoresSafeArea(edges: hasHero ? .top : [])
+        .scrollEdgeEffectStyle(.hard, for: .top)
+        .onScrollGeometryChange(for: Bool.self) { geometry in
+            geometry.contentOffset.y + geometry.contentInsets.top > (hasHero ? heroHeight : 40)
+        } action: { _, isPastTitle in
+            showsNavigationTitle = isPastTitle
         }
     }
 

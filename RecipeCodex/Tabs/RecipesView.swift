@@ -2,16 +2,21 @@ import RecipeModel
 import SwiftData
 import SwiftUI
 
-/// What the iPhone Recipes stack pushes: a recipe, Needs a Look, or the Collections list.
+/// What the Recipes stack pushes: a recipe by its identifier, and on iPhone Needs a Look or the
+/// Collections list. iPad's content column pushes the same routes over the grid or the shelf.
 enum LibraryRoute: Hashable {
-    case recipe(Recipe)
+    case recipe(PersistentIdentifier)
     case needsReview
     case collections
+    /// A book's detail (03 §3.7), pushed over the shelf as a recipe is over the grid. Nothing
+    /// pushes it yet: books arrive with Phase 2.
+    case book(PersistentIdentifier)
 }
 
 /// The library, with a view switch between the recipe collection and the cookbook shelf (03 §3.2, §3.7).
-/// iPhone (compact width) is a stack with the Recipes · Books switch; iPad (regular width) is a
-/// three-column split view: sidebar (All, Collections, Books), the recipes, and the recipe (03 §4).
+/// iPhone (compact width) is a stack with the Recipes · Books switch; iPad (regular width) is two
+/// columns, the sidebar (All, Collections, Books) and one wide content column with the grid or list
+/// under the content toolbar, where a recipe pushes over the grid (04 §5.1 iPad columns).
 /// Only the navigation bar floats: the switch, the review prompt and the filter tokens are the first
 /// items of the scrolling content (04 §5.1 Floating headers).
 struct RecipesView: View {
@@ -33,11 +38,11 @@ struct RecipesView: View {
     @State private var isAddingRecipe = false
     @State private var isImportingFromWeb = false
     @State private var isImportingLibrary = false
-    /// iPhone: the pushed recipes.
+    /// What is pushed: on the iPhone stack, or over the grid in iPad's content column. One path, so
+    /// an open recipe stays open when an iPad window changes width.
     @State private var path: [LibraryRoute] = []
-    /// iPad: the sidebar's scope and the recipe shown in the detail column.
+    /// iPad: the sidebar's scope.
     @State private var scope: LibraryScope? = .all
-    @State private var selectedRecipeID: PersistentIdentifier?
     /// Set by the import sheet; opened once the sheet has gone.
     @State private var importedRecipe: Recipe?
     @State private var isCreatingCollection = false
@@ -155,7 +160,7 @@ struct RecipesView: View {
                         }
                     }
                 } else {
-                    LibraryRecipes(sort: sort, layout: layout, grouping: grouping, scope: .all, filter: $filter, collections: collections, selection: nil, multiSelection: isSelecting ? $selectedIDs : nil) {
+                    LibraryRecipes(sort: sort, layout: layout, grouping: grouping, scope: .all, filter: $filter, collections: collections, isInSplitView: false, multiSelection: isSelecting ? $selectedIDs : nil) {
                         libraryHeader(showsSwitch: !isSelecting)
                     }
                 }
@@ -167,65 +172,66 @@ struct RecipesView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar(removing: isSelecting ? nil : .title)
             .toolbarVisibility(isSelecting ? .hidden : .automatic, for: .tabBar)
-            .navigationDestination(for: LibraryRoute.self) { route in
-                switch route {
-                case let .recipe(recipe): RecipeDetailView(recipe: recipe)
-                case .needsReview: NeedsALookView()
-                case .collections:
-                    CollectionsList { collection in
-                        filter.collection = collection.persistentModelID
-                        path.removeLast()
-                    } onDelete: { collection in
-                        if filter.collection == collection.persistentModelID { filter.collection = nil }
-                    }
-                }
-            }
+            .navigationDestination(for: LibraryRoute.self) { destination($0) }
             .toolbar { libraryToolbar }
         }
     }
 
     // MARK: - iPad
 
+    /// Two columns (04 §5.1 iPad columns): the sidebar, and the grid or list in one wide column
+    /// whose toolbar sits at the display's top trailing corner. A recipe pushes over the grid and
+    /// Back returns to it.
     private var splitLayout: some View {
         NavigationSplitView {
-            LibrarySidebar(selection: $scope)
+            // Picking a row, even the one already picked, shows its recipes, so whatever was
+            // pushed goes; scope changes made in code (Spotlight, the review row) keep the path.
+            LibrarySidebar(selection: Binding { scope } set: { scope = $0; path = [] })
                 .navigationTitle("Recipes")
-        } content: {
-            let scope = scope ?? .all
-            Group {
-                if scope == .shelf || allRecipes.isEmpty {
-                    emptyLibrary(scope: scope)
-                } else {
-                    LibraryRecipes(sort: sort, layout: layout, grouping: grouping, scope: scope, filter: $filter, collections: collections, selection: $selectedRecipeID, multiSelection: isSelecting ? $selectedIDs : nil) {
-                        libraryHeader(showsSwitch: false)
-                    }
-                }
-            }
-            .navigationTitle(isSelecting ? selectionTitle : LibrarySidebar.title(for: scope, books: books, collections: collections))
-            .toolbar { libraryToolbar }
         } detail: {
-            NavigationStack {
-                if let recipe = selectedRecipe {
-                    RecipeDetailView(recipe: recipe, onDelete: { delete(recipe) })
-                        // A new recipe starts from its own servings and units.
-                        .id(recipe.persistentModelID)
-                } else {
-                    ContentUnavailableView {
-                        Label("No Recipe Selected", systemImage: "book.closed")
-                    } description: {
-                        Text(allRecipes.isEmpty ? "Add a recipe to see it here." : "Choose a recipe to read, scale or cook it.")
+            NavigationStack(path: $path) {
+                let scope = scope ?? .all
+                Group {
+                    if scope == .shelf || allRecipes.isEmpty {
+                        emptyLibrary(scope: scope)
+                    } else {
+                        LibraryRecipes(sort: sort, layout: layout, grouping: grouping, scope: scope, filter: $filter, collections: collections, isInSplitView: true, multiSelection: isSelecting ? $selectedIDs : nil) {
+                            libraryHeader(showsSwitch: false)
+                        }
                     }
                 }
+                .navigationTitle(isSelecting ? selectionTitle : LibrarySidebar.title(for: scope, books: books, collections: collections))
+                .toolbar { libraryToolbar }
+                .navigationDestination(for: LibraryRoute.self) { destination($0) }
             }
         }
     }
 
-    private var selectedRecipe: Recipe? {
-        guard let selectedRecipeID else { return nil }
-        return allRecipes.first { $0.persistentModelID == selectedRecipeID }
-    }
-
     // MARK: - Shared
+
+    @ViewBuilder
+    private func destination(_ route: LibraryRoute) -> some View {
+        switch route {
+        case let .recipe(id):
+            if let recipe = allRecipes.first(where: { $0.persistentModelID == id }) {
+                RecipeDetailView(recipe: recipe)
+                    // Each recipe opens on its own servings and units.
+                    .id(id)
+            }
+        case .needsReview:
+            NeedsALookView()
+        case .collections:
+            CollectionsList { collection in
+                filter.collection = collection.persistentModelID
+                path.removeLast()
+            } onDelete: { collection in
+                if filter.collection == collection.persistentModelID { filter.collection = nil }
+            }
+        case .book:
+            // Book detail (03 §3.7) arrives with books in Phase 2 and pushes here, over the shelf.
+            ContentUnavailableView("Book", systemImage: "book", description: Text("Book details arrive with the shelf."))
+        }
+    }
 
     /// The first items of the scrolling content: the view switch (iPhone), the review prompt while
     /// imports wait for a check, and one token per active filter.
@@ -474,15 +480,15 @@ struct RecipesView: View {
         }
     }
 
-    /// Shows `recipe`: pushed on iPhone, selected on iPad (widening the scope if it hides the recipe).
+    /// Shows `recipe`, pushed on iPhone and over the grid on iPad (widening the sidebar's scope if
+    /// it hides the recipe).
     private func open(_ recipe: Recipe) {
         if isSplit {
             if !(scope ?? .all).contains(recipe) { scope = .all }
-            selectedRecipeID = recipe.persistentModelID
         } else {
             libraryView = .recipes
-            path = [.recipe(recipe)]
         }
+        path = [.recipe(recipe.persistentModelID)]
     }
 
     /// A new collection: selected in the sidebar on iPad, set as the Collection filter on iPhone.
@@ -508,21 +514,11 @@ struct RecipesView: View {
         open(recipe)
     }
 
-    /// Delete from the iPad detail column: clear the selection first so the column never renders a
-    /// deleted model, then delete on the next turn of the run loop.
-    private func delete(_ recipe: Recipe) {
-        selectedRecipeID = nil
-        Task {
-            await Task.yield()
-            modelContext.delete(recipe)
-            try? modelContext.save()
-        }
-    }
-
-    /// Delete from Select mode, the same way: selections first, then the recipes.
+    /// Delete from Select mode: the selection and any pushed copy first, so nothing renders a
+    /// deleted model, then the recipes on the next turn of the run loop.
     private func delete(_ recipes: [Recipe]) {
         let ids = Set(recipes.map(\.persistentModelID))
-        if let selectedRecipeID, ids.contains(selectedRecipeID) { self.selectedRecipeID = nil }
+        path.removeAll { if case let .recipe(id) = $0 { ids.contains(id) } else { false } }
         selectedIDs.subtract(ids)
         Task {
             await Task.yield()
@@ -540,11 +536,11 @@ struct RecipesView: View {
     }
 }
 
-/// The filtered, sorted, grouped recipes as a grid or a list, under `header`. With a `selection`
-/// (iPad) a tap selects the recipe for the detail column and a recipe can be dragged onto a sidebar
-/// collection; without one (iPhone) a tap pushes the recipe. With a `multiSelection` (Select mode)
-/// every recipe shows a selection circle and a tap toggles it; the list's own selection extends
-/// with ⌘-click and shift-click on iPad.
+/// The filtered, sorted, grouped recipes as a grid or a list, under `header`. A tap pushes the
+/// recipe. In iPad's content column (`isInSplitView`) a recipe can also be dragged onto a sidebar
+/// collection, and the cards are wider so the full column holds about four across. With a
+/// `multiSelection` (Select mode) every recipe shows a selection circle and a tap toggles it; the
+/// list's own selection extends with ⌘-click and shift-click on iPad.
 private struct LibraryRecipes<Header: View>: View {
     @Query private var recipes: [Recipe]
     let layout: RecipeLayout
@@ -552,7 +548,7 @@ private struct LibraryRecipes<Header: View>: View {
     let scope: LibraryScope
     @Binding var filter: RecipeFilter
     let collections: [RecipeCollection]
-    let selection: Binding<PersistentIdentifier?>?
+    let isInSplitView: Bool
     let multiSelection: Binding<Set<PersistentIdentifier>>?
     @ViewBuilder let header: Header
 
@@ -561,14 +557,14 @@ private struct LibraryRecipes<Header: View>: View {
     /// Long-press → Add to Collection → New Collection…: the recipe to put in it once named.
     @State private var collectingRecipe: Recipe?
 
-    init(sort: RecipeSort, layout: RecipeLayout, grouping: RecipeGrouping, scope: LibraryScope, filter: Binding<RecipeFilter>, collections: [RecipeCollection], selection: Binding<PersistentIdentifier?>?, multiSelection: Binding<Set<PersistentIdentifier>>? = nil, @ViewBuilder header: () -> Header) {
+    init(sort: RecipeSort, layout: RecipeLayout, grouping: RecipeGrouping, scope: LibraryScope, filter: Binding<RecipeFilter>, collections: [RecipeCollection], isInSplitView: Bool, multiSelection: Binding<Set<PersistentIdentifier>>? = nil, @ViewBuilder header: () -> Header) {
         _recipes = Query(sort: sort.descriptors, animation: .default)
         self.layout = layout
         self.grouping = grouping
         self.scope = scope
         _filter = filter
         self.collections = collections
-        self.selection = selection
+        self.isInSplitView = isInSplitView
         self.multiSelection = multiSelection
         self.header = header()
     }
@@ -616,9 +612,9 @@ private struct LibraryRecipes<Header: View>: View {
             ContentUnavailableView {
                 Label("Nothing in “\(collection.name)” yet", systemImage: "rectangle.stack")
             } description: {
-                Text(selection == nil
-                    ? "Add a recipe from its long-press menu: Add to Collection."
-                    : "Drag recipes onto the collection in the sidebar, or use Add to Collection in their long-press menu.")
+                Text(isInSplitView
+                    ? "Drag recipes onto the collection in the sidebar, or use Add to Collection in their long-press menu."
+                    : "Add a recipe from its long-press menu: Add to Collection.")
             }
         } else if filter.isActive {
             ContentUnavailableView {
@@ -656,7 +652,9 @@ private struct LibraryRecipes<Header: View>: View {
                     emptyState
                         .padding(.top, 40)
                 } else {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 160), spacing: 12)], spacing: 12) {
+                    // 160 pt gives two cards across an iPhone; 200 gives about four across iPad's
+                    // full content column and three beside the sidebar in portrait.
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: isInSplitView ? 200 : 160), spacing: 12)], spacing: 12) {
                         ForEach(sections) { section in
                             Section {
                                 ForEach(section.recipes) { recipe in
@@ -702,29 +700,15 @@ private struct LibraryRecipes<Header: View>: View {
                         }
                 }
                 .accessibilityAddTraits(isSelected ? .isSelected : [])
-            } else if let selection {
-                let isSelected = selection.wrappedValue == recipe.persistentModelID
-                Button {
-                    selection.wrappedValue = recipe.persistentModelID
-                } label: {
-                    RecipeCard(recipe: recipe)
-                        .overlay {
-                            if isSelected {
-                                RoundedRectangle(cornerRadius: 22)
-                                    .strokeBorder(.tint, lineWidth: 3)
-                            }
-                        }
-                }
-                .accessibilityAddTraits(isSelected ? .isSelected : [])
             } else {
-                NavigationLink(value: LibraryRoute.recipe(recipe)) {
+                NavigationLink(value: LibraryRoute.recipe(recipe.persistentModelID)) {
                     RecipeCard(recipe: recipe)
                 }
             }
         }
         .buttonStyle(.plain)
         .contextMenu { actions(for: recipe) }
-        .modifier(RecipeDragSource(recipe: recipe, isEnabled: selection != nil))
+        .modifier(RecipeDragSource(recipe: recipe, isEnabled: isInSplitView))
     }
 
     @ViewBuilder
@@ -739,21 +723,13 @@ private struct LibraryRecipes<Header: View>: View {
             }
             .listStyle(.plain)
             .environment(\.editMode, .constant(.active))
-        } else if let selection {
-            List(selection: selection) {
-                listContent(sections, isEmpty: isEmpty) { recipe in
-                    RecipeRow(recipe: recipe)
-                        .tag(recipe.persistentModelID)
-                        .draggable(RecipeDragItem(id: recipe.id)) { RecipeRow(recipe: recipe).frame(width: 320) }
-                }
-            }
-            .listStyle(.plain)
         } else {
             List {
                 listContent(sections, isEmpty: isEmpty) { recipe in
-                    NavigationLink(value: LibraryRoute.recipe(recipe)) {
+                    NavigationLink(value: LibraryRoute.recipe(recipe.persistentModelID)) {
                         RecipeRow(recipe: recipe)
                     }
+                    .modifier(RecipeRowDragSource(recipe: recipe, isEnabled: isInSplitView))
                 }
             }
             .listStyle(.plain)
@@ -816,7 +792,6 @@ private struct LibraryRecipes<Header: View>: View {
     }
 
     private func delete(_ recipe: Recipe) {
-        if selection?.wrappedValue == recipe.persistentModelID { selection?.wrappedValue = nil }
         withAnimation {
             modelContext.delete(recipe)
         }
@@ -834,6 +809,22 @@ private struct RecipeDragSource: ViewModifier {
         if isEnabled {
             content.draggable(RecipeDragItem(id: recipe.id)) {
                 RecipeCard(recipe: recipe).frame(width: 180)
+            }
+        } else {
+            content
+        }
+    }
+}
+
+/// iPad: a list row can be dragged onto a collection in the sidebar too.
+private struct RecipeRowDragSource: ViewModifier {
+    let recipe: Recipe
+    let isEnabled: Bool
+
+    func body(content: Content) -> some View {
+        if isEnabled {
+            content.draggable(RecipeDragItem(id: recipe.id)) {
+                RecipeRow(recipe: recipe).frame(width: 320)
             }
         } else {
             content

@@ -181,7 +181,7 @@ struct NeedsALookView: View {
     var body: some View {
         let pending = recipes.filter(\.needsReview)
         List(pending) { recipe in
-            NavigationLink(value: LibraryRoute.recipe(recipe)) {
+            NavigationLink(value: LibraryRoute.recipe(recipe.persistentModelID)) {
                 VStack(alignment: .leading, spacing: 4) {
                     RecipeRow(recipe: recipe)
                     HStack(spacing: 6) {
