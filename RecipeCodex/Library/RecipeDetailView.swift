@@ -37,6 +37,8 @@ struct RecipeDetailView: View {
     private var version: RecipeVersion? { recipe.currentVersion }
     /// Pantry → Profile → Units; US until a profile exists.
     private var preferredSystem: MeasurementSystem { profiles.first?.unitPreference.measurementSystem ?? .us }
+    /// Pantry → Profile → Temperature; °F until a profile exists.
+    private var temperatureScale: TemperatureScale { profiles.first?.temperaturePreference.temperatureScale ?? .fahrenheit }
     private var hasHero: Bool { recipe.coverImageData != nil }
     /// iPad with room to spare: ingredients and steps side by side (03 §3.3).
     private var isSideBySide: Bool { sizeClass == .regular && contentWidth >= 820 }
@@ -343,6 +345,7 @@ struct RecipeDetailView: View {
                 Text("No steps yet.").foregroundStyle(.secondary)
             }
             ForEach(Array(version.sortedSteps.enumerated()), id: \.element.id) { index, step in
+                let conversions = StepText.conversions(in: step.text, scale: temperatureScale)
                 HStack(alignment: .top, spacing: 12) {
                     HStack(alignment: .firstTextBaseline, spacing: 12) {
                         Text("\(index + 1)")
@@ -350,12 +353,14 @@ struct RecipeDetailView: View {
                             .monospacedDigit()
                             .foregroundStyle(.tint)
                             .frame(minWidth: 24, alignment: .trailing)
-                        Text(step.text)
+                        // Temperatures as pills in the preferred unit (04 §5.1); long-press for the original.
+                        StepText(text: step.text, scale: temperatureScale)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .modifier(StepTemperatureLongPress(conversions: conversions))
                     .accessibilityElement(children: .combine)
-                    .accessibilityLabel("Step \(index + 1). \(step.text)")
+                    .accessibilityLabel("Step \(index + 1). \(StepText.spoken(step.text, in: temperatureScale))")
 
                     let photos = step.sortedPhotos
                     if !photos.isEmpty {

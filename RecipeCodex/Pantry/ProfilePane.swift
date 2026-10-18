@@ -81,7 +81,7 @@ private struct ProfileForm: View {
             } header: {
                 Text("Units")
             } footer: {
-                Text("Recipes show amounts written in the other system converted to yours, rounded to what you can measure. Tap US or Metric on a recipe to convert every amount. Temperatures in steps are shown as written for now.")
+                Text("Recipes show amounts written in the other system converted to yours, rounded to what you can measure; with US, grams and kilograms stay as written so precise recipes keep their weights. Tap US or Metric on a recipe to convert every amount. Temperatures in steps are shown in your unit; touch and hold a step to see them as written.")
             }
         }
         .animation(.default, value: profile.concurrencyLimit)
