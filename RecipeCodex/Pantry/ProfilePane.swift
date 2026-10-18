@@ -42,22 +42,7 @@ private struct ProfileForm: View {
             } header: {
                 Text("Proficiency")
             } footer: {
-                Text("The schedule scales its time estimates to how you cook.")
-            }
-
-            Section {
-                Stepper(value: $profile.concurrencyLimit, in: 1...4) {
-                    LabeledContent("Tasks at Once") {
-                        Text(profile.concurrencyLimit, format: .number)
-                            .monospacedDigit()
-                            .contentTransition(.numericText())
-                    }
-                }
-                .accessibilityValue("\(profile.concurrencyLimit) tasks at once")
-            } header: {
-                Text("Juggling")
-            } footer: {
-                Text("How many hands-on tasks the schedule gives you at the same time. Passive ones, like a roast in the oven or a dough resting, don't count.")
+                Text("The schedule scales its time estimates to how you cook, and gives you as many hands-on tasks at once as your level handles.")
             }
 
             Section {
@@ -84,7 +69,6 @@ private struct ProfileForm: View {
                 Text("Recipes show amounts written in the other system converted to yours, rounded to what you can measure; with US, grams and kilograms stay as written so precise recipes keep their weights. Tap US or Metric on a recipe to convert every amount. Temperatures in steps are shown in your unit; touch and hold a step to see them as written.")
             }
         }
-        .animation(.default, value: profile.concurrencyLimit)
     }
 }
 
@@ -94,15 +78,17 @@ extension Proficiency {
         case .learning: "Learning"
         case .confident: "Confident"
         case .advanced: "Advanced"
+        case .expert: "Expert"
         }
     }
 
-    /// One sentence each (03 §3.17).
+    /// One sentence each (03 §3.17, 04 §5.1 Proficiency).
     var explanation: String {
         switch self {
         case .learning: "You follow recipes closely. The schedule allows extra time for prep and technique."
         case .confident: "You're at home with most recipes. Times are taken as the recipe gives them."
         case .advanced: "Fast hands and a feel for timing. The schedule tightens the estimates."
+        case .expert: "You run several dishes at once and know when to check the oven without a timer. The schedule packs hands-on tasks tightly and trusts your timing."
         }
     }
 }

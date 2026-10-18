@@ -32,9 +32,21 @@ public enum ScheduleTaskKind: String, Codable, Sendable, CaseIterable {
     case active, passive, cleaning, plating
 }
 
-/// Cook proficiency, which scales the scheduler's duration estimates.
+/// Cook proficiency, which scales the scheduler's duration estimates and sets how many hands-on
+/// tasks it gives the cook at once (04 §5.1 Proficiency).
 public enum Proficiency: String, Codable, Sendable, CaseIterable {
-    case learning, confident, advanced
+    case learning, confident, advanced, expert
+
+    /// Hands-on tasks the schedule runs at the same time: 1 · 2 · 3 · 4. Passive ones (a roast in
+    /// the oven, a dough resting) don't count. Never shown as a setting.
+    public var concurrencyLimit: Int {
+        switch self {
+        case .learning: 1
+        case .confident: 2
+        case .advanced: 3
+        case .expert: 4
+        }
+    }
 }
 
 /// Preferred display units.

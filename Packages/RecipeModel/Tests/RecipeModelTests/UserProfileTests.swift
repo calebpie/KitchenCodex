@@ -13,6 +13,23 @@ struct UserProfileTests {
         #expect(profile.concurrencyLimit == 2)
     }
 
+    /// 04 §5.1 Proficiency: four tiers, and hands-on concurrency follows the tier.
+    @Test func concurrencyFollowsTheTier() {
+        #expect(Proficiency.allCases == [.learning, .confident, .advanced, .expert])
+        let profile = UserProfile(proficiency: .learning)
+        #expect(profile.concurrencyLimit == 1)
+        profile.proficiency = .advanced
+        #expect(profile.concurrencyLimit == 3)
+        profile.proficiency = .expert
+        #expect(profile.concurrencyLimit == 4)
+    }
+
+    @Test func concurrencyIsNotStored() {
+        let attributes = RecipeStore.schema.entities.first { $0.name == "UserProfile" }?.attributes.map(\.name) ?? []
+        #expect(attributes.contains("proficiency"))
+        #expect(!attributes.contains("concurrencyLimit"))
+    }
+
     @Test func currentCreatesOnceAndKeepsChanges() throws {
         let container = try RecipeStore.makeContainer(inMemory: true)
         let context = ModelContext(container)
