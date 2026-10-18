@@ -5,28 +5,84 @@ import Units
 
 /// A step's text as written, with each temperature shown as a pill in the cook's preferred unit
 /// (03 §3.3 and §3.12, 04 §5.1 Temperatures): "Roast at 220°C (200°C fan)" reads "Roast at 425°F"
-/// for a Fahrenheit cook. The original wording is kept; tapping the pill or the edit menu shows it
-/// as written (04 §5.1 Step pills). The headnote, the notes and ingredient lines use the same parts.
-/// `StepTextView` lays the text out; this type finds the temperatures and what they read. A nil
+/// for a Fahrenheit cook. Each duration is a pill too, in the short form ("about 10 minutes" reads
+/// "10 min", "1 to 1 1/2 hours" "1–1½ hr"), which neither Units nor scaling changes. The original
+/// wording is kept; tapping the pill or the edit menu shows it as written (04 §5.1 Step pills).
+/// The headnote and the notes use the same parts; ingredient lines take only the temperatures.
+/// `StepTextView` lays the text out; this type finds the mentions and what they read. A nil
 /// scale (Units → As Written) keeps every temperature as written, still marked as a pill.
 enum StepText {
     enum Part: Equatable {
         case text(String)
         /// What the pill shows, and the words it stands for.
         case temperature(shown: String, original: String)
+        /// What the pill shows ("8–10 min"), what VoiceOver reads ("8 to 10 minutes"), and the
+        /// words it stands for.
+        case duration(shown: String, spoken: String, original: String)
+
+        /// Whether the part is a pill rather than plain words.
+        var isPill: Bool {
+            if case .text = self { false } else { true }
+        }
     }
 
-    /// The text split around every temperature `TemperatureParser` finds.
-    static func parts(of text: String, in scale: TemperatureScale?) -> [Part] {
+    /// One temperature or duration the parsers found, where it sits.
+    private enum Mention {
+        case temperature(TemperatureMention)
+        case duration(DurationMention)
+
+        var range: Range<String.Index> {
+            switch self {
+            case let .temperature(mention): mention.range
+            case let .duration(mention): mention.range
+            }
+        }
+    }
+
+    /// Every temperature `TemperatureParser` finds and, with `includesDurations`, every duration
+    /// `DurationParser` finds, in order of where each starts (a temperature first when both start
+    /// at once). Day-scale durations written with an article are left out: "once a day" is how
+    /// often, and "a day ahead" when, neither a time to count; "2 days" and "3–5 days" stay.
+    private static func mentions(in text: String, includesDurations: Bool) -> [Mention] {
+        let temperatures = TemperatureParser.mentions(in: text).map(Mention.temperature)
+        guard includesDurations else { return temperatures }
+        let durations = DurationParser.mentions(in: text)
+            .filter { !isArticleDay($0) }
+            .map(Mention.duration)
+        // Stable: the temperatures come first, so they stay first on a tie.
+        return (temperatures + durations).enumerated()
+            .sorted { ($0.element.range.lowerBound, $0.offset) < ($1.element.range.lowerBound, $1.offset) }
+            .map(\.element)
+    }
+
+    /// "a day", "a day or two": a day or more, written with "a" or "an" rather than a number.
+    private static func isArticleDay(_ mention: DurationMention) -> Bool {
+        mention.duration.lower >= CookingDuration(1, .days)
+            && mention.originalText.range(of: #"^an?\s"#, options: [.regularExpression, .caseInsensitive]) != nil
+    }
+
+    /// The text split around its pills: every temperature and, with `includesDurations` (steps,
+    /// the headnote and the notes), every duration. Mentions that overlap become pills side by
+    /// side over the words they share, never one inside another.
+    static func parts(of text: String, in scale: TemperatureScale?, includesDurations: Bool = false) -> [Part] {
         var parts: [Part] = []
         var position = text.startIndex
-        for mention in TemperatureParser.mentions(in: text) {
+        for mention in mentions(in: text, includesDurations: includesDurations) {
             if position < mention.range.lowerBound {
                 parts.append(.text(String(text[position..<mention.range.lowerBound])))
             }
-            let shown = scale.map { shown(mention.temperature, in: $0) } ?? mention.originalText
-            parts.append(.temperature(shown: shown, original: mention.originalText))
-            position = mention.range.upperBound
+            switch mention {
+            case let .temperature(temperature):
+                let shown = scale.map { shown(temperature.temperature, in: $0) } ?? temperature.originalText
+                parts.append(.temperature(shown: shown, original: temperature.originalText))
+            case let .duration(duration):
+                parts.append(.duration(
+                    shown: duration.duration.formatted(style: .abbreviated),
+                    spoken: duration.duration.formatted(style: .full),
+                    original: duration.originalText
+                ))
+            }
+            position = max(position, mention.range.upperBound)
         }
         if position < text.endIndex {
             parts.append(.text(String(text[position...])))
@@ -60,15 +116,25 @@ enum StepText {
     /// alternative sits 25°F lower.
     static let sameTemperatureSpread = Rational(12)
 
-    /// The step as VoiceOver should read it: temperatures in the preferred unit, spelled out.
+    /// The step as VoiceOver should read it: temperatures in the preferred unit and durations,
+    /// both spelled out ("8 to 10 minutes"). As Written reads temperatures as the recipe wrote them.
     static func spoken(_ text: String, in scale: TemperatureScale?) -> String {
-        guard let scale else { return text }
         var result = ""
         var position = text.startIndex
-        for mention in TemperatureParser.mentions(in: text) {
-            result += text[position..<mention.range.lowerBound]
-            result += shown(mention.temperature, in: scale, style: .full)
-            position = mention.range.upperBound
+        for mention in mentions(in: text, includesDurations: true) {
+            if position < mention.range.lowerBound {
+                result += text[position..<mention.range.lowerBound]
+            } else if position > text.startIndex {
+                // Pills side by side read as two values.
+                result += " "
+            }
+            switch mention {
+            case let .temperature(temperature):
+                result += scale.map { shown(temperature.temperature, in: $0, style: .full) } ?? temperature.originalText
+            case let .duration(duration):
+                result += duration.duration.formatted(style: .full)
+            }
+            position = max(position, mention.range.upperBound)
         }
         return result + text[position...]
     }
@@ -78,11 +144,15 @@ enum StepText {
         !TemperatureParser.mentions(in: text).isEmpty
     }
 
-    /// Temperatures whose pill differs from what the recipe wrote, as (shown, original) pairs.
+    /// Pills that differ from what the recipe wrote, as (shown, original) pairs, in order:
+    /// converted temperatures and every duration whose short form isn't the recipe's own words.
     static func conversions(in text: String, scale: TemperatureScale?) -> [(shown: String, original: String)] {
-        parts(of: text, in: scale).compactMap { part in
-            guard case let .temperature(shown, original) = part, shown != original else { return nil }
-            return (shown, original)
+        parts(of: text, in: scale, includesDurations: true).compactMap { part in
+            switch part {
+            case let .temperature(shown, original) where shown != original: (shown, original)
+            case let .duration(shown, _, original) where shown != original: (shown, original)
+            default: nil
+            }
         }
     }
 }
@@ -103,11 +173,12 @@ extension TemperaturePreference {
 /// photos): the first lines run beside a rect of `exclusion` size at the top trailing corner, and
 /// once the text passes its bottom it runs the full width. SwiftUI `Text` cannot wrap around a
 /// view, so this is a non-editable, non-scrolling `UITextView` with an exclusion path. It keeps
-/// Dynamic Type, text selection, the temperature pills (capsules drawn behind the ranges
-/// `StepText` finds) and As Written, which joins the edit menu for a selected temperature. A pill
-/// is a button (04 §5.1 Step pills): a tap shows a small popover anchored to it with the value
-/// shown and the wording as written; a long-press still selects text. The headnote and the notes
-/// use the same view, without a thumbnail.
+/// Dynamic Type, text selection, the temperature and time pills (capsules drawn behind the ranges
+/// `StepText` finds) and As Written, which joins the edit menu for a selected pill. A pill is a
+/// button (04 §5.1 Step pills): a tap shows a small popover anchored to it with the value shown
+/// and the wording as written; a long-press still selects text. A time pill starts no timer yet;
+/// timers come with cook mode (Phase 3). The headnote and the notes use the same view, without a
+/// thumbnail.
 struct StepTextView: View {
     let text: String
     let scale: TemperatureScale?
@@ -139,7 +210,7 @@ struct StepTextView: View {
     }
 }
 
-/// What a tapped temperature says: the value as shown, then the recipe's own words.
+/// What a tapped temperature or time says: the value as shown, then the recipe's own words.
 private struct AsWrittenPopover: View {
     let shown: String
     let original: String
@@ -216,8 +287,9 @@ private struct StepTextLayout: UIViewRepresentable {
         return CGSize(width: width, height: view.height(forWidth: width))
     }
 
-    /// The step with each temperature as a semibold, tinted run padded by narrow no-break spaces,
-    /// and where each run is, with what the recipe wrote.
+    /// The step with each temperature and duration as a semibold, tinted run padded by narrow
+    /// no-break spaces, and where each run is, with what the recipe wrote. Pills that touch get a
+    /// thin space between them so their capsules stay apart.
     static func attributedText(_ text: String, scale: TemperatureScale?, font: UIFont) -> (NSAttributedString, [Coordinator.Pill]) {
         let result = NSMutableAttributedString()
         var pills: [Coordinator.Pill] = []
@@ -226,21 +298,46 @@ private struct StepTextLayout: UIViewRepresentable {
             .font: UIFont.systemFont(ofSize: font.pointSize, weight: .semibold),
             .foregroundColor: UIColor(Color.accentColor),
         ]
-        for part in StepText.parts(of: text, in: scale) {
+        var previousWasPill = false
+        for part in StepText.parts(of: text, in: scale, includesDurations: true) {
+            let kind: Coordinator.Pill.Kind
+            let shown: String
+            let original: String
             switch part {
             case let .text(words):
                 result.append(NSAttributedString(string: words, attributes: plain))
-            case let .temperature(shown, original):
-                let run = NSAttributedString(string: "\u{202F}\(shown)\u{202F}", attributes: pill)
-                pills.append(.init(range: NSRange(location: result.length, length: run.length), shown: shown, original: original))
-                result.append(run)
+                previousWasPill = false
+                continue
+            case let .temperature(temperature, written):
+                (kind, shown, original) = (.temperature, temperature, written)
+            case let .duration(duration, _, written):
+                (kind, shown, original) = (.duration, duration, written)
             }
+            if previousWasPill {
+                result.append(NSAttributedString(string: "\u{2009}", attributes: plain))
+            }
+            let run = NSAttributedString(string: "\u{202F}\(shown)\u{202F}", attributes: pill)
+            pills.append(.init(kind: kind, range: NSRange(location: result.length, length: run.length), shown: shown, original: original))
+            result.append(run)
+            previousWasPill = true
         }
         return (result, pills)
     }
 
     final class Coordinator: NSObject, UITextViewDelegate {
         struct Pill {
+            enum Kind {
+                case temperature, duration
+
+                var systemImage: String {
+                    switch self {
+                    case .temperature: "thermometer.medium"
+                    case .duration: "clock"
+                    }
+                }
+            }
+
+            let kind: Kind
             let range: NSRange
             let shown: String
             let original: String
@@ -248,12 +345,12 @@ private struct StepTextLayout: UIViewRepresentable {
 
         var pills: [Pill] = []
 
-        /// A selection that touches a converted temperature offers it as written.
+        /// A selection that touches a converted temperature or a duration offers it as written.
         func textView(_ textView: UITextView, editMenuForTextIn range: NSRange, suggestedActions: [UIMenuElement]) -> UIMenu? {
             let written = pills.filter { $0.shown != $0.original && NSIntersectionRange($0.range, range).length > 0 }
             guard !written.isEmpty else { return nil }
             let items = written.map { pill in
-                UIAction(title: "As Written: \(pill.original)", image: UIImage(systemName: "thermometer.medium")) { _ in }
+                UIAction(title: "As Written: \(pill.original)", image: UIImage(systemName: pill.kind.systemImage)) { _ in }
             }
             return UIMenu(children: [UIMenu(options: .displayInline, children: items)] + suggestedActions)
         }
@@ -261,12 +358,12 @@ private struct StepTextLayout: UIViewRepresentable {
 }
 
 /// The text view behind `StepTextView`: sizes itself for a width with the exclusion in place,
-/// draws a capsule behind each temperature, and reports a tap on one.
+/// draws a capsule behind each pill, and reports a tap on one.
 final class StepUITextView: UITextView {
     /// Space between the text and the thumbnail beside it, and below it.
     private static let exclusionGap = CGSize(width: 12, height: 8)
 
-    /// Called with the pill's index and its capsule's rect when a tap lands on a temperature.
+    /// Called with the pill's index and its capsule's rect when a tap lands on a pill.
     var onTapPill: ((Int, CGRect) -> Void)?
 
     private var exclusion: CGSize?
@@ -339,7 +436,7 @@ final class StepUITextView: UITextView {
         updatePills()
     }
 
-    /// One capsule behind each line segment of each temperature, under the text.
+    /// One capsule behind each line segment of each pill, under the text.
     private func updatePills() {
         guard let layoutManager = textLayoutManager, let content = layoutManager.textContentManager else { return }
         layoutManager.ensureLayout(for: layoutManager.documentRange)
@@ -401,10 +498,10 @@ private final class PillTapDelegate: NSObject, UIGestureRecognizerDelegate {
 // MARK: - Accessibility
 
 extension View {
-    /// One element reading `text` with its temperatures spelled out in `scale`, after `prefix`
-    /// ("Step 2."), with the originals as custom content and an As Written action that reads them
-    /// (04 §5.1 Step pills).
-    func temperatureTextAccessibility(_ text: String, scale: TemperatureScale?, prefix: String? = nil) -> some View {
+    /// One element reading `text` with its temperatures spelled out in `scale` and its durations
+    /// spelled out ("8 to 10 minutes"), after `prefix` ("Step 2."), with the originals as custom
+    /// content and an As Written action that reads them (04 §5.1 Step pills).
+    func pillTextAccessibility(_ text: String, scale: TemperatureScale?, prefix: String? = nil) -> some View {
         let originals = StepText.conversions(in: text, scale: scale).map(\.original)
         return accessibilityElement(children: .ignore)
             .accessibilityLabel([prefix, StepText.spoken(text, in: scale)].compactMap(\.self).joined(separator: " "))
@@ -457,6 +554,9 @@ extension Text {
                     .foregroundStyle(.tint)
                     .customAttribute(TemperaturePillAttribute())
                 result = Text("\(result)\(pill)")
+            case .duration:
+                // Ingredient lines take no time pills (`parts` leaves durations out by default).
+                break
             }
         }
         return result

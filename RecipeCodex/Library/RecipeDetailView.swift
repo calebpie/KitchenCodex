@@ -456,8 +456,8 @@ struct RecipeDetailView: View {
                     stepThumbnail(step, photos: photos, number: number)
                 }
                 StepTextView(text: step.text, scale: shownTemperatureScale, exclusion: stacksPhoto || photos.isEmpty ? nil : StepPhotoThumbnail.size)
-                    // Temperatures read in the shown unit, spelled out, with As Written as an action.
-                    .temperatureTextAccessibility(step.text, scale: shownTemperatureScale, prefix: "Step \(number).")
+                    // Temperatures read in the shown unit and times in full, with As Written as an action.
+                    .pillTextAccessibility(step.text, scale: shownTemperatureScale, prefix: "Step \(number).")
                     .overlay(alignment: .topTrailing) {
                         if !stacksPhoto, !photos.isEmpty {
                             stepThumbnail(step, photos: photos, number: number)
@@ -477,11 +477,11 @@ struct RecipeDetailView: View {
         .buttonStyle(.plain)
     }
 
-    /// The headnote and the notes use the step view, so their temperatures are pills too.
+    /// The headnote and the notes use the step view, so their temperatures and times are pills too.
     private var headnoteSection: some View {
         DisclosureGroup {
             StepTextView(text: recipe.headnote, scale: shownTemperatureScale)
-                .temperatureTextAccessibility(recipe.headnote, scale: shownTemperatureScale)
+                .pillTextAccessibility(recipe.headnote, scale: shownTemperatureScale)
                 .padding(.top, 8)
                 .frame(maxWidth: .infinity, alignment: .leading)
         } label: {
@@ -494,7 +494,7 @@ struct RecipeDetailView: View {
         VStack(alignment: .leading, spacing: 8) {
             SectionTitle("Notes")
             StepTextView(text: notes, scale: shownTemperatureScale)
-                .temperatureTextAccessibility(notes, scale: shownTemperatureScale)
+                .pillTextAccessibility(notes, scale: shownTemperatureScale)
         }
     }
 
