@@ -15,12 +15,14 @@ struct RecipeDetailView: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.modelContext) private var modelContext
 
-    /// Servings chosen with the stepper, or `nil` for the recipe as written.
+    /// Servings chosen in the scale popover, or `nil` for the recipe as written. Transient: the
+    /// stored recipe changes only in the editor (04 §5.1 Detail scale).
     @State private var servings: Int?
     /// Multiplier for recipes that give no servings.
     @State private var batchIndex = RecipeDetailView.batchSteps.firstIndex(of: .one)!
-    /// `nil` follows the Profile's units preference; once the cook picks a system everything converts to it.
-    @State private var unitSystem: MeasurementSystem?
+    @State private var isScaling = false
+    /// More → Units; transient like the scale (04 §5.1 Detail units).
+    @State private var units: UnitChoice = .preferred
     @Query(sort: [SortDescriptor(\UserProfile.createdAt)]) private var profiles: [UserProfile]
     @State private var isEditing = false
     @State private var isReviewing = false
@@ -70,10 +72,7 @@ struct RecipeDetailView: View {
                     if let version {
                         if isSideBySide {
                             HStack(alignment: .top, spacing: 40) {
-                                VStack(alignment: .leading, spacing: 28) {
-                                    scalingControls(for: version)
-                                    ingredientsSection(for: version)
-                                }
+                                ingredientsSection(for: version)
                                 .frame(width: (min(contentWidth, 1_100) - 104) * 0.4, alignment: .leading)
                                 VStack(alignment: .leading, spacing: 28) {
                                     stepsSection(for: version)
@@ -84,7 +83,6 @@ struct RecipeDetailView: View {
                                 .frame(maxWidth: .infinity, alignment: .leading)
                             }
                         } else {
-                            scalingControls(for: version)
                             ingredientsSection(for: version)
                             stepsSection(for: version)
                             if !version.notes.isEmpty {
@@ -101,10 +99,11 @@ struct RecipeDetailView: View {
                 .frame(maxWidth: .infinity)
             }
         }
-        // The hero runs under the navigation bar; the soft edge effect keeps Back and the toolbar legible over it.
+        // The hero runs under the navigation bar; once content scrolls beneath the bar the hard edge
+        // gives the title bar a defined edge over step text (04 §5.1 Floating headers).
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { contentWidth = $0 }
         .ignoresSafeArea(edges: hasHero ? .top : [])
-        .scrollEdgeEffectStyle(.soft, for: .top)
+        .scrollEdgeEffectStyle(.hard, for: .top)
         .onScrollGeometryChange(for: Bool.self) { geometry in
             geometry.contentOffset.y + geometry.contentInsets.top > (hasHero ? heroHeight : 40)
         } action: { _, isPastTitle in
@@ -113,15 +112,31 @@ struct RecipeDetailView: View {
         .navigationTitle(showsNavigationTitle ? recipe.title : "")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            // The pencil, not the word (04 §5.1 Edit glyph).
             ToolbarItem(placement: .primaryAction) {
-                Button("Edit") { isEditing = true }
+                Button("Edit", systemImage: "pencil") { isEditing = true }
             }
             ToolbarItem(placement: .primaryAction) {
                 Menu {
+                    // Share lives here, not in its own bubble (04 §5.1 Detail share).
+                    ShareRecipeMenu(recipe: recipe) {
+                        Label("Share", systemImage: "square.and.arrow.up")
+                    }
                     Button(recipe.isFavorite ? "Unfavorite" : "Favorite", systemImage: recipe.isFavorite ? "heart.slash" : "heart") {
                         recipe.isFavorite.toggle()
                     }
                     AddToCollectionMenu(recipe: recipe) { isNamingCollection = true }
+                    if let version, hasMeasuredIngredients(version) {
+                        Divider()
+                        Picker(selection: $units) {
+                            ForEach(UnitChoice.allCases) { choice in
+                                Text(choice.title(preferred: preferredSystem)).tag(choice)
+                            }
+                        } label: {
+                            Label("Units", systemImage: "ruler")
+                        }
+                        .pickerStyle(.menu)
+                    }
                     Divider()
                     Button("Delete", systemImage: "trash", role: .destructive) {
                         isConfirmingDelete = true
@@ -142,13 +157,7 @@ struct RecipeDetailView: View {
                     Text("The recipe and all its versions will be deleted.")
                 }
             }
-            // Bottom toolbar (03 §3.3): Share · Add to menu (Phase 4) · Cook.
-            ToolbarItem(placement: .bottomBar) {
-                ShareRecipeMenu(recipe: recipe) {
-                    Label("Share", systemImage: "square.and.arrow.up")
-                }
-            }
-            ToolbarSpacer(.flexible, placement: .bottomBar)
+            // Bottom toolbar: the prominent Cook alone (04 §5.1 Detail share); Add to menu arrives with Plan.
             ToolbarItem(placement: .bottomBar) {
                 Button {
                     // Cook mode arrives in Phase 3.
@@ -259,39 +268,85 @@ struct RecipeDetailView: View {
         return .one
     }
 
-    @ViewBuilder
-    private func scalingControls(for version: RecipeVersion) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+    private func isScaled(_ version: RecipeVersion) -> Bool {
+        scaleFactor(for: version) != .one
+    }
+
+    /// "4 servings", "6 servings · scaled from 4", "× 1", "× 1½".
+    private func scaleTitle(for version: RecipeVersion) -> String {
+        if let base = version.servings {
+            let shown = servings ?? base
+            let title = shown == 1 ? "1 serving" : "\(shown) servings"
+            return shown == base ? title : "\(title) · scaled from \(base)"
+        }
+        return "× \(Self.batchSteps[batchIndex].mixedNumberString)"
+    }
+
+    /// The scale in the Ingredients header (04 §5.1 Detail scale): tap for the popover.
+    private func scaleButton(for version: RecipeVersion) -> some View {
+        Button {
+            isScaling = true
+        } label: {
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text(scaleTitle(for: version))
+                    .contentTransition(.numericText())
+                Image(systemName: "chevron.down")
+                    .imageScale(.small)
+                    .fontWeight(.semibold)
+            }
+            .font(.headline)
+        }
+        .buttonStyle(.borderless)
+        .accessibilityLabel("Scale")
+        .accessibilityValue(scaleTitle(for: version))
+        .accessibilityHint("Changes the amounts for this reading. The recipe stays as written.")
+        .popover(isPresented: $isScaling) {
+            scalePopover(for: version)
+                .presentationCompactAdaptation(.popover)
+        }
+    }
+
+    private func scalePopover(for version: RecipeVersion) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
             if let base = version.servings {
-                Stepper(value: Binding { servings ?? base } set: { servings = $0 }, in: 1...200) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Serves \(servings ?? base)")
-                            .font(.headline)
-                            .contentTransition(.numericText())
-                        if let servings, servings != base {
-                            Text("Scaled from \(base)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
+                Stepper(value: Binding { servings ?? base } set: { servings = $0 == base ? nil : $0 }, in: 1...200) {
+                    Text((servings ?? base) == 1 ? "1 serving" : "\(servings ?? base) servings")
+                        .font(.headline)
+                        .monospacedDigit()
+                        .contentTransition(.numericText())
                 }
                 .accessibilityValue("\(servings ?? base) servings")
             } else {
                 Stepper(value: $batchIndex, in: 0...(Self.batchSteps.count - 1)) {
-                    Text("Batch × \(Self.batchSteps[batchIndex].description)")
+                    Text("Batch × \(Self.batchSteps[batchIndex].mixedNumberString)")
                         .font(.headline)
+                        .monospacedDigit()
                 }
             }
-
-            if hasMeasuredIngredients(version) {
-                Picker("Units", selection: Binding { unitSystem ?? preferredSystem } set: { unitSystem = $0 }) {
-                    Text("US").tag(MeasurementSystem.us)
-                    Text("Metric").tag(MeasurementSystem.metric)
+            HStack(alignment: .firstTextBaseline) {
+                Text(scaleFootnote(for: version))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 12)
+                Button("Reset") {
+                    servings = nil
+                    batchIndex = Self.batchSteps.firstIndex(of: .one)!
                 }
-                .pickerStyle(.segmented)
+                .disabled(!isScaled(version))
             }
         }
+        .padding(20)
+        .frame(minWidth: 280, idealWidth: 320)
         .animation(.default, value: servings)
+        .animation(.default, value: batchIndex)
+    }
+
+    private func scaleFootnote(for version: RecipeVersion) -> String {
+        if let base = version.servings {
+            return isScaled(version) ? "Scaled from \(base). The recipe stays as written." : "As written."
+        }
+        return isScaled(version) ? "The recipe stays as written." : "As written."
     }
 
     private func hasMeasuredIngredients(_ version: RecipeVersion) -> Bool {
@@ -304,7 +359,21 @@ struct RecipeDetailView: View {
     private func ingredientsSection(for version: RecipeVersion) -> some View {
         let factor = scaleFactor(for: version)
         return VStack(alignment: .leading, spacing: 12) {
-            SectionTitle("Ingredients")
+            // "Ingredients · 4 servings ⌄"; stacked when the two don't fit on a line.
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    SectionTitle("Ingredients")
+                    Text("·")
+                        .font(.headline)
+                        .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
+                    scaleButton(for: version)
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    SectionTitle("Ingredients")
+                    scaleButton(for: version)
+                }
+            }
             if version.sortedIngredients.isEmpty {
                 Text("No ingredients yet.").foregroundStyle(.secondary)
             }
@@ -317,7 +386,7 @@ struct RecipeDetailView: View {
                             .accessibilityAddTraits(.isHeader)
                     }
                     ForEach(group.ingredients) { ingredient in
-                        IngredientLine(ingredient: ingredient, factor: factor, system: unitSystem, preferred: preferredSystem)
+                        IngredientLine(ingredient: ingredient, factor: factor, units: units, preferred: preferredSystem)
                     }
                 }
             }
@@ -444,12 +513,30 @@ private struct SectionTitle: View {
     }
 }
 
-/// One ingredient, scaled and converted, with the amount in bold.
+/// More → Units on recipe detail (04 §5.1 Detail units): the Profile's preference, a system, or
+/// the units the recipe wrote.
+enum UnitChoice: String, CaseIterable, Identifiable {
+    case preferred, us, metric, asWritten
+
+    var id: Self { self }
+
+    func title(preferred system: MeasurementSystem) -> String {
+        switch self {
+        case .preferred: "Preferred (\(system == .us ? "US" : "Metric"))"
+        case .us: "US"
+        case .metric: "Metric"
+        case .asWritten: "As Written"
+        }
+    }
+}
+
+/// One ingredient, scaled and converted: the amount bold, the item in the primary color, and the
+/// preparation, note and "(optional)" in the secondary color at the same size and weight
+/// (04 §5.1 Ingredient lines). Long-press shows the line as written.
 private struct IngredientLine: View {
     let ingredient: Ingredient
     let factor: Rational
-    /// The system the cook tapped, or nil to follow `preferred`.
-    let system: MeasurementSystem?
+    let units: UnitChoice
     /// The Profile's units preference.
     let preferred: MeasurementSystem
 
@@ -459,26 +546,40 @@ private struct IngredientLine: View {
                 .font(.system(size: 5))
                 .foregroundStyle(.tertiary)
                 .accessibilityHidden(true)
-            if let amount {
-                Text("\(Text(amount).fontWeight(.semibold).monospacedDigit()) \(description)")
-                    .contentTransition(.numericText())
-            } else {
-                Text(description)
-            }
+            line
+                .contentTransition(.numericText())
         }
         .fixedSize(horizontal: false, vertical: true)
         .animation(.default, value: amount)
+        .contentShape(.rect)
+        .contextMenu {
+            Section("As Written") {
+                Label(ingredient.rawText, systemImage: "text.quote")
+            }
+        }
+    }
+
+    private var line: Text {
+        let item = Text(ingredient.item.isEmpty ? ingredient.rawText : ingredient.item)
+        var text = item
+        if let amount {
+            text = Text("\(Text(amount).fontWeight(.semibold).monospacedDigit()) \(item)")
+        }
+        if let detail {
+            text = Text("\(text)\(Text(detail).foregroundStyle(.secondary))")
+        }
+        return text
     }
 
     /// Scaled exactly, then re-expressed in a system, then rounded to what a cook can measure.
-    /// Until the cook taps US or Metric, an amount written in the other system is converted to the
-    /// preferred one (04 §5.1 Units preference); one already in it, any spoon, count, and metric
-    /// weight under the US preference stays as written, changing unit only when scaling makes the
-    /// written unit awkward (¼ cup × 1.5 is 6 tbsp).
+    /// Under Preferred, an amount written in the other system is converted to the preferred one
+    /// (04 §5.1 Units preference); one already in it, any spoon, count, and metric weight under
+    /// the US preference stays as written, changing unit only when scaling makes the written unit
+    /// awkward (¼ cup × 1.5 is 6 tbsp). US or Metric converts everything; As Written converts nothing.
     private var amount: String? {
         guard let quantity = ingredient.quantity, quantity.unit != .toTaste else { return nil }
         var shown = quantity.scaled(by: factor)
-        if let target = Self.targetSystem(for: quantity.unit, tapped: system, preferred: preferred, isScaled: factor != .one) {
+        if let target = Self.targetSystem(for: quantity.unit, units: units, preferred: preferred, isScaled: factor != .one) {
             shown = shown.displayed(in: target)
         }
         return shown.friendlyRounded().formatted()
@@ -486,21 +587,30 @@ private struct IngredientLine: View {
 
     /// The system to display an amount in, or nil to leave it as written. Grams and kilograms stay
     /// metric under the US preference so precise recipes keep their weights; millilitres and litres
-    /// still become cups. Tapping US or Metric converts everything.
-    static func targetSystem(for unit: CookingUnit?, tapped: MeasurementSystem?, preferred: MeasurementSystem, isScaled: Bool) -> MeasurementSystem? {
-        if let tapped { return tapped }
+    /// still become cups. US or Metric converts everything; As Written keeps each amount's own
+    /// system, re-picking the unit only when scaled.
+    static func targetSystem(for unit: CookingUnit?, units: UnitChoice, preferred: MeasurementSystem, isScaled: Bool) -> MeasurementSystem? {
+        switch units {
+        case .us: return .us
+        case .metric: return .metric
+        case .asWritten: return isScaled ? unit?.system : nil
+        case .preferred: break
+        }
         guard let unit, let own = unit.system else { return nil }
         let keepsMetricWeight = preferred == .us && own == .metric && unit.isMass
         if own != preferred, unit.isConvertible, !unit.isSpoon, !keepsMetricWeight { return preferred }
         return isScaled ? own : nil
     }
 
-    private var description: String {
-        var text = ingredient.item
+    /// Everything after the item: ", bone-in, thinly sliced", ", to taste", " (about 3 oranges)",
+    /// " (optional)".
+    private var detail: String? {
+        var text = ""
         if let preparation = ingredient.preparation, !preparation.isEmpty { text += ", \(preparation)" }
         if ingredient.cookingUnit == .toTaste { text += ", to taste" }
+        if let note = ingredient.note, !note.isEmpty { text += " (\(note))" }
         if ingredient.isOptional { text += " (optional)" }
-        return text
+        return text.isEmpty ? nil : text
     }
 }
 
