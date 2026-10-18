@@ -6,6 +6,8 @@ import SwiftUI
 @main
 struct RecipeCodexApp: App {
     private let container: ModelContainer
+    private let spotlight: RecipeSpotlightIndexer
+    @Environment(\.scenePhase) private var scenePhase
 
     init() {
         let logger = Logger(subsystem: "com.calebpietrafesa.RecipeCodex", category: "store")
@@ -26,12 +28,19 @@ struct RecipeCodexApp: App {
                 }
             }
         }
+        spotlight = RecipeSpotlightIndexer(container: container)
     }
 
     var body: some Scene {
         WindowGroup {
             RootTabView()
+                .task { spotlight.start() }
         }
         .modelContainer(container)
+        .onChange(of: scenePhase) { _, phase in
+            // Recipes saved by the Share Extension, or synced from another device, arrive while the
+            // app is away; index them when it comes back.
+            if phase == .active { spotlight.scheduleSync() }
+        }
     }
 }

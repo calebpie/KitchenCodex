@@ -1,3 +1,4 @@
+import CoreSpotlight
 import SwiftUI
 
 /// The five top-level destinations (02 §1.1), in the order the work happens: collect recipes,
@@ -31,6 +32,12 @@ struct RootTabView: View {
         // iPhone: bottom tab bar. iPad: top tab bar that the user can convert into a sidebar.
         .tabViewStyle(.sidebarAdaptable)
         .environment(router)
+        // A recipe tapped in Spotlight (RecipeSpotlightIndexer) opens in Recipes.
+        .onContinueUserActivity(CSSearchableItemActionType) { activity in
+            guard let identifier = activity.userInfo?[CSSearchableItemActivityIdentifier] as? String,
+                  let id = UUID(uuidString: identifier) else { return }
+            router.openRecipe(id: id)
+        }
     }
 }
 
