@@ -41,6 +41,10 @@ public struct WebPageExtraction: Sendable {
     public var sourceURL: URL?
     /// Visible text around the recipe (or the start of the page's text), capped for the on-device model.
     public var recipeText: String
+    /// Whether `recipeText` shows ingredient lines: amounts with an item (`IngredientParser`), or a
+    /// list under an "Ingredients" heading. Without them the model has nothing to copy and invents
+    /// a recipe, so it is not asked (`wantsModel`).
+    public var hasIngredientLines: Bool
 }
 
 /// Imports a recipe from a web page's HTML (Flow A).
@@ -48,8 +52,9 @@ public struct WebPageExtraction: Sendable {
 /// Deterministic first, model second (04 §1): schema.org JSON-LD, then schema.org microdata, then a
 /// reading of the visible text (`PageTextReader`). Each result records its `method` and a
 /// `confidence`; JSON-LD is 0.95, microdata 0.85, the page-text reading at most 0.5. When the result
-/// is missing or below `ImportedRecipe.reviewThreshold` and a structurer is available, the page text
-/// goes to the model (`refine`), whose result is labelled `.model` and still flagged for review.
+/// is missing or below `ImportedRecipe.reviewThreshold`, the page text shows ingredient lines, and a
+/// structurer is available, the page text goes to the model (`refine`), whose result is labelled
+/// `.model` and still flagged for review.
 public struct WebRecipeImporter: Sendable {
     public var structurer: (any RecipeStructuring)?
 
@@ -73,6 +78,7 @@ public struct WebRecipeImporter: Sendable {
         let reader = PageTextReader(page: page, base: metadata.sourceURL)
         let reading = reader.read()
 
+        let modelInput = modelInput(reader: reader, reading: reading, title: metadata.title)
         var extraction = WebPageExtraction(
             recipe: nil,
             pageTitle: metadata.title,
@@ -80,7 +86,8 @@ public struct WebRecipeImporter: Sendable {
             author: metadata.author,
             imageURL: metadata.imageURL,
             sourceURL: metadata.sourceURL,
-            recipeText: modelText(reader: reader, reading: reading, title: metadata.title)
+            recipeText: modelInput.text,
+            hasIngredientLines: reading != nil || showsIngredientLines(modelInput.lines)
         )
 
         var partial: ImportedRecipe?
@@ -152,9 +159,11 @@ public struct WebRecipeImporter: Sendable {
 
     // MARK: - With the model
 
-    /// Whether the model should take a pass at this page.
+    /// Whether the model should take a pass at this page: the deterministic result is missing or
+    /// weak, and the page text shows ingredient lines for the model to copy. A shell or home page
+    /// with none yields "no recipe found" rather than a recipe the model made up.
     public static func wantsModel(_ extraction: WebPageExtraction) -> Bool {
-        guard !extraction.recipeText.isEmpty else { return false }
+        guard !extraction.recipeText.isEmpty, extraction.hasIngredientLines else { return false }
         return extraction.recipe?.needsReview ?? true
     }
 
@@ -321,9 +330,49 @@ public struct WebRecipeImporter: Sendable {
         recipe.ingredientGroups = groups
     }
 
-    private static func modelText(reader: PageTextReader, reading: PageTextReader.Reading?, title: String) -> String {
+    /// Ingredient-like lines among those the model would read: at least two with an amount and a
+    /// unit ("1 tablespoon soy sauce"), three with an amount and an item ("3 eggs"; a home page's
+    /// "2 Michelin-starred chefs" alone is not enough), or two lines listed under an "Ingredients"
+    /// heading. Headings never count, so recipe cards titled "12 Holiday Cookies" don't.
+    static func showsIngredientLines(_ lines: [PageLine]) -> Bool {
+        var withUnit = 0
+        var withAmount = 0
+        var heading: Int?
+        var listed = 0
+        for (index, line) in lines.enumerated() {
+            let kind = PageTextReader.kind(of: line)
+            if case .section(.ingredients) = kind {
+                heading = index
+                listed = 0
+                continue
+            }
+            if case .ingredient = kind {
+                let parsed = IngredientParser.parse(ImportText.ingredientLine(line.text))
+                if parsed.quantity != nil, !parsed.item.isEmpty {
+                    withAmount += 1
+                    if parsed.unit != nil { withUnit += 1 }
+                }
+            }
+            if let start = heading {
+                switch kind {
+                case .ingredient, .maybeIngredient:
+                    listed += 1
+                case .section, .prose:
+                    heading = nil
+                default:
+                    break
+                }
+                if index - start > 12 { heading = nil }
+            }
+            if withUnit >= 2 || withAmount >= 3 || listed >= 2 { return true }
+        }
+        return false
+    }
+
+    /// The page text handed to the model, and the lines it was taken from.
+    private static func modelInput(reader: PageTextReader, reading: PageTextReader.Reading?, title: String) -> (text: String, lines: [PageLine]) {
         let lines = reader.lines
-        guard !lines.isEmpty else { return "" }
+        guard !lines.isEmpty else { return ("", []) }
         let range: Range<Int>
         if let reading {
             range = max(0, reading.span.lowerBound - 8)..<min(lines.count, reading.span.upperBound + 4)
@@ -334,11 +383,13 @@ public struct WebRecipeImporter: Sendable {
             range = start..<lines.count
         }
         var text = title.isEmpty ? "" : "\(title)\n"
+        var used: [PageLine] = []
         for line in lines[range] {
             guard text.count + line.text.count < modelTextLimit else { break }
             text += line.text + "\n"
+            used.append(line)
         }
-        return text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (text.trimmingCharacters(in: .whitespacesAndNewlines), used)
     }
 }
 

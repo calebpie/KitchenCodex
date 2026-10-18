@@ -195,13 +195,55 @@ struct ModelFallbackTests {
 
     let url = URL(string: "https://example.test/article")!
 
-    @Test func modelReadsAPageWithNoRecipeData() async throws {
-        let html = try Fixtures.synthetic("no-recipe.html")
+    @Test func modelReadsIngredientLinesThePageReadingMissed() async throws {
+        // Amount lines between paragraphs: no run for the page reading, but something to copy.
+        let html = try Fixtures.synthetic("page-text-scattered-ingredients.html")
+        let extraction = WebRecipeImporter.extract(html: html, url: url)
+        #expect(extraction.recipe == nil)
+        #expect(extraction.hasIngredientLines)
         let recipe = try await WebRecipeImporter(structurer: StubStructurer()).importRecipe(html: html, url: url)
         #expect(recipe.method == .model)
-        #expect(recipe.title == "Ten Kitchen Tools We Love")
+        #expect(recipe.title == "My Grandmother's Coconut Rice")
         #expect(recipe.ingredients.count == 3)
         #expect(recipe.needsReview)
+    }
+
+    /// Slice 4 saw the model invent ten "1 tablespoon" lines from a JavaScript shell and a recipe
+    /// called "Home" from a home page. Without ingredient lines the model is never asked.
+    @Test(arguments: ["shell-page.html", "home-page.html", "no-recipe.html"])
+    func pagesWithoutIngredientLinesNeverAskTheModel(_ name: String) async throws {
+        let html = try Fixtures.synthetic(name)
+        let extraction = WebRecipeImporter.extract(html: html, url: url)
+        #expect(extraction.recipe == nil)
+        #expect(!extraction.hasIngredientLines)
+        #expect(!WebRecipeImporter.wantsModel(extraction))
+        let importer = WebRecipeImporter(structurer: StubStructurer())
+        #expect(!importer.canRefine(extraction))
+        await #expect(throws: WebImportError.noRecipeFound) {
+            try await importer.importRecipe(html: html, url: url)
+        }
+    }
+
+    @Test func aShellPageKeepsItsMetadataForAddManually() throws {
+        // "Add Manually Instead" starts from the page title and link.
+        let page = URL(string: "https://ember.example/recipes/burnt-ends?ref=home")!
+        let shell = WebRecipeImporter.extract(html: try Fixtures.synthetic("shell-page.html"), url: page)
+        #expect(shell.pageTitle == "Smoked Brisket Burnt Ends")
+        #expect(shell.siteName == "Ember Kitchen")
+        #expect(shell.sourceURL?.absoluteString == "https://ember.example/recipes/burnt-ends")
+    }
+
+    @Test func ingredientLinesNeedMoreThanStrayNumbers() {
+        func lines(_ texts: [String], heading: String? = nil) -> [PageLine] {
+            var result = heading.map { [PageLine(text: $0, tag: "h2", headingLevel: 2, listID: nil)] } ?? []
+            result += texts.map { PageLine(text: $0, tag: "li", headingLevel: nil, listID: 1) }
+            return result
+        }
+        #expect(WebRecipeImporter.showsIngredientLines(lines(["1 tablespoon soy sauce", "2 cups water"])))
+        #expect(WebRecipeImporter.showsIngredientLines(lines(["3 eggs", "2 onions", "1 lemon"])))
+        #expect(!WebRecipeImporter.showsIngredientLines(lines(["2 Michelin-starred chefs", "1 pan dinners"])))
+        #expect(WebRecipeImporter.showsIngredientLines(lines(["Kosher salt", "Black pepper"], heading: "Ingredients")))
+        #expect(!WebRecipeImporter.showsIngredientLines(lines(["Kosher salt", "Black pepper"])))
     }
 
     @Test func structuredDataNeverAsksTheModel() async throws {
