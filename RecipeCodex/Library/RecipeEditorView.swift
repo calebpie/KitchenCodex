@@ -6,8 +6,11 @@ import SwiftUI
 import Units
 
 /// New Recipe and Edit share this form (03 §3.4). Editing saves a new version when the content changes.
+/// Reviewing (from a recipe's "Check N ingredients" row) opens at the ingredients with how each line
+/// was read beside the line from the page; saving, with or without changes, clears the review.
 struct RecipeEditorView: View {
     let recipe: Recipe?
+    var isReviewing = false
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
@@ -20,8 +23,9 @@ struct RecipeEditorView: View {
     @State private var isConfirmingDiscard = false
     private let original: RecipeDraft
 
-    init(recipe: Recipe?) {
+    init(recipe: Recipe?, isReviewing: Bool = false) {
         self.recipe = recipe
+        self.isReviewing = isReviewing && recipe != nil
         let draft = recipe.map(RecipeDraft.init(recipe:)) ?? RecipeDraft()
         _draft = State(initialValue: draft)
         original = draft
@@ -32,79 +36,95 @@ struct RecipeEditorView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                photoSection
+            ScrollViewReader { proxy in
+                Form {
+                    photoSection
 
-                Section {
-                    TextField("Title", text: $draft.title, axis: .vertical)
-                        .font(.headline)
-                    Picker("Course", selection: $draft.course) {
-                        Text("None").tag(String?.none)
-                        ForEach(courseOptions, id: \.self) { course in
-                            Text(course).tag(Optional(course))
+                    Section {
+                        TextField("Title", text: $draft.title, axis: .vertical)
+                            .font(.headline)
+                        Picker("Course", selection: $draft.course) {
+                            Text("None").tag(String?.none)
+                            ForEach(courseOptions, id: \.self) { course in
+                                Text(course).tag(Optional(course))
+                            }
+                        }
+                    }
+
+                    Section("Yield") {
+                        NumberField(title: "Servings", text: $draft.servings)
+                        TextField("Yield, like “1 loaf” or “24 cookies”", text: $draft.yieldText)
+                    }
+
+                    Section("Time") {
+                        NumberField(title: "Prep", text: $draft.prepMinutes, unit: "min")
+                        NumberField(title: "Cook", text: $draft.cookMinutes, unit: "min")
+                        NumberField(title: "Total", text: $draft.totalMinutes, unit: "min")
+                    }
+
+                    if isReviewing, let recipe {
+                        reviewSection(recipe)
+                    }
+
+                    Section {
+                        PlaceholderTextEditor(text: $draft.ingredientsText, placeholder: "2 cups flour\n1 1/2 tsp kosher salt\n3 large eggs\nsalt to taste")
+                            .frame(minHeight: 140)
+                            // "tsp" and "tbsp" are not typos.
+                            .autocorrectionDisabled()
+                            .textInputAutocapitalization(.never)
+                    } header: {
+                        Text("Ingredients")
+                    } footer: {
+                        Text("One ingredient per line. Amounts and units are read automatically so the recipe can scale. A line ending with a colon, like “For the dressing:”, starts a group.")
+                    }
+
+                    if !draft.parsedIngredients.isEmpty {
+                        Section("Reads As") {
+                            ReadsAsRows(draft: draft)
+                        }
+                    }
+
+                    Section {
+                        PlaceholderTextEditor(text: $draft.stepsText, placeholder: "Whisk the dry ingredients.\n\nBeat in the eggs one at a time.")
+                            .frame(minHeight: 180)
+                    } header: {
+                        Text("Steps")
+                    } footer: {
+                        Text("One step per paragraph. Leave a blank line between steps; numbering is added for you.")
+                    }
+
+                    if let recipe, !stepPhotos(of: recipe).isEmpty {
+                        stepPhotosSection(recipe)
+                    }
+
+                    Section("Notes") {
+                        PlaceholderTextEditor(text: $draft.notes, placeholder: "Substitutions, timing, what to serve it with")
+                            .frame(minHeight: 100)
+                    }
+
+                    if let recipe {
+                        Section {
+                            TextField("What changed? (optional)", text: $draft.changeSummary)
+                        } header: {
+                            Text("Version")
+                        } footer: {
+                            Text("Saving a change to the yield, times, ingredients, steps or notes creates version \(recipe.nextVersionNumber). Earlier versions are kept.")
                         }
                     }
                 }
-
-                Section("Yield") {
-                    NumberField(title: "Servings", text: $draft.servings)
-                    TextField("Yield, like “1 loaf” or “24 cookies”", text: $draft.yieldText)
-                }
-
-                Section("Time") {
-                    NumberField(title: "Prep", text: $draft.prepMinutes, unit: "min")
-                    NumberField(title: "Cook", text: $draft.cookMinutes, unit: "min")
-                    NumberField(title: "Total", text: $draft.totalMinutes, unit: "min")
-                }
-
-                Section {
-                    PlaceholderTextEditor(text: $draft.ingredientsText, placeholder: "2 cups flour\n1 1/2 tsp kosher salt\n3 large eggs\nsalt to taste")
-                        .frame(minHeight: 140)
-                        // "tsp" and "tbsp" are not typos.
-                        .autocorrectionDisabled()
-                        .textInputAutocapitalization(.never)
-                } header: {
-                    Text("Ingredients")
-                } footer: {
-                    Text("One ingredient per line. Amounts and units are read automatically so the recipe can scale. A line ending with a colon, like “For the dressing:”, starts a group.")
-                }
-
-                if !draft.parsedIngredients.isEmpty {
-                    Section("Reads As") {
-                        ReadsAsRows(draft: draft)
-                    }
-                }
-
-                Section {
-                    PlaceholderTextEditor(text: $draft.stepsText, placeholder: "Whisk the dry ingredients.\n\nBeat in the eggs one at a time.")
-                        .frame(minHeight: 180)
-                } header: {
-                    Text("Steps")
-                } footer: {
-                    Text("One step per paragraph. Leave a blank line between steps; numbering is added for you.")
-                }
-
-                if let recipe, !stepPhotos(of: recipe).isEmpty {
-                    stepPhotosSection(recipe)
-                }
-
-                Section("Notes") {
-                    PlaceholderTextEditor(text: $draft.notes, placeholder: "Substitutions, timing, what to serve it with")
-                        .frame(minHeight: 100)
-                }
-
-                if let recipe {
-                    Section {
-                        TextField("What changed? (optional)", text: $draft.changeSummary)
-                    } header: {
-                        Text("Version")
-                    } footer: {
-                        Text("Saving a change to the yield, times, ingredients, steps or notes creates version \(recipe.nextVersionNumber). Earlier versions are kept.")
+                .scrollDismissesKeyboard(.interactively)
+                .onAppear {
+                    guard isReviewing, let recipe else { return }
+                    // Open at the first line to check, else the ingredients (03 §3.3: the row
+                    // scrolls to the suspect items).
+                    let target: AnyHashable = recipe.ingredientsToCheck.first.map { AnyHashable($0.persistentModelID) } ?? AnyHashable(Self.reviewSectionID)
+                    Task {
+                        await Task.yield()
+                        proxy.scrollTo(target, anchor: .center)
                     }
                 }
             }
-            .scrollDismissesKeyboard(.interactively)
-            .navigationTitle(isEditing ? "Edit Recipe" : "New Recipe")
+            .navigationTitle(isReviewing ? "Review Recipe" : (isEditing ? "Edit Recipe" : "New Recipe"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -117,8 +137,9 @@ struct RecipeEditorView: View {
                     }
                 }
                 ToolbarItem(placement: .confirmationAction) {
+                    // Reviewing can save without changes: that is the cook saying it looks right.
                     Button("Save", role: .confirm) { save() }
-                        .disabled(!draft.canSave || (isEditing && !hasChanges) || isLoadingPhoto)
+                        .disabled(!draft.canSave || (isEditing && !hasChanges && !isReviewing) || isLoadingPhoto)
                 }
             }
             .interactiveDismissDisabled(hasChanges)
@@ -237,8 +258,30 @@ struct RecipeEditorView: View {
     }
 
     private func save() {
-        draft.save(to: recipe, comparedWith: original, in: modelContext)
+        let saved = draft.save(to: recipe, comparedWith: original, in: modelContext)
+        if isReviewing { saved.markReviewed(in: modelContext) }
         dismiss()
+    }
+
+    // MARK: - Review
+
+    private static let reviewSectionID = "review"
+
+    /// The stored lines as the import read them, with the page's original under each, and the page.
+    private func reviewSection(_ recipe: Recipe) -> some View {
+        Section {
+            IngredientProvenanceRows(ingredients: recipe.currentVersion?.sortedIngredients ?? [])
+            if let url = recipe.source?.url {
+                Link(destination: url) {
+                    Label("View Page", systemImage: "safari")
+                }
+            }
+        } header: {
+            Text("As Imported")
+        } footer: {
+            Text("Bold is how each line was read; under it is the line as the page wrote it. Fix a line below and it is read again. Saving marks the recipe as checked.")
+        }
+        .id(Self.reviewSectionID)
     }
 }
 

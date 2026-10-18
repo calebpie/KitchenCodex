@@ -23,6 +23,7 @@ struct RecipeDetailView: View {
     @State private var unitSystem: MeasurementSystem?
     @Query(sort: [SortDescriptor(\UserProfile.createdAt)]) private var profiles: [UserProfile]
     @State private var isEditing = false
+    @State private var isReviewing = false
     @State private var isConfirmingDelete = false
     @State private var isDeleting = false
     @State private var showsNavigationTitle = false
@@ -55,6 +56,10 @@ struct RecipeDetailView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 28) {
+                    if recipe.needsReview {
+                        ReviewBanner(recipe: recipe) { isReviewing = true }
+                            .transition(.opacity)
+                    }
                     header
                     if !recipe.headnote.isEmpty {
                         headnoteSection
@@ -153,6 +158,9 @@ struct RecipeDetailView: View {
         .sheet(isPresented: $isEditing) {
             RecipeEditorView(recipe: recipe)
         }
+        .sheet(isPresented: $isReviewing) {
+            RecipeEditorView(recipe: recipe, isReviewing: true)
+        }
         .fullScreenCover(item: $viewedStepPhotos) { selection in
             StepPhotoViewer(selection: selection)
         }
@@ -176,9 +184,22 @@ struct RecipeDetailView: View {
                 .font(.largeTitle.bold())
                 .fixedSize(horizontal: false, vertical: true)
 
-            Text(sourceLine)
+            if let url = recipe.source?.url {
+                // Provenance is one tap from the source (03 §1 principle 4).
+                Link(destination: url) {
+                    HStack(spacing: 4) {
+                        Text(sourceLine)
+                        Image(systemName: "arrow.up.right")
+                            .imageScale(.small)
+                    }
+                }
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .accessibilityHint("Opens the recipe's web page.")
+            } else {
+                Text(sourceLine)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
 
             metadata
         }
