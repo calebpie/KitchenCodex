@@ -141,3 +141,73 @@ struct IngredientProvenanceRows: View {
         return quantity.formatted()
     }
 }
+
+/// "2 new recipes need a look ›" at the top of Recipes while any import waits for a check
+/// (04 §5.1 Review prompt). Opens Needs a Look.
+struct NeedsALookRow: View {
+    let count: Int
+    var action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Image(systemName: "exclamationmark.bubble.fill")
+                    .foregroundStyle(.yellow)
+                    .accessibilityHidden(true)
+                Text(count == 1 ? "1 new recipe needs a look" : "\(count) new recipes need a look")
+                    .foregroundStyle(.primary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Image(systemName: "chevron.forward")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .frame(minHeight: 44)
+            .background(.background.secondary, in: .rect(cornerRadius: 16))
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Imported with low confidence. Shows them to check against the page.")
+    }
+}
+
+/// Needs a Look on iPhone: the recipes waiting for a check, newest first, each with what to check.
+/// A recipe leaves the list once it is reviewed. iPad shows the same smart collection from its sidebar.
+struct NeedsALookView: View {
+    @Query(sort: [SortDescriptor(\Recipe.createdAt, order: .reverse)]) private var recipes: [Recipe]
+
+    var body: some View {
+        let pending = recipes.filter(\.needsReview)
+        List(pending) { recipe in
+            NavigationLink(value: LibraryRoute.recipe(recipe)) {
+                VStack(alignment: .leading, spacing: 4) {
+                    RecipeRow(recipe: recipe)
+                    HStack(spacing: 6) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.yellow)
+                            .accessibilityHidden(true)
+                        Text(recipe.reviewTitle)
+                            .foregroundStyle(.secondary)
+                    }
+                    .font(.caption)
+                    .padding(.leading, 68)
+                }
+            }
+        }
+        .listStyle(.plain)
+        .overlay {
+            if pending.isEmpty {
+                ContentUnavailableView {
+                    Label("All checked", systemImage: "checkmark.circle")
+                } description: {
+                    Text("Every imported recipe has had its look.")
+                }
+            }
+        }
+        .navigationTitle("Needs a Look")
+        .navigationBarTitleDisplayMode(.inline)
+        .animation(.default, value: pending.count)
+    }
+}
