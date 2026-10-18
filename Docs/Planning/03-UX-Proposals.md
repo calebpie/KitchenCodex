@@ -192,7 +192,7 @@ A sheet with a five-star rating, a one-line "how did it go," optional photo (off
 
 ### 3.18 Search
 
-A search field at the bottom on iPhone (search tab), suggestions before typing (recent, "Never cooked," "Cooked in Seattle," books), and results grouped by Recipes, Books, Events, Ingredients, Sources. A natural-language phrase shows its interpretation as tokens above the results ("vegetable · side · Seattle · Jan–Apr 2026") that you can remove individually. On iPad the field is top trailing.
+The system search tab (`Tab(role: .search)`): on iPhone a separate Liquid Glass bubble beside the four tabs that morphs into the field, never a custom control (decided Oct 17, 2026, 04 §5.1 "Search tab"). The view is context-aware: a scope control under the field (All · Recipes · Pantry · Plan) defaults to the tab you came from, suggestions before typing come from that tab (recent, "Never cooked," "Cooked in Seattle," books), and results use that tab's own cell style so searching from Recipes reads as filtering the recipes; under All, results are grouped by Recipes, Books, Events, Ingredients, Sources. Search inside one screen (Books, a Pantry pane, Sources) is a `.searchable` field with the minimizing toolbar behavior, a small bubble that expands in place. A natural-language phrase shows its interpretation as tokens above the results ("vegetable · side · Seattle · Jan–Apr 2026") that you can remove individually. On iPad the field is top trailing.
 
 ### 3.19 First run
 
@@ -242,5 +242,6 @@ Resolved Oct 17, 2026, from your review:
 9. **Event dates.** Set in Plan and editable until service starts (3.9).
 10. **iPad tabs.** Floating Liquid Glass tab bar at the top, never a tab sidebar; each tab's split-view sidebar is the only left column (§4, 04 §5.1). Added Oct 17, 2026 from `Docs/Specs/ux-notes.md` row 1.
 11. **Pantry hub.** The Pantry tab root on iPhone is a Profile card plus an inset grouped list of panes with live summaries, each pushing its pane; the first pane is renamed Staples; the same rows are the iPad sidebar (3.17). Replaces the chip selector. Added Oct 17, 2026 from `Docs/Specs/ux-notes.md` row 2.
+12. **Search tab.** The system search tab as the bubble beside four tabs, with scopes defaulting to the current tab and results in that tab's cell style; in-screen search uses minimizing `.searchable` fields (3.18). Added Oct 17, 2026 from `Docs/Specs/ux-notes.md` row 3.
 
 Still open: nothing from this document. UX notes gathered between Phase 1 slices live in `Docs/Specs/ux-notes.md`.
