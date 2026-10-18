@@ -1,3 +1,4 @@
+import Capture
 import RecipeModel
 import SwiftData
 import SwiftUI
@@ -79,6 +80,7 @@ struct RecipeDetailView: View {
                     Button(recipe.isFavorite ? "Unfavorite" : "Favorite", systemImage: recipe.isFavorite ? "heart.slash" : "heart") {
                         recipe.isFavorite.toggle()
                     }
+                    shareMenu
                     Divider()
                     Button("Delete", systemImage: "trash", role: .destructive) {
                         isConfirmingDelete = true
@@ -144,16 +146,23 @@ struct RecipeDetailView: View {
         }
     }
 
-    private var sourceLine: String {
-        if let book = recipe.book {
-            let page = recipe.pageNumber.map { ", p. \($0)" } ?? ""
-            return "\(book.title)\(page)"
+    private var sourceLine: String { recipe.sourceLine }
+
+    /// Share Recipe: PDF, Markdown or plain text of the current version as written.
+    private var shareMenu: some View {
+        let export = ExportRecipe(recipe: recipe)
+        let preview = SharePreview(recipe.title, image: Image(systemName: "fork.knife"))
+        return Menu("Share Recipe", systemImage: "square.and.arrow.up") {
+            ShareLink(item: RecipePDFFile(recipe: export, coverData: recipe.coverImage?.imageData ?? recipe.coverImageData), preview: preview) {
+                Label("PDF", systemImage: "doc.richtext")
+            }
+            ShareLink(item: RecipeMarkdownFile(recipe: export), preview: preview) {
+                Label("Markdown", systemImage: "number")
+            }
+            ShareLink(item: RecipePlainText(recipe: export), preview: preview) {
+                Label("Plain Text", systemImage: "doc.plaintext")
+            }
         }
-        if let source = recipe.source {
-            let site = source.siteName ?? source.url?.host() ?? ""
-            return [site, source.author].compactMap { $0?.isEmpty == false ? $0 : nil }.joined(separator: " · ")
-        }
-        return "Added by hand · \(recipe.createdAt.formatted(date: .abbreviated, time: .omitted))"
     }
 
     private var metadata: some View {
