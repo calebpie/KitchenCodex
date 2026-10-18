@@ -15,6 +15,23 @@ public struct ProduceEquivalent: Sendable, Equatable {
     }
 }
 
+/// How a note stood in its line, which decides how it reads (04 §5.1 Ingredient lines): a closing
+/// clause follows a comma, a parenthetical keeps its parentheses, so notes never nest.
+public enum NoteForm: String, Sendable, Equatable, CaseIterable {
+    /// "plus extra (for kneading)", "for frying, as needed": the closing clauses of the preparation.
+    case clause
+    /// "(about 3 oranges)": a trailing parenthetical of the item or the preparation.
+    case parenthetical
+
+    /// The note as it reads after the item and preparation: ", plus extra (for kneading)" or
+    /// " (about 3 oranges)". A note whose own words hold parentheses reads after a comma whatever
+    /// its form, so parentheses never nest; a note stored without a form reads as a parenthetical.
+    public static func suffix(for note: String, form: NoteForm?) -> String {
+        if form == .clause || note.contains("(") || note.contains(")") { return ", \(note)" }
+        return " (\(note))"
+    }
+}
+
 /// One ingredient line split into amount, unit, item, preparation and note.
 public struct ParsedIngredient: Sendable, Equatable {
     /// `nil` when the line names no amount ("salt to taste", "freshly ground pepper").
@@ -28,6 +45,9 @@ public struct ParsedIngredient: Sendable, Equatable {
     /// parentheses: "about 3 oranges", "plus more for the pan", "ask your butcher to do this".
     /// Several are joined with "; ".
     public var note: String?
+    /// How the note stood in the line: `.clause` when it ends with closing clauses ("plus more for
+    /// the pan"), even after parentheticals; otherwise `.parenthetical`. Nil without a note.
+    public var noteForm: NoteForm?
     /// Set when the note counts the produce the line comes from ("about 3 oranges", "from 2 lemons").
     public var equivalent: ProduceEquivalent?
     public var isOptional: Bool
@@ -40,6 +60,7 @@ public struct ParsedIngredient: Sendable, Equatable {
         item: String,
         preparation: String? = nil,
         note: String? = nil,
+        noteForm: NoteForm? = nil,
         equivalent: ProduceEquivalent? = nil,
         isOptional: Bool = false,
         rawText: String = ""
@@ -49,6 +70,7 @@ public struct ParsedIngredient: Sendable, Equatable {
         self.item = item
         self.preparation = preparation
         self.note = note
+        self.noteForm = noteForm
         self.equivalent = equivalent
         self.isOptional = isOptional
         self.rawText = rawText
@@ -146,6 +168,7 @@ public enum IngredientParser {
             item: item,
             preparation: preparation,
             note: notes.isEmpty ? nil : notes.joined(separator: "; "),
+            noteForm: notes.isEmpty ? nil : (clauseNote != nil ? .clause : .parenthetical),
             equivalent: notes.lazy.compactMap(produceEquivalent(in:)).first,
             isOptional: isOptional,
             rawText: rawText
@@ -295,13 +318,16 @@ public enum IngredientParser {
         return unit
     }
 
-    /// "1 cup (240 ml) milk": the parenthetical repeats the amount in other units, which scaling and
-    /// the unit toggle regenerate, so it is dropped. Other parentheticals ("(14-ounce) can") stay.
-    /// Returns the dropped measure's unit, which tells fluid ounces from ounces of weight.
+    /// "1 cup (240 ml) milk", "4 pounds (about 2kg) potatoes": the parenthetical repeats the amount
+    /// in other units, which scaling and the unit toggle regenerate, so it is dropped, an "about"
+    /// with it. Other parentheticals ("(14-ounce) can") stay. Returns the dropped measure's unit,
+    /// which tells fluid ounces from ounces of weight.
     private static func dropEquivalentMeasure(_ tokens: inout Tokens) -> CookingUnit? {
         let rest = tokens.remainder
-        guard let range = rest.range(of: #"^\(\s*[\d./\s-]+\s*[A-Za-z. ]+\)\s*"#, options: .regularExpression) else { return nil }
+        let approximately = #"(?:(?:about|approximately|approx\.?|roughly|around|~)\s*)?"#
+        guard let range = rest.range(of: #"^\(\s*"# + approximately + #"[\d./\s-]+\s*[A-Za-z. ]+\)\s*"#, options: [.regularExpression, .caseInsensitive]) else { return nil }
         let inner = rest[range].trimmingCharacters(in: CharacterSet(charactersIn: "() ").union(.whitespaces))
+            .replacingOccurrences(of: "^" + approximately, with: "", options: [.regularExpression, .caseInsensitive])
         var innerTokens = Tokens(inner)
         guard readQuantity(&innerTokens) != nil, let unit = readUnit(&innerTokens), innerTokens.remainder.isEmpty else { return nil }
         tokens = Tokens(String(rest[range.upperBound...]))

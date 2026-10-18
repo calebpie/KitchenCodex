@@ -96,6 +96,23 @@ struct RecipeExporterTests {
         """)
     }
 
+    /// 04 §5.1 Ingredient lines: a clause note follows a comma, a parenthetical keeps its
+    /// parentheses, and nothing nests.
+    @Test func notesReadInTheirForm() {
+        let flour = ExportRecipe.Ingredient(quantity: Quantity(Rational(7, 2), .cup), item: "all-purpose flour", note: "plus extra (for kneading)", noteForm: .clause)
+        #expect(flour.line == "3½ cups all-purpose flour, plus extra (for kneading)")
+        let butter = ExportRecipe.Ingredient(quantity: Quantity(2, .tablespoon), item: "unsalted butter", preparation: "softened", note: "plus more for the pan", noteForm: .clause)
+        #expect(butter.description == "unsalted butter, softened, plus more for the pan")
+        let juice = ExportRecipe.Ingredient(quantity: Quantity(5, .fluidOunce), item: "orange juice", note: "about 3 oranges", noteForm: .parenthetical)
+        #expect(juice.description == "orange juice (about 3 oranges)")
+        // Stored before forms: read as a parenthetical, unless that would nest.
+        #expect(ExportRecipe.Ingredient(item: "lamb", note: "about 12 ounces").description == "lamb (about 12 ounces)")
+        let nested = ExportRecipe.Ingredient(item: "shallots", note: "about 8 ounces total; thinly sliced (use about 5 ounces)", noteForm: .parenthetical)
+        #expect(nested.description == "shallots, about 8 ounces total; thinly sliced (use about 5 ounces)")
+        let markdown = RecipeExporter.markdown(ExportRecipe(title: "Bread", ingredients: [flour]))
+        #expect(markdown.contains("- **3½ cups** all-purpose flour, plus extra (for kneading)"))
+    }
+
     @Test func minimalRecipe() {
         let recipe = ExportRecipe(title: "Toast", steps: ["Toast the bread."])
         #expect(RecipeExporter.markdown(recipe) == "# Toast\n\n## Steps\n\n1. Toast the bread.\n")

@@ -354,7 +354,8 @@ struct ReadsAsRows: View {
 }
 
 /// How the parser read one line: amount and unit in bold, then the item, the preparation and the
-/// note, each on its own line (04 §5.1 Ingredient lines).
+/// note with how it will read (after a comma, or in parentheses), each on its own line
+/// (04 §5.1 Ingredient lines).
 struct ParsedIngredientRow: View {
     let parsed: ParsedIngredient
 
@@ -372,7 +373,7 @@ struct ParsedIngredientRow: View {
                         .foregroundStyle(.secondary)
                 }
                 if let note = parsed.note {
-                    Text("Note: \(note)")
+                    Text("Note: \(note)\(Text(verbatim: " · \(Self.formTitle(note: note, form: parsed.noteForm))").foregroundStyle(.tertiary))")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -390,5 +391,10 @@ struct ParsedIngredientRow: View {
     private var detail: String? {
         let parts = [parsed.preparation, parsed.isOptional ? "optional" : nil].compactMap(\.self)
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    /// Where the note will sit on the recipe, as `NoteForm.suffix` places it.
+    static func formTitle(note: String, form: NoteForm?) -> String {
+        NoteForm.suffix(for: note, form: form).hasPrefix(",") ? "after a comma" : "in parentheses"
     }
 }

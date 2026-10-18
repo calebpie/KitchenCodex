@@ -10,16 +10,19 @@ public struct ExportRecipe: Sendable, Equatable {
         public var quantity: Quantity?
         public var item: String
         public var preparation: String?
-        /// "about 3 oranges", "plus more for the pan": printed in parentheses after the preparation.
+        /// "about 3 oranges", "plus more for the pan": printed after the preparation as its form says.
         public var note: String?
+        /// A clause note follows a comma, a parenthetical keeps its parentheses (`NoteForm.suffix`).
+        public var noteForm: NoteForm?
         public var isOptional: Bool
 
-        public init(group: String? = nil, quantity: Quantity? = nil, item: String, preparation: String? = nil, note: String? = nil, isOptional: Bool = false) {
+        public init(group: String? = nil, quantity: Quantity? = nil, item: String, preparation: String? = nil, note: String? = nil, noteForm: NoteForm? = nil, isOptional: Bool = false) {
             self.group = group
             self.quantity = quantity
             self.item = item
             self.preparation = preparation
             self.note = note
+            self.noteForm = noteForm
             self.isOptional = isOptional
         }
 
@@ -30,12 +33,12 @@ public struct ExportRecipe: Sendable, Equatable {
         }
 
         /// The item with its preparation, note and flags: "unsalted butter, softened", "flaky salt,
-        /// to taste", "orange juice (about 3 oranges)".
+        /// to taste", "orange juice (about 3 oranges)", "all-purpose flour, plus extra (for kneading)".
         public var description: String {
             var text = item
             if let preparation, !preparation.isEmpty { text += ", \(preparation)" }
             if quantity?.unit == .toTaste { text += ", to taste" }
-            if let note, !note.isEmpty { text += " (\(note))" }
+            if let note, !note.isEmpty { text += NoteForm.suffix(for: note, form: noteForm) }
             if isOptional { text += " (optional)" }
             return text
         }

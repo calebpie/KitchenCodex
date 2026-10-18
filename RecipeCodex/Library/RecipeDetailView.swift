@@ -651,12 +651,15 @@ private struct IngredientLine: View {
     }
 
     /// Everything after the item, in the secondary color: ", bone-in, thinly sliced", ", to taste",
-    /// " (about 3 oranges)", " (optional)", with temperatures as pills.
+    /// the note as its form says (" (about 3 oranges)", ", plus extra (for kneading)"), " (optional)",
+    /// with temperatures as pills.
     private var detail: Text? {
         var text = ""
         if let preparation = ingredient.preparation, !preparation.isEmpty { text += ", \(preparation)" }
         if ingredient.cookingUnit == .toTaste { text += ", to taste" }
-        if let note = ingredient.note, !note.isEmpty { text += " (\(note))" }
+        if let note = ingredient.note, !note.isEmpty {
+            text += NoteForm.suffix(for: note, form: ingredient.noteForm.flatMap(NoteForm.init(rawValue:)))
+        }
         if ingredient.isOptional { text += " (optional)" }
         return text.isEmpty ? nil : Text.withTemperaturePills(text, scale: temperatureScale)
     }

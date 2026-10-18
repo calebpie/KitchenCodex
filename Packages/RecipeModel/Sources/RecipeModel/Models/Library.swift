@@ -141,6 +141,10 @@ extension RecipeSchemaV1 {
         /// A trailing aside that is neither preparation nor a unit equivalent: "about 3 oranges",
         /// "plus more for the pan", "ask your butcher to do this" (04 §5.1 Ingredient lines).
         public var note: String?
+        /// How the note stood in the line, the raw value of Capture's `NoteForm`: "clause" reads
+        /// after a comma ("all-purpose flour, plus extra (for kneading)"), "parenthetical" in
+        /// parentheses, so notes never nest. Nil without a note, and for notes stored before it.
+        public var noteForm: String?
         /// When the note names produce the line comes from ("about 3 oranges", "from 2 lemons"), how
         /// many, as an exact rational like the quantity, so shopping can buy oranges, not juice.
         public var equivalentCountNumerator: Int?

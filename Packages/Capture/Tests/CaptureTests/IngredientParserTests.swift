@@ -47,6 +47,9 @@ struct IngredientParserTests {
         Case(line: "1/4 cup chopped walnuts (optional)", quantity: Rational(1, 4), unit: .cup, item: "chopped walnuts", isOptional: true),
         Case(line: "Kosher salt and freshly ground pepper, to taste", quantity: nil, unit: .toTaste, item: "Kosher salt and freshly ground pepper"),
         Case(line: "1 cup (240 ml) whole milk", quantity: Rational(1), unit: .cup, item: "whole milk"),
+        Case(line: "4 pounds (about 2kg) russet potatoes", quantity: Rational(4), unit: .pound, item: "russet potatoes"),
+        Case(line: "4 lb (about 2 kg) russet or Yukon Gold potatoes, peeled", quantity: Rational(4), unit: .pound, item: "russet or Yukon Gold potatoes", preparation: "peeled"),
+        Case(line: "1 cup (approximately 240 ml) whole milk", quantity: Rational(1), unit: .cup, item: "whole milk"),
         Case(line: "1 (14 oz) can diced tomatoes", quantity: Rational(1), unit: nil, item: "(14 oz) can diced tomatoes"),
         Case(line: "Freshly ground black pepper", quantity: nil, unit: nil, item: "Freshly ground black pepper"),
         Case(line: "an onion", quantity: nil, unit: nil, item: "an onion"),
@@ -160,6 +163,8 @@ struct IngredientNoteTests {
         var preparation: String? = nil
         let note: String?
         var equivalent: ProduceEquivalent? = nil
+        /// How the note stood; a note without one given is a parenthetical.
+        var form: NoteForm? = nil
 
         var testDescription: String { line }
     }
@@ -179,11 +184,13 @@ struct IngredientNoteTests {
         Case(line: "1 sprig thyme (or 1/2 teaspoon dried thyme)", item: "sprig thyme", note: "or 1/2 teaspoon dried thyme"),
         Case(line: "5 pounds (2.2 kilograms) beef short ribs, bone-in, thinly sliced lengthwise into ½-inch thick strips (ask your butcher to do this)", item: "beef short ribs", preparation: "bone-in, thinly sliced lengthwise into 1/2-inch thick strips", note: "ask your butcher to do this"),
         // Closing clauses that say what the line is for, or how much more.
-        Case(line: "2 tablespoons unsalted butter, softened, plus more for the pan", item: "unsalted butter", preparation: "softened", note: "plus more for the pan"),
-        Case(line: "3 1/2 cups all-purpose flour, plus extra (for kneading)", item: "all-purpose flour", note: "plus extra (for kneading)"),
-        Case(line: "1 teaspoon red-pepper flakes, plus more to taste", item: "red-pepper flakes", note: "plus more to taste"),
-        Case(line: "Canola oil, for frying, as needed", item: "Canola oil", note: "for frying, as needed"),
+        Case(line: "2 tablespoons unsalted butter, softened, plus more for the pan", item: "unsalted butter", preparation: "softened", note: "plus more for the pan", form: .clause),
+        Case(line: "3 1/2 cups all-purpose flour, plus extra (for kneading)", item: "all-purpose flour", note: "plus extra (for kneading)", form: .clause),
+        Case(line: "1 teaspoon red-pepper flakes, plus more to taste", item: "red-pepper flakes", note: "plus more to taste", form: .clause),
+        Case(line: "Canola oil, for frying, as needed", item: "Canola oil", note: "for frying, as needed", form: .clause),
         Case(line: "Olive oil (for serving)", item: "Olive oil", note: "for serving"),
+        // A parenthetical, then a closing clause: the note ends with the clause, so it is one.
+        Case(line: "1 cup orange juice (about 3 oranges), plus more for serving", item: "orange juice", note: "about 3 oranges; plus more for serving", equivalent: ProduceEquivalent(count: Rational(3), item: "oranges"), form: .clause),
         // Several parentheticals, and commas inside one.
         Case(line: "4 split chicken breasts (bone-in, skin-on)", item: "split chicken breasts", note: "bone-in, skin-on"),
         Case(line: "2 tomatoes (about 12 ounces total weight) (peeled, seeded, and finely diced)", item: "tomatoes", note: "about 12 ounces total weight; peeled, seeded, and finely diced"),
@@ -192,6 +199,7 @@ struct IngredientNoteTests {
         Case(line: "12 g Cinnamon stick(s), divided", item: "Cinnamon stick(s)", preparation: "divided", note: nil),
         Case(line: "1 (14 oz) can diced tomatoes", item: "(14 oz) can diced tomatoes", note: nil),
         Case(line: "1 cup (240 ml) whole milk", item: "whole milk", note: nil),
+        Case(line: "4 pounds (about 2kg) russet potatoes", item: "russet potatoes", note: nil),
         Case(line: "1 onion, finely chopped", item: "onion", preparation: "finely chopped", note: nil),
     ])
     func readsNote(_ expected: Case) {
@@ -200,6 +208,28 @@ struct IngredientNoteTests {
         #expect(parsed.preparation == expected.preparation)
         #expect(parsed.note == expected.note)
         #expect(parsed.equivalent == expected.equivalent)
+        #expect(parsed.noteForm == (expected.note == nil ? nil : expected.form ?? .parenthetical))
+    }
+
+    @Test func notesReadInTheirForm() {
+        #expect(NoteForm.suffix(for: "plus extra (for kneading)", form: .clause) == ", plus extra (for kneading)")
+        #expect(NoteForm.suffix(for: "about 3 oranges", form: .parenthetical) == " (about 3 oranges)")
+        #expect(NoteForm.suffix(for: "about 3 oranges", form: nil) == " (about 3 oranges)")
+        // Parentheses in the note itself: after a comma, so they never nest.
+        #expect(NoteForm.suffix(for: "5 (10-ounce) packages", form: .parenthetical) == ", 5 (10-ounce) packages")
+    }
+
+    /// The slice 6 finding: an "about" inside the leading equivalent no longer keeps it in the item.
+    @Test func dropsAnApproximateLeadingEquivalent() {
+        let potatoes = IngredientParser.parse("4 pounds (about 2kg) russet potatoes")
+        #expect(potatoes.quantity == Rational(4))
+        #expect(potatoes.unit == .pound)
+        #expect(potatoes.item == "russet potatoes")
+        #expect(potatoes.note == nil)
+        // Ounces with an approximate volume beside them are still fluid ounces.
+        #expect(IngredientParser.parse("5 ounces (about 150 ml) orange juice").unit == .fluidOunce)
+        // A count's parenthetical is not a unit equivalent and stays where it was.
+        #expect(IngredientParser.parse("2 (about 1 pound) eggplants").item == "(about 1 pound) eggplants")
     }
 
     @Test func optionalAndToTasteAreNotNotes() {

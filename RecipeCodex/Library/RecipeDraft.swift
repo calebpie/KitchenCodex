@@ -192,12 +192,13 @@ struct RecipeDraft: Equatable {
 }
 
 extension Ingredient {
-    /// The words of a parsed line: item, preparation, note and the produce the note counts
-    /// (04 §5.1 Ingredient lines). Amount and unit are set by the caller.
+    /// The words of a parsed line: item, preparation, note and its form, and the produce the note
+    /// counts (04 §5.1 Ingredient lines). Amount and unit are set by the caller.
     func setWording(from parsed: ParsedIngredient) {
         item = parsed.item
         preparation = parsed.preparation
         note = parsed.note
+        noteForm = parsed.noteForm?.rawValue
         equivalentCountNumerator = parsed.equivalent?.count.numerator
         equivalentCountDenominator = parsed.equivalent?.count.denominator
         equivalentItem = parsed.equivalent?.item

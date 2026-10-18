@@ -29,6 +29,7 @@ extension ExportRecipe {
                     item: ingredient.item.isEmpty ? ingredient.rawText : ingredient.item,
                     preparation: ingredient.preparation,
                     note: ingredient.note,
+                    noteForm: ingredient.noteForm.flatMap(NoteForm.init(rawValue:)),
                     isOptional: ingredient.isOptional
                 )
             },

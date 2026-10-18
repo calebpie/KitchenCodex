@@ -61,13 +61,14 @@ struct SchemaTests {
         #expect(fetched?.currentVersion?.isCurrentOf?.title == "Focaccia")
     }
 
-    /// 04 §5.1 Ingredient lines: a note, and the produce it counts, stored beside the item.
+    /// 04 §5.1 Ingredient lines: a note, its form, and the produce it counts, stored beside the item.
     @Test func ingredientKeepsNoteAndEquivalent() throws {
         let container = try RecipeStore.makeContainer(inMemory: true)
         let context = ModelContext(container)
 
         let juice = Ingredient(item: "orange juice", rawText: "5 ounces (142 ml) orange juice (about 3 oranges)")
         juice.note = "about 3 oranges"
+        juice.noteForm = "parenthetical"
         juice.equivalentCountNumerator = 3
         juice.equivalentCountDenominator = 1
         juice.equivalentItem = "oranges"
@@ -77,15 +78,21 @@ struct SchemaTests {
         pear.equivalentCountDenominator = 2
         pear.equivalentItem = "pears"
         let salt = Ingredient(item: "kosher salt", rawText: "1 tsp kosher salt")
-        for model in [juice, pear, salt] as [any PersistentModel] { context.insert(model) }
+        let flour = Ingredient(item: "all-purpose flour", rawText: "3 1/2 cups all-purpose flour, plus extra (for kneading)")
+        flour.note = "plus extra (for kneading)"
+        flour.noteForm = "clause"
+        for model in [juice, pear, salt, flour] as [any PersistentModel] { context.insert(model) }
         try context.save()
 
         let fetched = try context.fetch(FetchDescriptor<Ingredient>(sortBy: [SortDescriptor(\.item)]))
-        #expect(fetched.map(\.item) == ["kosher salt", "orange juice", "pear juice"])
-        #expect(fetched[0].note == nil && fetched[0].equivalentItem == nil && fetched[0].equivalentCountNumerator == nil)
-        #expect(fetched[1].note == "about 3 oranges")
-        #expect(fetched[1].equivalentItem == "oranges")
-        #expect(fetched[2].equivalentCountNumerator == 3 && fetched[2].equivalentCountDenominator == 2)
+        #expect(fetched.map(\.item) == ["all-purpose flour", "kosher salt", "orange juice", "pear juice"])
+        #expect(fetched[0].noteForm == "clause")
+        let fetchedSalt = fetched[1]
+        #expect(fetchedSalt.note == nil && fetchedSalt.noteForm == nil && fetchedSalt.equivalentItem == nil && fetchedSalt.equivalentCountNumerator == nil)
+        let fetchedJuice = fetched[2]
+        #expect(fetchedJuice.note == "about 3 oranges" && fetchedJuice.noteForm == "parenthetical")
+        #expect(fetchedJuice.equivalentItem == "oranges")
+        #expect(fetched[3].equivalentCountNumerator == 3 && fetched[3].equivalentCountDenominator == 2)
     }
 
     /// Pairings live on the menu and can point at a bottle in the cellar (03 §3.9, §3.17).
