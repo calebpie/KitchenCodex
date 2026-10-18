@@ -39,16 +39,19 @@ struct StepPhotoImage: View {
     }
 }
 
-/// The trailing thumbnail on a step in recipe detail (03 §3.3). Shows the first photo, with a count
-/// badge when the step has more than one.
+/// The trailing thumbnail on a step in recipe detail (03 §3.3, 04 §5.1 Step photos): 4:3, 120 pt
+/// tall, the step text wrapping around it. Shows the first photo, with a count badge when the step
+/// has more than one.
 struct StepPhotoThumbnail: View {
     let photos: [RecipeImage]
     let stepNumber: Int
 
+    static let size = CGSize(width: 160, height: 120)
+
     var body: some View {
-        StepPhotoImage(image: photos[0], pointSize: 64)
-            .frame(width: 64, height: 64)
-            .clipShape(.rect(cornerRadius: 10))
+        StepPhotoImage(image: photos[0], pointSize: Self.size.width)
+            .frame(width: Self.size.width, height: Self.size.height)
+            .clipShape(.rect(cornerRadius: 12))
             .overlay(alignment: .bottomTrailing) {
                 if photos.count > 1 {
                     Text("\(photos.count)")

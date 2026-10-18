@@ -13,6 +13,7 @@ struct RecipeDetailView: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.modelContext) private var modelContext
 
     /// Servings chosen in the scale popover, or `nil` for the recipe as written. Transient: the
@@ -414,35 +415,52 @@ struct RecipeDetailView: View {
                 Text("No steps yet.").foregroundStyle(.secondary)
             }
             ForEach(Array(version.sortedSteps.enumerated()), id: \.element.id) { index, step in
-                let conversions = StepText.conversions(in: step.text, scale: temperatureScale)
-                HStack(alignment: .top, spacing: 12) {
-                    HStack(alignment: .firstTextBaseline, spacing: 12) {
-                        Text("\(index + 1)")
-                            .font(.headline)
-                            .monospacedDigit()
-                            .foregroundStyle(.tint)
-                            .frame(minWidth: 24, alignment: .trailing)
-                        // Temperatures as pills in the preferred unit (04 §5.1); long-press for the original.
-                        StepText(text: step.text, scale: temperatureScale)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .modifier(StepTemperatureLongPress(conversions: conversions))
-                    .accessibilityElement(children: .combine)
-                    .accessibilityLabel("Step \(index + 1). \(StepText.spoken(step.text, in: temperatureScale))")
-
-                    let photos = step.sortedPhotos
-                    if !photos.isEmpty {
-                        Button {
-                            viewedStepPhotos = StepPhotoSelection(step: step, stepNumber: index + 1)
-                        } label: {
-                            StepPhotoThumbnail(photos: photos, stepNumber: index + 1)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
+                stepRow(step, number: index + 1)
             }
         }
+    }
+
+    /// One step: its number, then the text wrapping around the trailing thumbnail when the step has
+    /// photos (04 §5.1 Step photos). At accessibility text sizes the wrap would leave a few words a
+    /// line, so the thumbnail sits above the text instead.
+    @ViewBuilder
+    private func stepRow(_ step: Step, number: Int) -> some View {
+        let photos = step.sortedPhotos
+        let stacksPhoto = dynamicTypeSize.isAccessibilitySize
+        let originals = StepText.conversions(in: step.text, scale: temperatureScale).map(\.original)
+        HStack(alignment: stacksPhoto && !photos.isEmpty ? .top : .firstTextBaseline, spacing: 12) {
+            Text("\(number)")
+                .font(.headline)
+                .monospacedDigit()
+                .foregroundStyle(.tint)
+                .frame(minWidth: 24, alignment: .trailing)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 12) {
+                if stacksPhoto, !photos.isEmpty {
+                    stepThumbnail(step, photos: photos, number: number)
+                }
+                StepTextView(text: step.text, scale: temperatureScale, exclusion: stacksPhoto || photos.isEmpty ? nil : StepPhotoThumbnail.size)
+                    // Temperatures read in the preferred unit, spelled out.
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("Step \(number). \(StepText.spoken(step.text, in: temperatureScale))")
+                    .accessibilityCustomContent("As Written", originals.joined(separator: "; "), importance: .default)
+                    .overlay(alignment: .topTrailing) {
+                        if !stacksPhoto, !photos.isEmpty {
+                            stepThumbnail(step, photos: photos, number: number)
+                        }
+                    }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func stepThumbnail(_ step: Step, photos: [RecipeImage], number: Int) -> some View {
+        Button {
+            viewedStepPhotos = StepPhotoSelection(step: step, stepNumber: number)
+        } label: {
+            StepPhotoThumbnail(photos: photos, stepNumber: number)
+        }
+        .buttonStyle(.plain)
     }
 
     private var headnoteSection: some View {
