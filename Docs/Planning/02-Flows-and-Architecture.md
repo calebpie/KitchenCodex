@@ -50,7 +50,7 @@ Each flow lists the steps, the system pieces involved, and where the user can ba
 2. The Share Extension shows a compact preview: title, image, source, "Save" and "Open in app."
 3. Behind the preview: parse JSON-LD (instant). If none, render and extract with the on-device model (2 to 6 seconds, with specific progress text per the HIG Generative AI guidance: "Reading ingredients…").
 4. Save writes to the shared App Group store; the main app picks up the change through `HistoryObserver` and syncs via CloudKit.
-5. Next time the app opens, a quiet "1 new recipe needs a look" row appears on Cook if the extraction had low confidence.
+5. Next time the app opens, a quiet "1 new recipe needs a look" row appears at the top of Recipes if the extraction had low confidence, opening the Needs a Look smart collection (decided Oct 17, 2026, 04 §5.1 "Review prompt"; Cook shows only what is cooking).
 
 Fix-up: every imported recipe opens in the same editable structure as a manual one. The source URL and a "Reader tips" placeholder stay attached.
 
@@ -103,7 +103,7 @@ Recipes → Add → New recipe. A single scrolling form: title, source (free tex
 
 1. Plan → Event → Shopping list (also reachable from Plan → Shopping lists).
 2. List grouped by stop (Whole Foods, Butcher, Fishmonger) and within each by store section. Pantry items you have are hidden under "Have at home (8)"; tap to move one back to the list.
-3. Check items off; it syncs to the other device. Long-press an item to see which recipes need it and the per-recipe quantities.
+3. Check items off; it syncs to the other device. Long-press an item to see which recipes need it and the per-recipe quantities. Produce is aggregated through ingredient equivalents ("142 mL orange juice (about 3 oranges)" and "2 tbsp orange zest (about 2 oranges)" list as "5–6 oranges" with both uses under it), with KnowledgeBase yields filling in where a recipe gives none (04 §5.1 "Ingredient lines").
 4. Share as text or to Reminders for someone without the app. Optional Instacart link.
 
 ### Flow H — Prep across days (the workback schedule)
@@ -211,7 +211,7 @@ The split matters for two reasons. The Scheduler and Units packages are pure Swi
 ```
 Book (…, reviewedLayouts[]) ──< BookSection ──< BookEntry (title, page, status: listed | captured | reviewed)
 Book ──< Recipe ; Book ──< Source
-Recipe ──< RecipeVersion (current; captureConfidence, needsReview) ──< Ingredient (qty rational, unit, item, prep, optional, group)
+Recipe ──< RecipeVersion (current; captureConfidence, needsReview) ──< Ingredient (qty rational, unit, item, prep, note, equivalent count + produce item, optional, group)
 RecipeVersion ──< Step (text as written, order) ──< StepAnnotation (kind: active | passive | lead, minutes or durationFormula: fixed + perUnit × input, attention: locked | intermittent | none, equipment, waits, component, parallelHint, holdRule) ──< RecipeImage (role: stepPhoto, from import, scan or your camera)
 Recipe ──< RecipeImage (role: photo | pageScan | cookPhoto | stepPhoto; step?, cookSession?; externalStorage)
 Recipe ──< RecipeLink (subRecipe, role: component | variation | reference)
