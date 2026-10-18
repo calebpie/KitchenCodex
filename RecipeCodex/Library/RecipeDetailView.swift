@@ -42,6 +42,16 @@ struct RecipeDetailView: View {
     private var preferredSystem: MeasurementSystem { profiles.first?.unitPreference.measurementSystem ?? .us }
     /// Pantry → Profile → Temperature; °F until a profile exists.
     private var temperatureScale: TemperatureScale { profiles.first?.temperaturePreference.temperatureScale ?? .fahrenheit }
+    /// Temperatures follow More → Units like amounts do, so a reading never mixes °F and °C:
+    /// Preferred is the Profile's unit, US °F, Metric °C, and As Written converts none.
+    private var shownTemperatureScale: TemperatureScale? {
+        switch units {
+        case .preferred: temperatureScale
+        case .us: .fahrenheit
+        case .metric: .celsius
+        case .asWritten: nil
+        }
+    }
     private var hasHero: Bool { recipe.coverImageData != nil }
     /// iPad with room to spare: ingredients and steps side by side (03 §3.3).
     private var isSideBySide: Bool { sizeClass == .regular && contentWidth >= 820 }
@@ -127,7 +137,7 @@ struct RecipeDetailView: View {
                         recipe.isFavorite.toggle()
                     }
                     AddToCollectionMenu(recipe: recipe) { isNamingCollection = true }
-                    if let version, hasMeasuredIngredients(version) {
+                    if let version, hasMeasuredIngredients(version) || hasTemperatures(version) {
                         Divider()
                         Picker(selection: $units) {
                             ForEach(UnitChoice.allCases) { choice in
@@ -355,6 +365,13 @@ struct RecipeDetailView: View {
         version.sortedIngredients.contains { $0.cookingUnit?.isConvertible == true }
     }
 
+    /// Units also chooses °F or °C, so it shows for a recipe whose only measures are temperatures.
+    private func hasTemperatures(_ version: RecipeVersion) -> Bool {
+        let texts = version.sortedSteps.map(\.text) + [version.notes, recipe.headnote]
+            + version.sortedIngredients.flatMap { [$0.item, $0.preparation ?? "", $0.note ?? ""] }
+        return texts.contains(where: StepText.hasTemperatures)
+    }
+
     // MARK: - Content
 
     private func ingredientsSection(for version: RecipeVersion) -> some View {
@@ -387,7 +404,7 @@ struct RecipeDetailView: View {
                             .accessibilityAddTraits(.isHeader)
                     }
                     ForEach(group.ingredients) { ingredient in
-                        IngredientLine(ingredient: ingredient, factor: factor, units: units, preferred: preferredSystem)
+                        IngredientLine(ingredient: ingredient, factor: factor, units: units, preferred: preferredSystem, temperatureScale: shownTemperatureScale)
                     }
                 }
             }
@@ -427,7 +444,6 @@ struct RecipeDetailView: View {
     private func stepRow(_ step: Step, number: Int) -> some View {
         let photos = step.sortedPhotos
         let stacksPhoto = dynamicTypeSize.isAccessibilitySize
-        let originals = StepText.conversions(in: step.text, scale: temperatureScale).map(\.original)
         HStack(alignment: stacksPhoto && !photos.isEmpty ? .top : .firstTextBaseline, spacing: 12) {
             Text("\(number)")
                 .font(.headline)
@@ -439,11 +455,9 @@ struct RecipeDetailView: View {
                 if stacksPhoto, !photos.isEmpty {
                     stepThumbnail(step, photos: photos, number: number)
                 }
-                StepTextView(text: step.text, scale: temperatureScale, exclusion: stacksPhoto || photos.isEmpty ? nil : StepPhotoThumbnail.size)
-                    // Temperatures read in the preferred unit, spelled out.
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("Step \(number). \(StepText.spoken(step.text, in: temperatureScale))")
-                    .accessibilityCustomContent("As Written", originals.joined(separator: "; "), importance: .default)
+                StepTextView(text: step.text, scale: shownTemperatureScale, exclusion: stacksPhoto || photos.isEmpty ? nil : StepPhotoThumbnail.size)
+                    // Temperatures read in the shown unit, spelled out, with As Written as an action.
+                    .temperatureTextAccessibility(step.text, scale: shownTemperatureScale, prefix: "Step \(number).")
                     .overlay(alignment: .topTrailing) {
                         if !stacksPhoto, !photos.isEmpty {
                             stepThumbnail(step, photos: photos, number: number)
@@ -463,10 +477,11 @@ struct RecipeDetailView: View {
         .buttonStyle(.plain)
     }
 
+    /// The headnote and the notes use the step view, so their temperatures are pills too.
     private var headnoteSection: some View {
         DisclosureGroup {
-            Text(recipe.headnote)
-                .fixedSize(horizontal: false, vertical: true)
+            StepTextView(text: recipe.headnote, scale: shownTemperatureScale)
+                .temperatureTextAccessibility(recipe.headnote, scale: shownTemperatureScale)
                 .padding(.top, 8)
                 .frame(maxWidth: .infinity, alignment: .leading)
         } label: {
@@ -478,8 +493,8 @@ struct RecipeDetailView: View {
     private func notesSection(_ notes: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             SectionTitle("Notes")
-            Text(notes)
-                .fixedSize(horizontal: false, vertical: true)
+            StepTextView(text: notes, scale: shownTemperatureScale)
+                .temperatureTextAccessibility(notes, scale: shownTemperatureScale)
         }
     }
 
@@ -550,13 +565,16 @@ enum UnitChoice: String, CaseIterable, Identifiable {
 
 /// One ingredient, scaled and converted: the amount bold, the item in the primary color, and the
 /// preparation, note and "(optional)" in the secondary color at the same size and weight
-/// (04 §5.1 Ingredient lines). Long-press shows the line as written.
+/// (04 §5.1 Ingredient lines). A temperature in the words ("oil, heated to 350°F") is a pill in the
+/// shown unit, as in steps. Long-press shows the line as written.
 private struct IngredientLine: View {
     let ingredient: Ingredient
     let factor: Rational
     let units: UnitChoice
     /// The Profile's units preference.
     let preferred: MeasurementSystem
+    /// The unit temperatures are shown in; nil keeps them as written.
+    let temperatureScale: TemperatureScale?
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
@@ -564,8 +582,14 @@ private struct IngredientLine: View {
                 .font(.system(size: 5))
                 .foregroundStyle(.tertiary)
                 .accessibilityHidden(true)
-            line
-                .contentTransition(.numericText())
+            if hasTemperatures {
+                // The renderer draws the capsules; it takes the place of the numeric transition.
+                line
+                    .textRenderer(TemperaturePillRenderer())
+            } else {
+                line
+                    .contentTransition(.numericText())
+            }
         }
         .fixedSize(horizontal: false, vertical: true)
         .animation(.default, value: amount)
@@ -577,14 +601,20 @@ private struct IngredientLine: View {
         }
     }
 
+    private var itemText: String { ingredient.item.isEmpty ? ingredient.rawText : ingredient.item }
+
+    private var hasTemperatures: Bool {
+        [itemText, ingredient.preparation ?? "", ingredient.note ?? ""].contains(where: StepText.hasTemperatures)
+    }
+
     private var line: Text {
-        let item = Text(ingredient.item.isEmpty ? ingredient.rawText : ingredient.item)
+        let item = Text.withTemperaturePills(itemText, scale: temperatureScale, isSecondary: false)
         var text = item
         if let amount {
             text = Text("\(Text(amount).fontWeight(.semibold).monospacedDigit()) \(item)")
         }
         if let detail {
-            text = Text("\(text)\(Text(detail).foregroundStyle(.secondary))")
+            text = Text("\(text)\(detail)")
         }
         return text
     }
@@ -620,15 +650,15 @@ private struct IngredientLine: View {
         return isScaled ? own : nil
     }
 
-    /// Everything after the item: ", bone-in, thinly sliced", ", to taste", " (about 3 oranges)",
-    /// " (optional)".
-    private var detail: String? {
+    /// Everything after the item, in the secondary color: ", bone-in, thinly sliced", ", to taste",
+    /// " (about 3 oranges)", " (optional)", with temperatures as pills.
+    private var detail: Text? {
         var text = ""
         if let preparation = ingredient.preparation, !preparation.isEmpty { text += ", \(preparation)" }
         if ingredient.cookingUnit == .toTaste { text += ", to taste" }
         if let note = ingredient.note, !note.isEmpty { text += " (\(note))" }
         if ingredient.isOptional { text += " (optional)" }
-        return text.isEmpty ? nil : text
+        return text.isEmpty ? nil : Text.withTemperaturePills(text, scale: temperatureScale)
     }
 }
 

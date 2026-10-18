@@ -5,8 +5,10 @@ import Units
 
 /// A step's text as written, with each temperature shown as a pill in the cook's preferred unit
 /// (03 §3.3 and §3.12, 04 §5.1 Temperatures): "Roast at 220°C (200°C fan)" reads "Roast at 425°F"
-/// for a Fahrenheit cook. The original wording is kept; the edit menu shows it as written.
-/// `StepTextView` lays the text out; this type finds the temperatures and what they read.
+/// for a Fahrenheit cook. The original wording is kept; tapping the pill or the edit menu shows it
+/// as written (04 §5.1 Step pills). The headnote, the notes and ingredient lines use the same parts.
+/// `StepTextView` lays the text out; this type finds the temperatures and what they read. A nil
+/// scale (Units → As Written) keeps every temperature as written, still marked as a pill.
 enum StepText {
     enum Part: Equatable {
         case text(String)
@@ -15,14 +17,15 @@ enum StepText {
     }
 
     /// The text split around every temperature `TemperatureParser` finds.
-    static func parts(of text: String, in scale: TemperatureScale) -> [Part] {
+    static func parts(of text: String, in scale: TemperatureScale?) -> [Part] {
         var parts: [Part] = []
         var position = text.startIndex
         for mention in TemperatureParser.mentions(in: text) {
             if position < mention.range.lowerBound {
                 parts.append(.text(String(text[position..<mention.range.lowerBound])))
             }
-            parts.append(.temperature(shown: shown(mention.temperature, in: scale), original: mention.originalText))
+            let shown = scale.map { shown(mention.temperature, in: $0) } ?? mention.originalText
+            parts.append(.temperature(shown: shown, original: mention.originalText))
             position = mention.range.upperBound
         }
         if position < text.endIndex {
@@ -58,7 +61,8 @@ enum StepText {
     static let sameTemperatureSpread = Rational(12)
 
     /// The step as VoiceOver should read it: temperatures in the preferred unit, spelled out.
-    static func spoken(_ text: String, in scale: TemperatureScale) -> String {
+    static func spoken(_ text: String, in scale: TemperatureScale?) -> String {
+        guard let scale else { return text }
         var result = ""
         var position = text.startIndex
         for mention in TemperatureParser.mentions(in: text) {
@@ -69,8 +73,13 @@ enum StepText {
         return result + text[position...]
     }
 
+    /// Whether `text` mentions a temperature at all.
+    static func hasTemperatures(_ text: String) -> Bool {
+        !TemperatureParser.mentions(in: text).isEmpty
+    }
+
     /// Temperatures whose pill differs from what the recipe wrote, as (shown, original) pairs.
-    static func conversions(in text: String, scale: TemperatureScale) -> [(shown: String, original: String)] {
+    static func conversions(in text: String, scale: TemperatureScale?) -> [(shown: String, original: String)] {
         parts(of: text, in: scale).compactMap { part in
             guard case let .temperature(shown, original) = part, shown != original else { return nil }
             return (shown, original)
@@ -95,28 +104,78 @@ extension TemperaturePreference {
 /// once the text passes its bottom it runs the full width. SwiftUI `Text` cannot wrap around a
 /// view, so this is a non-editable, non-scrolling `UITextView` with an exclusion path. It keeps
 /// Dynamic Type, text selection, the temperature pills (capsules drawn behind the ranges
-/// `StepText` finds) and As Written, which joins the edit menu for a selected temperature.
+/// `StepText` finds) and As Written, which joins the edit menu for a selected temperature. A pill
+/// is a button (04 §5.1 Step pills): a tap shows a small popover anchored to it with the value
+/// shown and the wording as written; a long-press still selects text. The headnote and the notes
+/// use the same view, without a thumbnail.
 struct StepTextView: View {
     let text: String
-    let scale: TemperatureScale
+    let scale: TemperatureScale?
     /// The thumbnail the text flows around, or nil for none.
     var exclusion: CGSize?
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @State private var tappedPill: TappedPill?
+
+    /// The pill a tap landed on, and where it sits in this view.
+    struct TappedPill: Identifiable, Equatable {
+        let id: Int
+        let shown: String
+        let original: String
+        let rect: CGRect
+    }
 
     var body: some View {
         let font = StepTextLayout.font(for: dynamicTypeSize)
-        StepTextLayout(text: text, scale: scale, exclusion: exclusion, font: font)
-            // The step number sits on the first line's baseline.
-            .alignmentGuide(.firstTextBaseline) { _ in font.ascender }
+        StepTextLayout(text: text, scale: scale, exclusion: exclusion, font: font) { pill in
+            tappedPill = pill
+        }
+        // The step number sits on the first line's baseline.
+        .alignmentGuide(.firstTextBaseline) { _ in font.ascender }
+        .popover(item: $tappedPill, attachmentAnchor: .rect(.rect(tappedPill?.rect ?? .zero))) { pill in
+            AsWrittenPopover(shown: pill.shown, original: pill.original)
+                .presentationCompactAdaptation(.popover)
+        }
+    }
+}
+
+/// What a tapped temperature says: the value as shown, then the recipe's own words.
+private struct AsWrittenPopover: View {
+    let shown: String
+    let original: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(shown)
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(.tint)
+            if original == shown {
+                Text("As written.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            } else {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("As Written")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    Text(original)
+                        .font(.body)
+                }
+                .accessibilityElement(children: .combine)
+            }
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .padding(16)
+        .frame(minWidth: 180, idealWidth: 260, maxWidth: 320, alignment: .leading)
     }
 }
 
 private struct StepTextLayout: UIViewRepresentable {
     let text: String
-    let scale: TemperatureScale
+    let scale: TemperatureScale?
     let exclusion: CGSize?
     let font: UIFont
+    let onTapPill: (StepTextView.TappedPill) -> Void
 
     /// The body style at the environment's Dynamic Type size.
     static func font(for size: DynamicTypeSize) -> UIFont {
@@ -146,6 +205,10 @@ private struct StepTextLayout: UIViewRepresentable {
         let (attributed, pills) = Self.attributedText(text, scale: scale, font: font)
         context.coordinator.pills = pills
         view.configure(text: attributed, pills: pills.map(\.range), exclusion: exclusion)
+        view.onTapPill = { index, rect in
+            guard pills.indices.contains(index) else { return }
+            onTapPill(.init(id: index, shown: pills[index].shown, original: pills[index].original, rect: rect))
+        }
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, uiView view: StepUITextView, context: Context) -> CGSize? {
@@ -155,7 +218,7 @@ private struct StepTextLayout: UIViewRepresentable {
 
     /// The step with each temperature as a semibold, tinted run padded by narrow no-break spaces,
     /// and where each run is, with what the recipe wrote.
-    static func attributedText(_ text: String, scale: TemperatureScale, font: UIFont) -> (NSAttributedString, [Coordinator.Pill]) {
+    static func attributedText(_ text: String, scale: TemperatureScale?, font: UIFont) -> (NSAttributedString, [Coordinator.Pill]) {
         let result = NSMutableAttributedString()
         var pills: [Coordinator.Pill] = []
         let plain: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: UIColor.label]
@@ -197,21 +260,45 @@ private struct StepTextLayout: UIViewRepresentable {
     }
 }
 
-/// The text view behind `StepTextView`: sizes itself for a width with the exclusion in place and
-/// draws a capsule behind each temperature.
+/// The text view behind `StepTextView`: sizes itself for a width with the exclusion in place,
+/// draws a capsule behind each temperature, and reports a tap on one.
 final class StepUITextView: UITextView {
     /// Space between the text and the thumbnail beside it, and below it.
     private static let exclusionGap = CGSize(width: 12, height: 8)
 
+    /// Called with the pill's index and its capsule's rect when a tap lands on a temperature.
+    var onTapPill: ((Int, CGRect) -> Void)?
+
     private var exclusion: CGSize?
     private var pillRanges: [NSRange] = []
     private var pillLayers: [CAShapeLayer] = []
+    /// Each capsule's rect with the index of its pill; a pill that wraps has one per line.
+    private var pillRects: [(index: Int, rect: CGRect)] = []
     private var laidOutWidth: CGFloat = -1
+    private let pillTapDelegate = PillTapDelegate()
 
     override init(frame: CGRect, textContainer: NSTextContainer?) {
         super.init(frame: frame, textContainer: textContainer)
         registerForTraitChanges([UITraitUserInterfaceStyle.self, UITraitAccessibilityContrast.self]) { (view: StepUITextView, _) in
             view.updatePills()
+        }
+        let tap = UITapGestureRecognizer(target: self, action: #selector(tapped))
+        pillTapDelegate.textView = self
+        tap.delegate = pillTapDelegate
+        addGestureRecognizer(tap)
+    }
+
+    @objc private func tapped(_ recognizer: UITapGestureRecognizer) {
+        // A held touch is the text view's long-press, which selects; only a quick one is a tap.
+        guard ProcessInfo.processInfo.systemUptime - pillTapDelegate.touchBegan < PillTapDelegate.longestTap,
+              let hit = pill(at: recognizer.location(in: self)) else { return }
+        onTapPill?(hit.index, hit.rect)
+    }
+
+    /// The pill under `point`, with a hit area grown to the 44 pt minimum height.
+    fileprivate func pill(at point: CGPoint) -> (index: Int, rect: CGRect)? {
+        pillRects.first { _, rect in
+            rect.insetBy(dx: -4, dy: -max(4, (44 - rect.height) / 2)).contains(point)
         }
     }
 
@@ -257,12 +344,15 @@ final class StepUITextView: UITextView {
         guard let layoutManager = textLayoutManager, let content = layoutManager.textContentManager else { return }
         layoutManager.ensureLayout(for: layoutManager.documentRange)
         var rects: [CGRect] = []
-        for range in pillRanges {
+        pillRects = []
+        for (index, range) in pillRanges.enumerated() {
             guard let start = content.location(content.documentRange.location, offsetBy: range.location),
                   let end = content.location(start, offsetBy: range.length),
                   let textRange = NSTextRange(location: start, end: end) else { continue }
             layoutManager.enumerateTextSegments(in: textRange, type: .standard, options: []) { _, rect, _, _ in
-                rects.append(rect.insetBy(dx: 0, dy: 1))
+                let capsule = rect.insetBy(dx: 0, dy: 1)
+                rects.append(capsule)
+                pillRects.append((index, capsule))
                 return true
             }
         }
@@ -280,5 +370,95 @@ final class StepUITextView: UITextView {
             pill.path = UIBezierPath(roundedRect: rect, cornerRadius: rect.height / 2).cgPath
             pill.fillColor = fill
         }
+    }
+}
+
+/// The pill tap's delegate, kept apart from the text view so none of `UITextView`'s own gesture
+/// handling is overridden: the tap begins only on a pill, and alongside the text view's taps.
+private final class PillTapDelegate: NSObject, UIGestureRecognizerDelegate {
+    /// Seconds a touch may be held and still count as a tap.
+    static let longestTap: TimeInterval = 0.4
+
+    weak var textView: StepUITextView?
+    /// When the current touch began, on the system uptime clock `UITouch` uses.
+    private(set) var touchBegan: TimeInterval = 0
+
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        touchBegan = touch.timestamp
+        return true
+    }
+
+    func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        guard let textView else { return false }
+        return textView.pill(at: gestureRecognizer.location(in: textView)) != nil
+    }
+
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+        true
+    }
+}
+
+// MARK: - Accessibility
+
+extension View {
+    /// One element reading `text` with its temperatures spelled out in `scale`, after `prefix`
+    /// ("Step 2."), with the originals as custom content and an As Written action that reads them
+    /// (04 §5.1 Step pills).
+    func temperatureTextAccessibility(_ text: String, scale: TemperatureScale?, prefix: String? = nil) -> some View {
+        let originals = StepText.conversions(in: text, scale: scale).map(\.original)
+        return accessibilityElement(children: .ignore)
+            .accessibilityLabel([prefix, StepText.spoken(text, in: scale)].compactMap(\.self).joined(separator: " "))
+            .accessibilityCustomContent("As Written", originals.joined(separator: "; "), importance: .default)
+            .accessibilityActions {
+                if !originals.isEmpty {
+                    Button("As Written") {
+                        AccessibilityNotification.Announcement("As written: \(originals.joined(separator: "; "))").post()
+                    }
+                }
+            }
+    }
+}
+
+// MARK: - Pills in SwiftUI text
+
+/// Marks a run of SwiftUI `Text` as a temperature, so `TemperaturePillRenderer` draws a capsule
+/// behind it: ingredient lines, which stay `Text`, use the same pill as steps.
+struct TemperaturePillAttribute: TextAttribute {}
+
+/// Draws a tinted capsule behind each run marked with `TemperaturePillAttribute`, under the text.
+struct TemperaturePillRenderer: TextRenderer {
+    func draw(layout: Text.Layout, in context: inout GraphicsContext) {
+        for line in layout {
+            for run in line where run[TemperaturePillAttribute.self] != nil {
+                let rect = run.typographicBounds.rect.insetBy(dx: 0, dy: 1)
+                context.fill(Capsule().path(in: rect), with: .color(Color.accentColor.opacity(0.16)))
+            }
+            for run in line {
+                context.draw(run)
+            }
+        }
+    }
+}
+
+extension Text {
+    /// `text` with each temperature as a pill in `scale` (a semibold, tinted run padded by narrow
+    /// no-break spaces, like the step view's), the other words in the primary or secondary color,
+    /// for ingredient lines.
+    static func withTemperaturePills(_ text: String, scale: TemperatureScale?, isSecondary: Bool = true) -> Text {
+        var result = Text(verbatim: "")
+        for part in StepText.parts(of: text, in: scale) {
+            switch part {
+            case let .text(words):
+                let plain = Text(verbatim: words)
+                result = Text("\(result)\(isSecondary ? plain.foregroundStyle(.secondary) : plain)")
+            case let .temperature(shown, _):
+                let pill = Text(verbatim: "\u{202F}\(shown)\u{202F}")
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.tint)
+                    .customAttribute(TemperaturePillAttribute())
+                result = Text("\(result)\(pill)")
+            }
+        }
+        return result
     }
 }
