@@ -4,7 +4,8 @@ import SwiftData
 import SwiftUI
 
 /// Collections the cook makes (03 §3.2): New Collection in Recipes' More menu, Add to Collection in
-/// the long-press menu and on detail, the iPad sidebar, and the Collection chip on iPhone.
+/// the long-press menu, on detail and in Select mode, the iPad sidebar, and on iPhone the Collection
+/// filter and the Collections list.
 enum CollectionActions {
     /// Collections in their sidebar order.
     static let sortDescriptors = [SortDescriptor(\RecipeCollection.sortOrder), SortDescriptor(\RecipeCollection.createdAt)]
@@ -31,6 +32,17 @@ enum CollectionActions {
     /// Deletes the collection; its recipes stay in the library.
     static func delete(_ collection: RecipeCollection, in context: ModelContext) {
         context.delete(collection)
+        try? context.save()
+    }
+
+    /// Moves collections in the cook's order (Edit in the iPad sidebar, the iPhone Collections list)
+    /// and renumbers every `sortOrder` from 0.
+    static func move(_ collections: [RecipeCollection], from source: IndexSet, to destination: Int, in context: ModelContext) {
+        var ordered = collections
+        ordered.move(fromOffsets: source, toOffset: destination)
+        for (index, collection) in ordered.enumerated() where collection.sortOrder != index {
+            collection.sortOrder = index
+        }
         try? context.save()
     }
 
@@ -66,6 +78,87 @@ struct AddToCollectionMenu: View {
             Button("New Collection…", systemImage: "plus") { onNewCollection() }
         } label: {
             Label("Add to Collection", systemImage: "rectangle.stack.badge.plus")
+        }
+    }
+}
+
+/// iPhone: Recipes → More → Collections. The cook's collections in their order, each with its count;
+/// tap one to show it, Edit to reorder or delete, and Rename… or Delete from a row's menu or swipe.
+/// New Collection stays in More; on iPad the sidebar does all of this.
+struct CollectionsList: View {
+    /// Shows the collection's recipes.
+    let onShow: (RecipeCollection) -> Void
+    /// Called before a collection is deleted, so the host can clear a filter that names it.
+    let onDelete: (RecipeCollection) -> Void
+
+    @Environment(\.modelContext) private var modelContext
+    @Query(sort: CollectionActions.sortDescriptors) private var collections: [RecipeCollection]
+    @State private var renamingCollection: RecipeCollection?
+    @State private var deletingCollection: RecipeCollection?
+
+    var body: some View {
+        List {
+            ForEach(collections) { collection in
+                Button {
+                    onShow(collection)
+                } label: {
+                    Label(collection.name, systemImage: "rectangle.stack")
+                        .badge(collection.recipes?.count ?? 0)
+                }
+                .tint(.primary)
+                .contextMenu {
+                    Button("Rename…", systemImage: "pencil") { renamingCollection = collection }
+                    Button("Delete", systemImage: "trash", role: .destructive) { deletingCollection = collection }
+                }
+                .swipeActions(edge: .trailing) {
+                    Button("Delete", systemImage: "trash", role: .destructive) { deletingCollection = collection }
+                    Button("Rename", systemImage: "pencil") { renamingCollection = collection }
+                }
+            }
+            .onMove { source, destination in
+                CollectionActions.move(collections, from: source, to: destination, in: modelContext)
+            }
+            .onDelete { offsets in
+                deletingCollection = offsets.first.map { collections[$0] }
+            }
+        }
+        .overlay {
+            if collections.isEmpty {
+                ContentUnavailableView {
+                    Label("No Collections", systemImage: "rectangle.stack")
+                } description: {
+                    Text("Make one with New Collection in the Recipes More menu.")
+                }
+            }
+        }
+        .navigationTitle("Collections")
+        .toolbar {
+            if collections.count > 1 {
+                ToolbarItem(placement: .primaryAction) {
+                    EditButton()
+                }
+            }
+        }
+        .collectionNamePrompt(
+            "Rename Collection",
+            isPresented: Binding { renamingCollection != nil } set: { if !$0 { renamingCollection = nil } },
+            initialName: renamingCollection?.name ?? ""
+        ) { name in
+            renamingCollection?.name = name
+            try? modelContext.save()
+        }
+        .confirmationDialog(
+            "Delete “\(deletingCollection?.name ?? "")”?",
+            isPresented: Binding { deletingCollection != nil } set: { if !$0 { deletingCollection = nil } },
+            titleVisibility: .visible,
+            presenting: deletingCollection
+        ) { collection in
+            Button("Delete Collection", role: .destructive) {
+                onDelete(collection)
+                CollectionActions.delete(collection, in: modelContext)
+            }
+        } message: { _ in
+            Text("The recipes stay in your library.")
         }
     }
 }

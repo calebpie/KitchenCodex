@@ -28,7 +28,8 @@ enum LibraryScope: Hashable {
 }
 
 /// The Recipes sidebar on iPad: All Recipes, smart collections, the cook's collections, and Books.
-/// A recipe dragged from the list onto a collection joins it (03 §3.2, §4).
+/// A recipe dragged from the list onto a collection joins it (03 §3.2, §4); Edit reorders the
+/// collections.
 struct LibrarySidebar: View {
     @Binding var selection: LibraryScope?
 
@@ -70,6 +71,9 @@ struct LibrarySidebar: View {
                 ForEach(collections) { collection in
                     collectionRow(collection)
                 }
+                .onMove { source, destination in
+                    CollectionActions.move(collections, from: source, to: destination, in: modelContext)
+                }
                 Button {
                     isCreatingCollection = true
                 } label: {
@@ -89,6 +93,14 @@ struct LibrarySidebar: View {
             }
         }
         .listStyle(.sidebar)
+        .toolbar {
+            // Edit reorders the cook's collections; it needs two to move.
+            if collections.count > 1 {
+                ToolbarItem(placement: .primaryAction) {
+                    EditButton()
+                }
+            }
+        }
         .collectionNamePrompt("New Collection", isPresented: $isCreatingCollection, actionTitle: "Create") { name in
             let collection = CollectionActions.create(named: name, in: modelContext)
             selection = .collection(collection.persistentModelID)

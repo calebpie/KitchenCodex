@@ -2,10 +2,11 @@ import RecipeModel
 import SwiftData
 import SwiftUI
 
-/// What the iPhone Recipes stack pushes: a recipe, or Needs a Look.
+/// What the iPhone Recipes stack pushes: a recipe, Needs a Look, or the Collections list.
 enum LibraryRoute: Hashable {
     case recipe(Recipe)
     case needsReview
+    case collections
 }
 
 /// The library, with a view switch between the recipe collection and the cookbook shelf (03 §3.2, §3.7).
@@ -170,6 +171,13 @@ struct RecipesView: View {
                 switch route {
                 case let .recipe(recipe): RecipeDetailView(recipe: recipe)
                 case .needsReview: NeedsALookView()
+                case .collections:
+                    CollectionsList { collection in
+                        filter.collection = collection.persistentModelID
+                        path.removeLast()
+                    } onDelete: { collection in
+                        if filter.collection == collection.persistentModelID { filter.collection = nil }
+                    }
                 }
             }
             .toolbar { libraryToolbar }
@@ -444,6 +452,12 @@ struct RecipesView: View {
                     Divider()
                     Button("New Collection…", systemImage: "rectangle.stack.badge.plus") {
                         isCreatingCollection = true
+                    }
+                    // iPhone: rename, reorder and delete in a list; iPad has the sidebar.
+                    if !isSplit, !collections.isEmpty {
+                        Button("Collections", systemImage: "rectangle.stack") {
+                            path.append(.collections)
+                        }
                     }
                     if let collection = currentCollection {
                         Button("Rename “\(collection.name)”…", systemImage: "pencil") {
