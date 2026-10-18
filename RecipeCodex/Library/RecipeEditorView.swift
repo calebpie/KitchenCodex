@@ -353,7 +353,8 @@ struct ReadsAsRows: View {
     }
 }
 
-/// How the parser read one line: amount and unit in bold, then the item and preparation.
+/// How the parser read one line: amount and unit in bold, then the item, the preparation and the
+/// note, each on its own line (04 §5.1 Ingredient lines).
 struct ParsedIngredientRow: View {
     let parsed: ParsedIngredient
 
@@ -367,6 +368,11 @@ struct ParsedIngredientRow: View {
                 Text(parsed.item)
                 if let detail {
                     Text(detail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                if let note = parsed.note {
+                    Text("Note: \(note)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

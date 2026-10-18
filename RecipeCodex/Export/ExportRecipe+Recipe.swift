@@ -28,6 +28,7 @@ extension ExportRecipe {
                     quantity: ingredient.quantity,
                     item: ingredient.item.isEmpty ? ingredient.rawText : ingredient.item,
                     preparation: ingredient.preparation,
+                    note: ingredient.note,
                     isOptional: ingredient.isOptional
                 )
             },

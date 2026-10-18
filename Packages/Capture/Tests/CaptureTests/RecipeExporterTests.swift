@@ -15,7 +15,7 @@ struct RecipeExporterTests {
         cookMinutes: 70,
         totalMinutes: 85,
         ingredients: [
-            .init(quantity: Quantity(1), item: "whole chicken (4 lb)"),
+            .init(quantity: Quantity(1), item: "whole chicken", note: "about 4 lb"),
             .init(quantity: Quantity(Rational(3, 2), .teaspoon), item: "kosher salt"),
             .init(quantity: Quantity(.zero, .toTaste), item: "black pepper"),
             .init(group: "For the pan sauce", quantity: Quantity(1, .cup), item: "chicken stock"),
@@ -41,7 +41,7 @@ struct RecipeExporterTests {
 
         ## Ingredients
 
-        - **1** whole chicken (4 lb)
+        - **1** whole chicken (about 4 lb)
         - **1½ tsp** kosher salt
         - black pepper, to taste
 
@@ -74,7 +74,7 @@ struct RecipeExporterTests {
         Serves 4 · Prep 15 min · Cook 1 hr 10 min · Total 1 hr 25 min
 
         INGREDIENTS
-        - 1 whole chicken (4 lb)
+        - 1 whole chicken (about 4 lb)
         - 1½ tsp kosher salt
         - black pepper, to taste
 

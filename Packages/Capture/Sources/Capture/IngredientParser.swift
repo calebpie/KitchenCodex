@@ -1,7 +1,21 @@
 import Foundation
 import Units
 
-/// One ingredient line split into amount, unit, item and preparation.
+/// Produce a line comes from, as its note says: "about 3 oranges" is 3 and "oranges". Shopping
+/// (Phase 4) buys the produce rather than the juice or zest (04 §5.1 Ingredient lines).
+public struct ProduceEquivalent: Sendable, Equatable {
+    /// How many, exactly as written ("1 1/2 pears" is 3/2); a range keeps its low end, as amounts do.
+    public var count: Rational
+    /// The produce as written: "oranges", "large lemons", "onion".
+    public var item: String
+
+    public init(count: Rational, item: String) {
+        self.count = count
+        self.item = item
+    }
+}
+
+/// One ingredient line split into amount, unit, item, preparation and note.
 public struct ParsedIngredient: Sendable, Equatable {
     /// `nil` when the line names no amount ("salt to taste", "freshly ground pepper").
     public var quantity: Rational?
@@ -10,6 +24,12 @@ public struct ParsedIngredient: Sendable, Equatable {
     public var item: String
     /// Whatever follows the first comma: "finely chopped", "divided", "at room temperature".
     public var preparation: String?
+    /// Trailing asides that are neither preparation nor a unit equivalent, without their
+    /// parentheses: "about 3 oranges", "plus more for the pan", "ask your butcher to do this".
+    /// Several are joined with "; ".
+    public var note: String?
+    /// Set when the note counts the produce the line comes from ("about 3 oranges", "from 2 lemons").
+    public var equivalent: ProduceEquivalent?
     public var isOptional: Bool
     /// The line as typed, trimmed. Kept so nothing the parser misreads is lost.
     public var rawText: String
@@ -19,6 +39,8 @@ public struct ParsedIngredient: Sendable, Equatable {
         unit: CookingUnit? = nil,
         item: String,
         preparation: String? = nil,
+        note: String? = nil,
+        equivalent: ProduceEquivalent? = nil,
         isOptional: Bool = false,
         rawText: String = ""
     ) {
@@ -26,6 +48,8 @@ public struct ParsedIngredient: Sendable, Equatable {
         self.unit = unit
         self.item = item
         self.preparation = preparation
+        self.note = note
+        self.equivalent = equivalent
         self.isOptional = isOptional
         self.rawText = rawText
     }
@@ -37,7 +61,9 @@ public struct ParsedIngredient: Sendable, Equatable {
 /// Reads a leading amount (whole numbers, fractions, mixed numbers, decimals, Unicode fractions,
 /// "1-1/2", ranges such as "2-3" or "2 to 3", which keep the low end), an optional unit from
 /// `CookingUnit`, then the item, with anything after the first comma as preparation.
-/// "to taste" and "(optional)" are recognised anywhere in the line.
+/// "to taste" and "(optional)" are recognised anywhere in the line. Trailing parentheticals and
+/// closing clauses such as "plus more for the pan" are the note, and a note that counts produce
+/// ("about 3 oranges") also gives the equivalent.
 public enum IngredientParser {
     /// Parses each non-blank line of `text`.
     public static func parseLines(_ text: String) -> [ParsedIngredient] {
@@ -57,8 +83,10 @@ public enum IngredientParser {
         }
 
         var saysToTaste = false
+        var saysToTasteAtEnd = false
         if let range = text.range(of: #",?\s*\(?\s*(or\s+)?\bto taste\b\s*\)?"#, options: [.regularExpression, .caseInsensitive]) {
             saysToTaste = true
+            saysToTasteAtEnd = text[range.upperBound...].trimmingCharacters(in: .whitespaces).isEmpty
             text.removeSubrange(range)
         }
 
@@ -85,13 +113,28 @@ public enum IngredientParser {
         if unit == .ounce, LiquidIngredients.ouncesAreFluid(item: item, equivalent: equivalentUnit) {
             unit = .fluidOunce
         }
+
+        // Notes, in the order the line gives them: the item's trailing parentheticals, the
+        // preparation's, then closing clauses ("plus more for the pan").
+        let itemNotes = takeTrailingParentheticals(&item)
+        var clauseNote: String?
+        var preparationNotes: [String] = []
+        if var prep = preparation {
+            clauseNote = takeNoteClauses(&prep)
+            preparationNotes = takeTrailingParentheticals(&prep)
+            preparation = prep.isEmpty ? nil : prep
+        }
         if saysToTaste {
             if quantity == nil {
                 unit = .toTaste
+            } else if let note = clauseNote, saysToTasteAtEnd {
+                // "plus more to taste" stays one note.
+                clauseNote = "\(note) to taste"
             } else {
                 preparation = [preparation, "to taste"].compactMap(\.self).joined(separator: ", ")
             }
         }
+        let notes = itemNotes + preparationNotes + [clauseNote].compactMap(\.self)
         if item.isEmpty, let prep = preparation {
             item = prep
             preparation = nil
@@ -102,6 +145,8 @@ public enum IngredientParser {
             unit: unit,
             item: item,
             preparation: preparation,
+            note: notes.isEmpty ? nil : notes.joined(separator: "; "),
+            equivalent: notes.lazy.compactMap(produceEquivalent(in:)).first,
             isOptional: isOptional,
             rawText: rawText
         )
@@ -136,6 +181,8 @@ public enum IngredientParser {
         }
         // "500g" → "500 g", "2tbsp" → "2 tbsp".
         result = result.replacingOccurrences(of: #"(\d)([A-Za-z])"#, with: "$1 $2", options: .regularExpression)
+        // "½-inch" stays one word: "1/2-inch", not "1/2 -inch".
+        result = result.replacingOccurrences(of: #"(\d/\d+) -(?=[A-Za-z])"#, with: "$1-", options: .regularExpression)
         return result
     }
 
@@ -263,14 +310,113 @@ public enum IngredientParser {
 
     // MARK: - Item and preparation
 
+    /// The item is everything before the first comma outside parentheses, so "orange juice (from
+    /// 3 oranges, strained)" keeps its parenthetical whole.
     private static func splitPreparation(_ text: String) -> (item: String, preparation: String?) {
         let cleaned = text
             .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
             .trimmingCharacters(in: CharacterSet.whitespaces.union(CharacterSet(charactersIn: ",;")))
-        guard let comma = cleaned.firstIndex(of: ",") else { return (cleaned, nil) }
+        guard let comma = topLevelCommas(in: cleaned).first else { return (cleaned, nil) }
         let item = cleaned[..<comma].trimmingCharacters(in: .whitespaces)
         let preparation = cleaned[cleaned.index(after: comma)...].trimmingCharacters(in: CharacterSet.whitespaces.union(CharacterSet(charactersIn: ",")))
         return (item, preparation.isEmpty ? nil : preparation)
+    }
+
+    /// The commas in `text` that are not inside parentheses.
+    private static func topLevelCommas(in text: String) -> [String.Index] {
+        var depth = 0
+        var commas: [String.Index] = []
+        for index in text.indices {
+            switch text[index] {
+            case "(": depth += 1
+            case ")": depth = max(0, depth - 1)
+            case "," where depth == 0: commas.append(index)
+            default: break
+            }
+        }
+        return commas
+    }
+
+    // MARK: - Notes
+
+    /// Removes the parentheticals that end `text` ("orange juice (about 3 oranges)") and returns
+    /// their contents in order. A parenthetical must stand as its own word, so "stick(s)" stays,
+    /// and is never the whole text, so "(14 oz) can" keeps its can.
+    private static func takeTrailingParentheticals(_ text: inout String) -> [String] {
+        var notes: [String] = []
+        while true {
+            let trimmed = text.trimmingCharacters(in: .whitespaces)
+            guard trimmed.hasSuffix(")") else { break }
+            var depth = 0
+            var opening: String.Index?
+            for index in trimmed.indices.reversed() {
+                if trimmed[index] == ")" { depth += 1 }
+                if trimmed[index] == "(" {
+                    depth -= 1
+                    if depth == 0 { opening = index; break }
+                }
+            }
+            guard let opening, opening > trimmed.startIndex,
+                  trimmed[trimmed.index(before: opening)].isWhitespace else { break }
+            let remaining = trimmed[..<opening].trimmingCharacters(in: CharacterSet.whitespaces.union(CharacterSet(charactersIn: ",;")))
+            let inner = trimmed[trimmed.index(after: opening)..<trimmed.index(before: trimmed.endIndex)].trimmingCharacters(in: .whitespaces)
+            guard !remaining.isEmpty else { break }
+            text = remaining
+            if !inner.isEmpty { notes.insert(inner, at: 0) }
+        }
+        return notes
+    }
+
+    /// Clauses that say what a line is for or how much more to have, not how to prepare it:
+    /// "plus more for the pan", "for serving", "about a handful", "if using", "such as Maldon".
+    private static let noteClause = #"^(plus|about|approximately|approx\.?|roughly|around|from|such as|like|preferably|ideally|if|as needed|or as needed|or more|for|to serve|to garnish|to finish|see)\b"#
+
+    /// Removes the closing run of note clauses from a preparation ("softened, plus more for the
+    /// pan" keeps "softened") and returns them as written.
+    private static func takeNoteClauses(_ preparation: inout String) -> String? {
+        var start = preparation.startIndex
+        var clauses: [(start: String.Index, text: String)] = []
+        for comma in topLevelCommas(in: preparation) + [preparation.endIndex] {
+            clauses.append((start, preparation[start..<comma].trimmingCharacters(in: .whitespaces)))
+            if comma < preparation.endIndex { start = preparation.index(after: comma) }
+        }
+        var first: String.Index?
+        for clause in clauses.reversed() {
+            guard clause.text.range(of: noteClause, options: [.regularExpression, .caseInsensitive]) != nil else { break }
+            first = clause.start
+        }
+        guard let first else { return nil }
+        let note = preparation[first...].trimmingCharacters(in: CharacterSet.whitespaces.union(CharacterSet(charactersIn: ",")))
+        preparation = preparation[..<first].trimmingCharacters(in: CharacterSet.whitespaces.union(CharacterSet(charactersIn: ",")))
+        return note.isEmpty ? nil : note
+    }
+
+    /// Words that name a size, not a thing, so "(2 large)" counts nothing.
+    private static let sizeWords: Set<String> = ["small", "medium", "large", "extra-large", "jumbo", "whole", "big"]
+
+    /// Packaging, portions and lengths: counted, but not produce to buy.
+    private static let nonProduceWords: Set<String> = [
+        "can", "cans", "tin", "tins", "jar", "jars", "package", "packages", "pkg", "packet", "packets",
+        "box", "boxes", "bag", "bags", "bottle", "bottles", "carton", "cartons", "container", "containers",
+        "tube", "tubes", "stick", "sticks", "slice", "slices", "serving", "servings", "portion", "portions",
+        "batch", "batches", "handful", "handfuls", "inch", "inches", "cm", "minute", "minutes", "hour", "hours",
+        "total", "each",
+    ]
+
+    /// "about 3 oranges", "from 2 lemons", "about 1 1/2 pears", "2 lemons": a count and the
+    /// produce it counts. Measures ("about 12 ounces"), bare counts ("about 12"), sizes ("2 large"),
+    /// packaging ("5 (10-ounce) packages") and alternatives ("or 1/2 teaspoon dried thyme") are not.
+    static func produceEquivalent(in note: String) -> ProduceEquivalent? {
+        let text = normalize(note)
+            .replacingOccurrences(of: #"^(from about|about|approximately|approx\.?|roughly|around|from|made from)\s+"#, with: "", options: [.regularExpression, .caseInsensitive])
+        var tokens = Tokens(text)
+        guard let count = readQuantity(&tokens), count > .zero, readUnit(&tokens) == nil else { return nil }
+        let words = tokens.remainder.split(separator: " ").map(String.init)
+        guard (1...4).contains(words.count),
+              words.allSatisfy({ $0.allSatisfy { $0.isLetter || $0 == "-" || $0 == "'" || $0 == "’" } }),
+              !words.allSatisfy({ sizeWords.contains($0.lowercased()) }),
+              !words.contains(where: { nonProduceWords.contains($0.lowercased()) }) else { return nil }
+        return ProduceEquivalent(count: count, item: words.joined(separator: " "))
     }
 }
 

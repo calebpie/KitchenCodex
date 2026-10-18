@@ -123,7 +123,7 @@ struct LiquidOunceTests {
         Case(line: "1 ounce soy sauce", unit: .fluidOunce, item: "soy sauce"),
         Case(line: "3 oz pure maple syrup", unit: .fluidOunce, item: "pure maple syrup"),
         Case(line: "4 ounces half-and-half", unit: .fluidOunce, item: "half-and-half"),
-        Case(line: "6 ounces dry white wine (such as Sauvignon Blanc)", unit: .fluidOunce, item: "dry white wine (such as Sauvignon Blanc)"),
+        Case(line: "6 ounces dry white wine (such as Sauvignon Blanc)", unit: .fluidOunce, item: "dry white wine"),
         // Solids named after a liquid stay ounces of weight.
         Case(line: "8 ounces cream cheese, softened", unit: .ounce, item: "cream cheese"),
         Case(line: "4 ounces milk chocolate, chopped", unit: .ounce, item: "milk chocolate"),
@@ -148,6 +148,73 @@ struct LiquidOunceTests {
     @Test func spelledOutFluidOuncesAreUnchanged() {
         #expect(IngredientParser.parse("8 fl oz heavy cream").unit == .fluidOunce)
         #expect(IngredientParser.parse("1 cup (8 ounces) milk").unit == .cup)
+    }
+}
+
+/// 04 §5.1 Ingredient lines: trailing asides are the note; a note that counts produce is also the equivalent.
+@Suite("Ingredient notes")
+struct IngredientNoteTests {
+    struct Case: CustomTestStringConvertible, Sendable {
+        let line: String
+        let item: String
+        var preparation: String? = nil
+        let note: String?
+        var equivalent: ProduceEquivalent? = nil
+
+        var testDescription: String { line }
+    }
+
+    @Test(arguments: [
+        // A produce equivalent, with or without "about" or "from".
+        Case(line: "5 ounces (142 ml) orange juice (about 3 oranges)", item: "orange juice", note: "about 3 oranges", equivalent: ProduceEquivalent(count: Rational(3), item: "oranges")),
+        Case(line: "2 tablespoons lemon juice (from 2 lemons)", item: "lemon juice", note: "from 2 lemons", equivalent: ProduceEquivalent(count: Rational(2), item: "lemons")),
+        Case(line: "1 cup (236 ml) pear juice (about 1 ½ pears)", item: "pear juice", note: "about 1 1/2 pears", equivalent: ProduceEquivalent(count: Rational(3, 2), item: "pears")),
+        Case(line: "1/3 cup freshly squeezed lemon juice (2 lemons)", item: "freshly squeezed lemon juice", note: "2 lemons", equivalent: ProduceEquivalent(count: Rational(2), item: "lemons")),
+        Case(line: "2 tbsp orange zest (about 2 large oranges)", item: "orange zest", note: "about 2 large oranges", equivalent: ProduceEquivalent(count: Rational(2), item: "large oranges")),
+        // Notes that count no produce: a measure, a bare count, a size, packaging, an alternative, prose.
+        Case(line: "1 rack American lamb (about 12 ounces)", item: "rack American lamb", note: "about 12 ounces"),
+        Case(line: "1 (2-ounce) can anchovy fillets (about 12), drained", item: "(2-ounce) can anchovy fillets", preparation: "drained", note: "about 12"),
+        Case(line: "4 cups chopped yellow onions (2 large)", item: "chopped yellow onions", note: "2 large"),
+        Case(line: "3 pounds frozen chopped spinach, defrosted (5 (10-ounce) packages)", item: "frozen chopped spinach", preparation: "defrosted", note: "5 (10-ounce) packages"),
+        Case(line: "1 sprig thyme (or 1/2 teaspoon dried thyme)", item: "sprig thyme", note: "or 1/2 teaspoon dried thyme"),
+        Case(line: "5 pounds (2.2 kilograms) beef short ribs, bone-in, thinly sliced lengthwise into ½-inch thick strips (ask your butcher to do this)", item: "beef short ribs", preparation: "bone-in, thinly sliced lengthwise into 1/2-inch thick strips", note: "ask your butcher to do this"),
+        // Closing clauses that say what the line is for, or how much more.
+        Case(line: "2 tablespoons unsalted butter, softened, plus more for the pan", item: "unsalted butter", preparation: "softened", note: "plus more for the pan"),
+        Case(line: "3 1/2 cups all-purpose flour, plus extra (for kneading)", item: "all-purpose flour", note: "plus extra (for kneading)"),
+        Case(line: "1 teaspoon red-pepper flakes, plus more to taste", item: "red-pepper flakes", note: "plus more to taste"),
+        Case(line: "Canola oil, for frying, as needed", item: "Canola oil", note: "for frying, as needed"),
+        Case(line: "Olive oil (for serving)", item: "Olive oil", note: "for serving"),
+        // Several parentheticals, and commas inside one.
+        Case(line: "4 split chicken breasts (bone-in, skin-on)", item: "split chicken breasts", note: "bone-in, skin-on"),
+        Case(line: "2 tomatoes (about 12 ounces total weight) (peeled, seeded, and finely diced)", item: "tomatoes", note: "about 12 ounces total weight; peeled, seeded, and finely diced"),
+        Case(line: "2 scallions (white and green parts), sliced diagonally", item: "scallions", preparation: "sliced diagonally", note: "white and green parts"),
+        // Not notes: a parenthetical inside a word, one that is the whole item, a leading unit equivalent.
+        Case(line: "12 g Cinnamon stick(s), divided", item: "Cinnamon stick(s)", preparation: "divided", note: nil),
+        Case(line: "1 (14 oz) can diced tomatoes", item: "(14 oz) can diced tomatoes", note: nil),
+        Case(line: "1 cup (240 ml) whole milk", item: "whole milk", note: nil),
+        Case(line: "1 onion, finely chopped", item: "onion", preparation: "finely chopped", note: nil),
+    ])
+    func readsNote(_ expected: Case) {
+        let parsed = IngredientParser.parse(expected.line)
+        #expect(parsed.item == expected.item)
+        #expect(parsed.preparation == expected.preparation)
+        #expect(parsed.note == expected.note)
+        #expect(parsed.equivalent == expected.equivalent)
+    }
+
+    @Test func optionalAndToTasteAreNotNotes() {
+        let walnuts = IngredientParser.parse("1/4 cup chopped walnuts (optional)")
+        #expect(walnuts.note == nil)
+        #expect(walnuts.isOptional)
+        let salt = IngredientParser.parse("sea salt (to taste)")
+        #expect(salt.note == nil)
+        #expect(salt.unit == .toTaste)
+    }
+
+    @Test func aNoteNeverChangesTheAmount() {
+        let parsed = IngredientParser.parse("5 ounces (142 ml) orange juice (about 3 oranges)")
+        #expect(parsed.quantity == Rational(5))
+        #expect(parsed.unit == .fluidOunce)
     }
 }
 

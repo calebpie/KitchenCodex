@@ -156,8 +156,8 @@ struct RecipeDraft: Equatable {
             ingredient.quantityNumerator = parsed.quantity?.numerator
             ingredient.quantityDenominator = parsed.quantity?.denominator
             ingredient.unit = parsed.unit?.rawValue
-            ingredient.preparation = parsed.preparation
             ingredient.isOptional = parsed.isOptional
+            ingredient.setWording(from: parsed)
             return ingredient
         }
 
@@ -188,6 +188,19 @@ struct RecipeDraft: Equatable {
         let photos = (recipe.images ?? []).filter { $0.role == .photo }
         recipe.images = (recipe.images ?? []).filter { $0.role != .photo }
         for image in photos { context.delete(image) }
+    }
+}
+
+extension Ingredient {
+    /// The words of a parsed line: item, preparation, note and the produce the note counts
+    /// (04 §5.1 Ingredient lines). Amount and unit are set by the caller.
+    func setWording(from parsed: ParsedIngredient) {
+        item = parsed.item
+        preparation = parsed.preparation
+        note = parsed.note
+        equivalentCountNumerator = parsed.equivalent?.count.numerator
+        equivalentCountDenominator = parsed.equivalent?.count.denominator
+        equivalentItem = parsed.equivalent?.item
     }
 }
 

@@ -34,7 +34,11 @@ struct RecipeCodexApp: App {
     var body: some Scene {
         WindowGroup {
             RootTabView()
-                .task { spotlight.start() }
+                .task {
+                    // Before indexing, so Spotlight sees the re-read items.
+                    IngredientReread.runOnce(in: container.mainContext)
+                    spotlight.start()
+                }
         }
         .modelContainer(container)
         .onChange(of: scenePhase) { _, phase in
