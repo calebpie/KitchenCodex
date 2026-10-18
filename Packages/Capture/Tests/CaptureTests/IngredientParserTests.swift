@@ -232,6 +232,34 @@ struct IngredientNoteTests {
         #expect(IngredientParser.parse("2 (about 1 pound) eggplants").item == "(about 1 pound) eggplants")
     }
 
+    /// Items stored before that keep the equivalent; the app's one-time re-read finds it this way
+    /// and takes the fresh reading only when the two then agree.
+    @Test func findsAnApproximateLeadingEquivalentInAStoredItem() {
+        #expect(IngredientParser.removingLeadingApproximateEquivalent(from: "(about 2 kg) russet or Yukon Gold potatoes") == "russet or Yukon Gold potatoes")
+        #expect(IngredientParser.removingLeadingApproximateEquivalent(from: "(about 2kg) russet potatoes") == "russet potatoes")
+        #expect(IngredientParser.removingLeadingApproximateEquivalent(from: "(Approximately 240 ml) whole milk") == "whole milk")
+        #expect(IngredientParser.removingLeadingApproximateEquivalent(from: "(approx. 1 1/2 cups) chicken stock") == "chicken stock")
+        #expect(IngredientParser.removingLeadingApproximateEquivalent(from: "(roughly 450 g) pork shoulder") == "pork shoulder")
+        #expect(IngredientParser.removingLeadingApproximateEquivalent(from: "(~150 ml) orange juice") == "orange juice")
+        // Not approximate, not a measure, not leading, or nothing after it.
+        #expect(IngredientParser.removingLeadingApproximateEquivalent(from: "(240 ml) whole milk") == nil)
+        #expect(IngredientParser.removingLeadingApproximateEquivalent(from: "(14 oz) can diced tomatoes") == nil)
+        #expect(IngredientParser.removingLeadingApproximateEquivalent(from: "(1-inch) piece ginger") == nil)
+        #expect(IngredientParser.removingLeadingApproximateEquivalent(from: "(about 3 oranges) juice") == nil)
+        #expect(IngredientParser.removingLeadingApproximateEquivalent(from: "russet potatoes (about 2 kg)") == nil)
+        #expect(IngredientParser.removingLeadingApproximateEquivalent(from: "(about 2 kg)") == nil)
+        #expect(IngredientParser.removingLeadingApproximateEquivalent(from: "russet potatoes") == nil)
+        // The roast potatoes as stored, against a fresh reading of their line.
+        let line = "4 pounds (about 2kg) russet or Yukon Gold potatoes, peeled and cut into quarters, sixths, or eighths, depending on size (see note)"
+        let fresh = IngredientParser.parse(line)
+        #expect(IngredientParser.removingLeadingApproximateEquivalent(from: "(about 2 kg) russet or Yukon Gold potatoes") == fresh.item)
+        #expect(fresh.preparation == "peeled and cut into quarters, sixths, or eighths, depending on size")
+        #expect(fresh.note == "see note")
+        // A count's parenthetical stays in a fresh reading, so the re-read leaves such an item be.
+        #expect(IngredientParser.parse("2 (about 1 pound) eggplants").item == "(about 1 pound) eggplants")
+        #expect(IngredientParser.removingLeadingApproximateEquivalent(from: "(about 1 pound) eggplants") == "eggplants")
+    }
+
     @Test func optionalAndToTasteAreNotNotes() {
         let walnuts = IngredientParser.parse("1/4 cup chopped walnuts (optional)")
         #expect(walnuts.note == nil)

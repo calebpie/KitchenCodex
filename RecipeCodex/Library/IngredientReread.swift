@@ -21,16 +21,23 @@ import Units
 ///   reading gives when the fresh note has the same words, else parenthetical, which is how such
 ///   notes read until now. Nothing else on the line changes. The lasagne's "plus extra (for
 ///   kneading)" becomes a clause and reads "all-purpose flour, plus extra (for kneading)".
+/// - **Approximate equivalents** (slice 8, its own flag). A stored item that starts with an
+///   approximate equivalent the parser now drops ("(about 2 kg) russet or Yukon Gold potatoes")
+///   takes the fresh item, and fluid ounces where the dropped measure now tells them apart, when
+///   the item without it is the fresh item and nothing else on the line reads differently. The
+///   roast potatoes read "4 lb russet or Yukon Gold potatoes".
 enum IngredientReread {
     static let defaultsKey = "ingredients.reread.notesAndLiquidOunces"
     static let noteFormsKey = "ingredients.reread.noteForms"
+    static let approximateEquivalentsKey = "ingredients.reread.approximateEquivalents"
     private static let logger = Logger(subsystem: "com.calebpietrafesa.RecipeCodex", category: "store")
 
-    /// Runs each pass once per install, the first before the second; later launches return at once.
+    /// Runs each pass once per install, in order; later launches return at once.
     static func runOnce(in context: ModelContext, defaults: UserDefaults = .standard) {
         let rereadsLines = !defaults.bool(forKey: defaultsKey)
         let setsNoteForms = !defaults.bool(forKey: noteFormsKey)
-        guard rereadsLines || setsNoteForms else { return }
+        let dropsEquivalents = !defaults.bool(forKey: approximateEquivalentsKey)
+        guard rereadsLines || setsNoteForms || dropsEquivalents else { return }
         guard let ingredients = try? context.fetch(FetchDescriptor<Ingredient>()) else { return }
         if rereadsLines {
             var fluidOunces = 0
@@ -56,9 +63,52 @@ enum IngredientReread {
             }
             logger.notice("Set the form of \(clauses + parentheticals) stored notes: \(clauses) clauses, \(parentheticals) parentheticals")
         }
+        if dropsEquivalents {
+            var items = 0
+            var fluidOunces = 0
+            for ingredient in ingredients {
+                switch dropApproximateEquivalent(ingredient) {
+                case .item?: items += 1
+                case .itemAndFluidOunces?: items += 1; fluidOunces += 1
+                case nil: break
+                }
+            }
+            logger.notice("Dropped an approximate equivalent from \(items) of \(ingredients.count) stored items, \(fluidOunces) now fluid ounces")
+        }
         if context.hasChanges { try? context.save() }
         defaults.set(true, forKey: defaultsKey)
         defaults.set(true, forKey: noteFormsKey)
+        defaults.set(true, forKey: approximateEquivalentsKey)
+    }
+
+    enum EquivalentChange: Equatable {
+        case item, itemAndFluidOunces
+    }
+
+    /// Takes the fresh item for a stored item that starts with an approximate equivalent, when
+    /// the item without it is what a fresh reading of the line gives and the amount, preparation,
+    /// note, produce equivalent and optional flag read the same. The unit may only go from ounces
+    /// to fluid ounces, which the dropped measure now decides ("5 ounces (about 150 ml) juice").
+    @discardableResult
+    static func dropApproximateEquivalent(_ ingredient: Ingredient) -> EquivalentChange? {
+        guard let stripped = IngredientParser.removingLeadingApproximateEquivalent(from: ingredient.item) else { return nil }
+        let parsed = IngredientParser.parse(ingredient.rawText)
+        let storedQuantity = ingredient.quantityNumerator.map { Rational($0, max(1, ingredient.quantityDenominator ?? 1)) }
+        let storedEquivalent = ingredient.equivalentCountNumerator.map { Rational($0, max(1, ingredient.equivalentCountDenominator ?? 1)) }
+        let becomesFluid = ingredient.unit == CookingUnit.ounce.rawValue && parsed.unit == .fluidOunce
+        guard parsed.item == stripped,
+              parsed.quantity == storedQuantity,
+              parsed.unit?.rawValue == ingredient.unit || becomesFluid,
+              parsed.preparation == ingredient.preparation,
+              parsed.note == ingredient.note,
+              ingredient.note == nil || parsed.noteForm?.rawValue == ingredient.noteForm,
+              parsed.equivalent?.count == storedEquivalent,
+              parsed.equivalent?.item == ingredient.equivalentItem,
+              parsed.isOptional == ingredient.isOptional
+        else { return nil }
+        ingredient.item = parsed.item
+        if becomesFluid { ingredient.unit = CookingUnit.fluidOunce.rawValue }
+        return becomesFluid ? .itemAndFluidOunces : .item
     }
 
     /// Gives a stored note without a form the form a fresh reading of its line finds, when the fresh

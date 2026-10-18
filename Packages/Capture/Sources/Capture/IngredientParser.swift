@@ -334,6 +334,20 @@ public enum IngredientParser {
         return unit
     }
 
+    /// `item` without the approximate equivalent measure it starts with: "(about 2 kg) russet
+    /// potatoes" is "russet potatoes". Lines parsed before the parser dropped an approximate
+    /// leading equivalent stored it in the item, and the app's one-time re-read finds them with
+    /// this. Nil when the item doesn't start with one: a bare measure ("(240 ml)") was always
+    /// dropped, a parenthetical that isn't a measure ("(1-inch) piece") is part of the item, and
+    /// nothing is left of an item that is only the measure.
+    public static func removingLeadingApproximateEquivalent(from item: String) -> String? {
+        let text = normalize(item)
+        guard text.range(of: #"^\(\s*(?:about|approximately|approx\.?|roughly|around|~)"#, options: [.regularExpression, .caseInsensitive]) != nil else { return nil }
+        var tokens = Tokens(text)
+        guard dropEquivalentMeasure(&tokens) != nil, !tokens.remainder.isEmpty else { return nil }
+        return tokens.remainder
+    }
+
     // MARK: - Item and preparation
 
     /// The item is everything before the first comma outside parentheses, so "orange juice (from
