@@ -74,12 +74,17 @@ public enum IngredientParser {
         } else {
             tokens.reset()
         }
+        var equivalentUnit: CookingUnit?
         if unit != nil {
-            dropEquivalentMeasure(&tokens)
+            equivalentUnit = dropEquivalentMeasure(&tokens)
         }
         tokens.skip(word: "of")
 
         var (item, preparation) = splitPreparation(tokens.remainder)
+        // Ounces of a liquid are fluid ounces, "fl" or not (04 §5.1 Liquid ounces).
+        if unit == .ounce, LiquidIngredients.ouncesAreFluid(item: item, equivalent: equivalentUnit) {
+            unit = .fluidOunce
+        }
         if saysToTaste {
             if quantity == nil {
                 unit = .toTaste
@@ -245,13 +250,15 @@ public enum IngredientParser {
 
     /// "1 cup (240 ml) milk": the parenthetical repeats the amount in other units, which scaling and
     /// the unit toggle regenerate, so it is dropped. Other parentheticals ("(14-ounce) can") stay.
-    private static func dropEquivalentMeasure(_ tokens: inout Tokens) {
+    /// Returns the dropped measure's unit, which tells fluid ounces from ounces of weight.
+    private static func dropEquivalentMeasure(_ tokens: inout Tokens) -> CookingUnit? {
         let rest = tokens.remainder
-        guard let range = rest.range(of: #"^\(\s*[\d./\s-]+\s*[A-Za-z. ]+\)\s*"#, options: .regularExpression) else { return }
+        guard let range = rest.range(of: #"^\(\s*[\d./\s-]+\s*[A-Za-z. ]+\)\s*"#, options: .regularExpression) else { return nil }
         let inner = rest[range].trimmingCharacters(in: CharacterSet(charactersIn: "() ").union(.whitespaces))
         var innerTokens = Tokens(inner)
-        guard readQuantity(&innerTokens) != nil, readUnit(&innerTokens) != nil, innerTokens.remainder.isEmpty else { return }
+        guard readQuantity(&innerTokens) != nil, let unit = readUnit(&innerTokens), innerTokens.remainder.isEmpty else { return nil }
         tokens = Tokens(String(rest[range.upperBound...]))
+        return unit
     }
 
     // MARK: - Item and preparation

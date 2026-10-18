@@ -95,6 +95,62 @@ struct IngredientParserTests {
     }
 }
 
+/// 04 §5.1 Liquid ounces: ounces of a liquid are fluid ounces; a parenthetical decides first.
+@Suite("Liquid ounces")
+struct LiquidOunceTests {
+    struct Case: CustomTestStringConvertible, Sendable {
+        let line: String
+        let unit: CookingUnit
+        let item: String
+
+        var testDescription: String { line }
+    }
+
+    @Test(arguments: [
+        // A metric volume in parentheses confirms fluid ounces, whatever the item.
+        Case(line: "5 ounces (142 ml) orange juice", unit: .fluidOunce, item: "orange juice"),
+        Case(line: "6 oz (180 mL) dashi or water", unit: .fluidOunce, item: "dashi or water"),
+        Case(line: "3 ounces (90 ml) Thai basil syrup", unit: .fluidOunce, item: "Thai basil syrup"),
+        // A weight in parentheses keeps ounces of weight, even for a liquid word.
+        Case(line: "4 ounces (113 g) butter", unit: .ounce, item: "butter"),
+        Case(line: "12 oz (340 g) honey", unit: .ounce, item: "honey"),
+        // No parenthetical: the liquid lexicon decides.
+        Case(line: "8 ounces whole milk", unit: .fluidOunce, item: "whole milk"),
+        Case(line: "4 oz. heavy cream, cold", unit: .fluidOunce, item: "heavy cream"),
+        Case(line: "16 ounces low-sodium chicken or vegetable broth", unit: .fluidOunce, item: "low-sodium chicken or vegetable broth"),
+        Case(line: "2 ounces extra-virgin olive oil for drizzling", unit: .fluidOunce, item: "extra-virgin olive oil for drizzling"),
+        Case(line: "12 ounces lager", unit: .fluidOunce, item: "lager"),
+        Case(line: "1 ounce soy sauce", unit: .fluidOunce, item: "soy sauce"),
+        Case(line: "3 oz pure maple syrup", unit: .fluidOunce, item: "pure maple syrup"),
+        Case(line: "4 ounces half-and-half", unit: .fluidOunce, item: "half-and-half"),
+        Case(line: "6 ounces dry white wine (such as Sauvignon Blanc)", unit: .fluidOunce, item: "dry white wine (such as Sauvignon Blanc)"),
+        // Solids named after a liquid stay ounces of weight.
+        Case(line: "8 ounces cream cheese, softened", unit: .ounce, item: "cream cheese"),
+        Case(line: "4 ounces milk chocolate, chopped", unit: .ounce, item: "milk chocolate"),
+        Case(line: "8 oz sour cream", unit: .ounce, item: "sour cream"),
+        Case(line: "5 ounces oil-packed tuna", unit: .ounce, item: "oil-packed tuna"),
+        Case(line: "4 ounces sardines in olive oil", unit: .ounce, item: "sardines in olive oil"),
+        Case(line: "6 ounces pancetta", unit: .ounce, item: "pancetta"),
+    ])
+    func readsOunces(_ expected: Case) {
+        let parsed = IngredientParser.parse(expected.line)
+        #expect(parsed.unit == expected.unit)
+        #expect(parsed.item == expected.item)
+    }
+
+    @Test func fluidOuncesConvertAsVolume() {
+        let parsed = IngredientParser.parse("5 ounces (142 ml) orange juice")
+        let quantity = Quantity(parsed.quantity!, parsed.unit)
+        // 5 fl oz is 148 mL, shown as 150 mL; ounces of weight would have read 140 g.
+        #expect(quantity.displayed(in: .metric).friendlyRounded().formatted() == "150 mL")
+    }
+
+    @Test func spelledOutFluidOuncesAreUnchanged() {
+        #expect(IngredientParser.parse("8 fl oz heavy cream").unit == .fluidOunce)
+        #expect(IngredientParser.parse("1 cup (8 ounces) milk").unit == .cup)
+    }
+}
+
 @Suite("Step splitting")
 struct StepSplitterTests {
     @Test func splitsOnLinesWhenThereAreNoParagraphs() {
