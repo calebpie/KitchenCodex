@@ -18,7 +18,7 @@ Five tabs on iPhone, matching the HIG preference for a small number of tabs with
 
 Books is a view of the library rather than a tab because a cookbook is a way of grouping recipes, not a separate activity; the shelf, book detail and scanning queue are unchanged, they just open from the Recipes tab. The Pantry tab replaces the profile button: what you have on hand (ingredients, tools, wine, suppliers) is consulted while planning and shopping, which makes it a destination. Profile and settings (proficiency, units, voice, intelligence, export) are its last pane.
 
-The top toolbar of every top-level screen is contextual: **Add (+)** when the screen can create something (a recipe or book, a pantry item or source, an event), and a **More (⋯)** menu for screen-level actions (view switch, sort, select, import and export). There is no profile button.
+The top toolbar of every top-level screen is contextual: **Add (+)** when the screen can create something (a recipe or book, a pantry item or source, an event), and a **More (⋯)** menu for screen-level actions (view switch, sort, select, import and export). There is no profile button, except the account button on the Pantry hub itself, which opens the Profile pane (04 §5.1 "Pantry hub").
 
 ### 1.2 Persistent surfaces
 
