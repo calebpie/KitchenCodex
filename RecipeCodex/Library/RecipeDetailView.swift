@@ -118,7 +118,6 @@ struct RecipeDetailView: View {
                     Button(recipe.isFavorite ? "Unfavorite" : "Favorite", systemImage: recipe.isFavorite ? "heart.slash" : "heart") {
                         recipe.isFavorite.toggle()
                     }
-                    shareMenu
                     Divider()
                     Button("Delete", systemImage: "trash", role: .destructive) {
                         isConfirmingDelete = true
@@ -139,13 +138,23 @@ struct RecipeDetailView: View {
                     Text("The recipe and all its versions will be deleted.")
                 }
             }
+            // Bottom toolbar (03 §3.3): Share · Add to menu (Phase 4) · Cook.
+            ToolbarItem(placement: .bottomBar) {
+                ShareRecipeMenu(recipe: recipe) {
+                    Label("Share", systemImage: "square.and.arrow.up")
+                }
+            }
+            ToolbarSpacer(.flexible, placement: .bottomBar)
             ToolbarItem(placement: .bottomBar) {
                 Button {
                     // Cook mode arrives in Phase 3.
                 } label: {
-                    Label("Cook", systemImage: "frying.pan")
-                        .labelStyle(.titleAndIcon)
-                        .padding(.horizontal, 24)
+                    // An explicit row: a bottom toolbar shows a Label as its icon only.
+                    HStack(spacing: 6) {
+                        Image(systemName: "frying.pan")
+                        Text("Cook")
+                    }
+                    .padding(.horizontal, 24)
                 }
                 .buttonStyle(.glassProminent)
                 .disabled(true)
@@ -206,23 +215,6 @@ struct RecipeDetailView: View {
     }
 
     private var sourceLine: String { recipe.sourceLine }
-
-    /// Share Recipe: PDF, Markdown or plain text of the current version as written.
-    private var shareMenu: some View {
-        let export = ExportRecipe(recipe: recipe)
-        let preview = SharePreview(recipe.title, image: Image(systemName: "fork.knife"))
-        return Menu("Share Recipe", systemImage: "square.and.arrow.up") {
-            ShareLink(item: RecipePDFFile(recipe: export, coverData: recipe.coverImage?.imageData ?? recipe.coverImageData), preview: preview) {
-                Label("PDF", systemImage: "doc.richtext")
-            }
-            ShareLink(item: RecipeMarkdownFile(recipe: export), preview: preview) {
-                Label("Markdown", systemImage: "number")
-            }
-            ShareLink(item: RecipePlainText(recipe: export), preview: preview) {
-                Label("Plain Text", systemImage: "doc.plaintext")
-            }
-        }
-    }
 
     private var metadata: some View {
         ViewThatFits(in: .horizontal) {

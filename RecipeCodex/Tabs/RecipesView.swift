@@ -384,7 +384,7 @@ private struct RecipeCollection: View {
         .tint(.accentColor)
     }
 
-    /// Long-press actions (03 §2 Menus): Cook, Favorite, Delete. Add to menu and Share arrive with Plan and export.
+    /// Long-press actions (03 §2 Menus): Cook, Favorite, Share, Delete. Add to menu arrives with Plan.
     @ViewBuilder
     private func actions(for recipe: Recipe) -> some View {
         Button("Cook", systemImage: "frying.pan") {}
@@ -392,6 +392,7 @@ private struct RecipeCollection: View {
         Button(recipe.isFavorite ? "Unfavorite" : "Favorite", systemImage: recipe.isFavorite ? "heart.slash" : "heart") {
             recipe.isFavorite.toggle()
         }
+        ShareRecipeMenu(recipe: recipe)
         Divider()
         Button("Delete", systemImage: "trash", role: .destructive) {
             pendingDeletion = recipe
