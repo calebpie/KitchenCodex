@@ -91,7 +91,7 @@ Recipes → Add → New recipe. A single scrolling form: title, source (free tex
 
 ### Flow F — Plan an event
 
-1. Plan → New event: name, date, arrival time, seating time, guest count, guests (from profiles or new), restrictions (merged from profiles), kitchen (home or another), notes.
+1. Plan → New event: name, date, arrival time, seating time, guest count, guests (from profiles or new), restrictions (merged from profiles), where (Home, or Away with a place name; Away adds a soft warning and an on-arrival check of ovens, burners and tools for this event only, 04 §5.1 "Kitchens"), notes.
 2. **Menu builder**: course slots (Starter, Main, Sides, Dessert, Drinks, plus custom). Add candidates to a slot from the library (browse/search in a sheet, or drag on iPad). Several candidates per slot are fine until you finalize.
 3. As you add: sub-recipes appear automatically under their parent; warnings appear as inline notes, not alerts ("Never cooked," "Three dishes need the oven at different temperatures," "Rosa is gluten-free; the gnocchi contains flour").
 4. **Balance panel**: coverage by course, protein/veg/starch, total servings vs guests, complexity load, pre-arrival share of work.
@@ -127,7 +127,7 @@ Recipes → Add → New recipe. A single scrolling form: title, source (free tex
 
 ### Flow J — First run (kitchen setup)
 
-Three screens, skippable: your kitchen's tools (checklist with counts for ovens and burners), proficiency (three levels with a sentence each about what changes), and pantry staples (a prefilled checklist to trim). Everything is editable later from the Pantry tab.
+Three screens, skippable: your kitchen's tools (checklist with counts for ovens and burners), proficiency (four tiers, Learning · Confident · Advanced · Expert, with a sentence each about what changes; concurrency follows the tier), and pantry staples (a prefilled checklist to trim). Everything is editable later from the Pantry tab.
 
 ## 3. Interaction model
 
@@ -227,7 +227,7 @@ Event ── Schedule ──< Task (recipe, step, start, duration, kind, depende
 Kitchen ──< Tool (type, count, capacity) ; Kitchen ──< PantryItem (item, inStock)
 Kitchen ──< Source (name, kind: store | online | producer, categories: equipment | food | drink, phone, url, address, carries, isFrequented)
 Kitchen ──< BeverageItem (kind: wine | spirit | liqueur | beer | mixer | nonAlcoholic, name, producer, vintage, region, style, bottles, isOpen, location)
-UserProfile (proficiency, concurrency, units preference incl. temperature °F | °C, voice options, kitchenTheme)
+UserProfile (proficiency, which determines concurrency; units preference incl. temperature °F | °C, voice options, kitchenTheme)
 ```
 
 `Source` does two jobs: a supplier directory, captured from cookbook Sources pages or added by hand, and the list of stores you frequent, which the shopping list uses as stops. `BeverageItem` is the cellar and bar. A `Pairing` sits on a course slot; it can point at a bottle on hand or stay free text, and a pairing with no bottle flows to the shopping list.
