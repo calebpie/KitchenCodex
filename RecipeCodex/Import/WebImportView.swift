@@ -6,7 +6,8 @@ import SwiftUI
 
 /// Recipes → Add → Import from Web: paste a link, Recipe Codex fetches the page as Safari would, reads
 /// the recipe with the same importer as the Share Extension, and shows the import preview (03 §3.4)
-/// for a check before saving through the manual-entry path.
+/// for a check before saving through the manual-entry path. A page whose fetched HTML holds no recipe
+/// is rendered in a hidden web view and read again (`RenderedPageLoader`).
 struct WebImportView: View {
     /// Called with the saved recipe just before the sheet dismisses, so Recipes can open it.
     var onSaved: (Recipe) -> Void
@@ -247,7 +248,10 @@ struct WebImportView: View {
         do {
             let page = try await WebPageFetcher().fetchPage(url)
             fallbackURL = page.url
-            let extraction = await Self.extract(page)
+            var extraction = await Self.extract(page)
+            if extraction.recipe == nil, let rendered = await render(page) {
+                extraction = rendered
+            }
             fallbackTitle = extraction.pageTitle
             var result = extraction.recipe
 
@@ -275,10 +279,35 @@ struct WebImportView: View {
         }
     }
 
+    /// A JavaScript-built page (ChefSteps) arrives from the fetch as an empty shell. Render it in a web
+    /// view, wait for its scripts, and read the DOM again, as the Share Extension gets it from Safari.
+    /// Nil when rendering fails or finds nothing the fetch didn't; the fetch's reading stands then.
+    private func render(_ page: FetchedPage) async -> WebPageExtraction? {
+        phase = .working("Loading the full page…")
+        var reading: WebPageExtraction?
+        do {
+            _ = try await RenderedPageLoader.render(page.url) { rendered in
+                let extraction = await Self.extract(html: rendered.html, url: rendered.url)
+                reading = extraction
+                return extraction.recipe != nil
+            }
+        } catch {
+            return nil
+        }
+        guard let reading, !Task.isCancelled else { return nil }
+        // Keep the rendering when it found the recipe, or at least more text for the model to read.
+        return reading.recipe != nil || reading.recipeText.count > 0 ? reading : nil
+    }
+
     /// Parsing a large page takes tens of milliseconds; keep it off the main actor.
     @concurrent
     nonisolated private static func extract(_ page: FetchedPage) async -> WebPageExtraction {
         WebRecipeImporter.extract(html: page.html, url: page.url)
+    }
+
+    @concurrent
+    nonisolated private static func extract(html: String, url: URL) async -> WebPageExtraction {
+        WebRecipeImporter.extract(html: html, url: url)
     }
 
     private func show(_ result: ImportedRecipe) {
