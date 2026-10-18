@@ -42,6 +42,16 @@ struct TemperatureParserTests {
         ("190º degrees Celsius", Temperature(190, .celsius)),
         ("190° degrees C", Temperature(190, .celsius)),
         ("190º Degrees centigrade", Temperature(190, .celsius)),
+        ("375° degrees Fahrenheit", Temperature(375, .fahrenheit)),
+        ("375˚ degrees F", Temperature(375, .fahrenheit)),
+        ("375º degree Fahrenheit", Temperature(375, .fahrenheit)),
+        ("375˚ degree F", Temperature(375, .fahrenheit)),
+        ("375º degrees C", Temperature(375, .celsius)),
+        ("375° degrees Celsius", Temperature(375, .celsius)),
+        ("375˚ degrees Celsius", Temperature(375, .celsius)),
+        ("190˚ degree C", Temperature(190, .celsius)),
+        ("190º degree Celsius", Temperature(190, .celsius)),
+        ("190° degree C", Temperature(190, .celsius)),
         ("176.5°C", Temperature(Rational(353, 2), .celsius)),
         ("62.5°C", Temperature(Rational(125, 2), .celsius)),
         ("5°C", Temperature(5, .celsius)),
@@ -151,6 +161,7 @@ struct TemperatureParserTests {
         "hot", "moderate", "350°F for 20 minutes", "Bake at 350°F", "180°C then 200°C", "tbsp", "°F",
         "350 Fun", "180 Cups", "180 Celsiuss", "fan", "fan 6", "hotter oven", "coolest oven",
         "180° degrees", "350º degrees", "350° degrees for 20 minutes", "375° degrees Fun",
+        "º", "ºF", "º F", "º degrees Fahrenheit", "˚ degrees C", "° degree Celsius", "degrees º F",
     ])
     func rejectsWhatIsNotAWholeTemperature(text: String) {
         #expect(TemperatureParser.parse(text) == nil)
@@ -204,6 +215,35 @@ struct TemperatureParserTests {
         #expect(first.temperature.formatted(in: .celsius) == "190°C", "the written Celsius value, not a conversion")
         #expect(first.temperature.formatted(in: .fahrenheit) == "375°F")
         #expect(mentions.last?.temperature.primary == Temperature(70, .fahrenheit))
+    }
+
+    @Test(arguments: [
+        ("Bake at 375º degrees Fahrenheit until set.", "375º degrees Fahrenheit", Temperature(375, .fahrenheit)),
+        ("Bake at 375° degrees Fahrenheit until set.", "375° degrees Fahrenheit", Temperature(375, .fahrenheit)),
+        ("Bake at 375˚ degrees F until set.", "375˚ degrees F", Temperature(375, .fahrenheit)),
+        ("Bake at 375º degree F until set.", "375º degree F", Temperature(375, .fahrenheit)),
+        ("Roast at 190º degrees Celsius for an hour.", "190º degrees Celsius", Temperature(190, .celsius)),
+        ("Roast at 190° degree Celsius for an hour.", "190° degree Celsius", Temperature(190, .celsius)),
+        ("Roast at 190˚ degrees C for an hour.", "190˚ degrees C", Temperature(190, .celsius)),
+    ] as [(String, String, Temperature)])
+    func doubledMarkerSpansTheWholeMention(text: String, span: String, temperature: Temperature) {
+        let mentions = TemperatureParser.mentions(in: text)
+        #expect(mentions.count == 1)
+        #expect(mentions.map { String(text[$0.range]) } == [span])
+        #expect(mentions.first?.originalText == span)
+        #expect(mentions.first?.temperature.alternatives == [temperature])
+    }
+
+    @Test func aLoneDegreeSignReadsNothing() {
+        for text in [
+            "º", "ºF", "˚C", "º degrees Fahrenheit", "˚ degrees C",
+            "Set the oven to º degrees Fahrenheit.",
+            "Turn the dial past ºF and wait.",
+            "Preheat to ˚ degrees C, then bake.",
+        ] {
+            #expect(TemperatureParser.parse(text) == nil, Comment(rawValue: text))
+            #expect(TemperatureParser.mentions(in: text).isEmpty, Comment(rawValue: text))
+        }
     }
 
     @Test func findsBritishCombinedFormInASentence() {
