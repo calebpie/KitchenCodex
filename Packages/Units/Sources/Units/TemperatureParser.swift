@@ -192,7 +192,7 @@ public struct TemperatureParser: Hashable, Sendable, Codable {
             atoms.append(Atom(range: match.range, temperature: Temperature(value, scale, fan: fan)))
         }
         for match in text.matches(of: gas) {
-            guard let mark = rational(fromGasMark: match.mark) else { continue }
+            guard let mark = rational(fromMixedNumber: match.mark) else { continue }
             let fan = match.leadFan != nil || match.trailFan != nil
             atoms.append(Atom(range: match.range, temperature: Temperature(mark, .gasMark, fan: fan)))
         }
@@ -221,9 +221,14 @@ public struct TemperatureParser: Hashable, Sendable, Codable {
         return Rational(whole) + Rational(fraction, scale)
     }
 
-    /// "6" → 6, "½" → 1/2, "6½" → 13/2, "1/2" → 1/2, "6 1/2" → 13/2, "6.5" → 13/2.
-    static func rational(fromGasMark text: Substring) -> Rational? {
-        let glyphs: [Character: Rational] = ["½": Rational(1, 2), "¼": Rational(1, 4), "¾": Rational(3, 4)]
+    /// A mixed number as recipes write one: "6" → 6, "½" → 1/2, "6½" → 13/2, "1 ½" → 3/2,
+    /// "1/2" → 1/2, "6 1/2" → 13/2, "6.5" → 13/2. Shared with ``DurationParser``.
+    static func rational(fromMixedNumber text: Substring) -> Rational? {
+        let glyphs: [Character: Rational] = [
+            "½": Rational(1, 2), "¼": Rational(1, 4), "¾": Rational(3, 4),
+            "⅓": Rational(1, 3), "⅔": Rational(2, 3),
+            "⅛": Rational(1, 8), "⅜": Rational(3, 8), "⅝": Rational(5, 8), "⅞": Rational(7, 8),
+        ]
         var remainder = text.trimmingCharacters(in: .whitespaces)
         var fraction: Rational = .zero
         if let last = remainder.last, let glyph = glyphs[last] {
