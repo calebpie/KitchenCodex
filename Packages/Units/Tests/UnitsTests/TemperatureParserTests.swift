@@ -32,6 +32,16 @@ struct TemperatureParserTests {
         ("180 degrees Celsius", Temperature(180, .celsius)),
         ("180 degrees centigrade", Temperature(180, .celsius)),
         ("180℃", Temperature(180, .celsius)),
+        ("375º degrees Fahrenheit", Temperature(375, .fahrenheit)),
+        ("375° degrees F", Temperature(375, .fahrenheit)),
+        ("375° degree F", Temperature(375, .fahrenheit)),
+        ("375˚ degrees F.", Temperature(375, .fahrenheit)),
+        ("375 ° degrees Fahrenheit", Temperature(375, .fahrenheit)),
+        ("375°degrees F", Temperature(375, .fahrenheit)),
+        ("375º deg. F", Temperature(375, .fahrenheit)),
+        ("190º degrees Celsius", Temperature(190, .celsius)),
+        ("190° degrees C", Temperature(190, .celsius)),
+        ("190º Degrees centigrade", Temperature(190, .celsius)),
         ("176.5°C", Temperature(Rational(353, 2), .celsius)),
         ("62.5°C", Temperature(Rational(125, 2), .celsius)),
         ("5°C", Temperature(5, .celsius)),
@@ -87,6 +97,8 @@ struct TemperatureParserTests {
         ("160°C ( fan )", Temperature(160, .celsius, fan: true)),
         ("325°F convection", Temperature(325, .fahrenheit, fan: true)),
         ("convection 325°F", Temperature(325, .fahrenheit, fan: true)),
+        ("160° degrees C fan", Temperature(160, .celsius, fan: true)),
+        ("convection 375º degrees F", Temperature(375, .fahrenheit, fan: true)),
     ])
     func tagsFanOvenValues(text: String, temperature: Temperature) {
         let parsed = TemperatureParser.parse(text)
@@ -124,6 +136,8 @@ struct TemperatureParserTests {
         ("200°C/400°F/Gas 6 (fan 180°C)", [
             Temperature(200, .celsius), Temperature(400, .fahrenheit), Temperature(6, .gasMark), Temperature(180, .celsius, fan: true),
         ]),
+        ("375º degrees Fahrenheit (190º degrees Celsius)", [Temperature(375, .fahrenheit), Temperature(190, .celsius)]),
+        ("375° degrees F / 190° degrees C / gas 5", [Temperature(375, .fahrenheit), Temperature(190, .celsius), Temperature(5, .gasMark)]),
     ])
     func keepsEveryAlternativeInOrder(text: String, alternatives: [Temperature]) {
         let parsed = TemperatureParser.parse(text)
@@ -136,6 +150,7 @@ struct TemperatureParserTests {
         "1 F", "9 C", "gas", "gas stove", "gas burner", "mark 6", "oven", "warm oven", "a hot pan",
         "hot", "moderate", "350°F for 20 minutes", "Bake at 350°F", "180°C then 200°C", "tbsp", "°F",
         "350 Fun", "180 Cups", "180 Celsiuss", "fan", "fan 6", "hotter oven", "coolest oven",
+        "180° degrees", "350º degrees", "350° degrees for 20 minutes", "375° degrees Fun",
     ])
     func rejectsWhatIsNotAWholeTemperature(text: String) {
         #expect(TemperatureParser.parse(text) == nil)
@@ -162,6 +177,33 @@ struct TemperatureParserTests {
         #expect(mention.originalText == "350°F")
         #expect(mention.temperature.alternatives == [Temperature(350, .fahrenheit)])
         #expect(TemperatureParser().mentions(in: text) == mentions)
+    }
+
+    @Test func findsADoubledMarkerAsOneRun() {
+        let text = "Preheat the oven to 375º degrees Fahrenheit and butter a 9 by 13 inch dish."
+        let mentions = TemperatureParser.mentions(in: text)
+        #expect(mentions.count == 1)
+        let mention = try! #require(mentions.first)
+        #expect(text[mention.range] == "375º degrees Fahrenheit")
+        #expect(mention.originalText == "375º degrees Fahrenheit")
+        #expect(mention.temperature.alternatives == [Temperature(375, .fahrenheit)])
+        #expect(mention.temperature.formatted(in: .fahrenheit) == "375°F")
+        #expect(mention.temperature.formatted(in: .celsius) == "190°C")
+        var rendered = text
+        rendered.replaceSubrange(mention.range, with: "[\(mention.temperature.formatted(in: .celsius))]")
+        #expect(rendered == "Preheat the oven to [190°C] and butter a 9 by 13 inch dish.")
+    }
+
+    @Test func doubledMarkerAlternativesFormOneMention() {
+        let text = "Bake at 375º degrees Fahrenheit (190º degrees Celsius) for 45 minutes, then rest at 70° degrees F."
+        let mentions = TemperatureParser.mentions(in: text)
+        #expect(mentions.map { text[$0.range] } == ["375º degrees Fahrenheit (190º degrees Celsius)", "70° degrees F"])
+        let first = try! #require(mentions.first)
+        #expect(first.originalText == "375º degrees Fahrenheit (190º degrees Celsius)")
+        #expect(first.temperature.alternatives == [Temperature(375, .fahrenheit), Temperature(190, .celsius)])
+        #expect(first.temperature.formatted(in: .celsius) == "190°C", "the written Celsius value, not a conversion")
+        #expect(first.temperature.formatted(in: .fahrenheit) == "375°F")
+        #expect(mentions.last?.temperature.primary == Temperature(70, .fahrenheit))
     }
 
     @Test func findsBritishCombinedFormInASentence() {
@@ -218,6 +260,8 @@ struct TemperatureParserTests {
             "Marinate for 180 minutes.",
             "Reduce by 180 ml.",
             "Preheat the oven to 350 degrees.",
+            "Preheat the oven to 350° degrees.",
+            "Preheat the oven to 350º degrees and wait.",
         ] {
             #expect(TemperatureParser.mentions(in: text).isEmpty, Comment(rawValue: text))
         }

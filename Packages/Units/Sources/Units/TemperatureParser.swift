@@ -56,11 +56,12 @@ public struct TemperatureMention: Hashable, Sendable {
 
 /// Reads the temperatures recipes write: "350°F", "350 degrees F", "180 C", "gas mark 6",
 /// "moderate oven", and British combined forms such as "240C/fan 220C/gas 9" or
-/// "200°C (180°C fan), gas 6, 400°F".
+/// "200°C (180°C fan), gas 6, 400°F". A degree sign may be doubled up with the word, as some
+/// sites write it: "375º degrees Fahrenheit" reads as 375°F.
 ///
-/// Like ``UnitParser`` it never guesses: "350 degrees" with no scale is not a temperature, and
-/// a bare letter ("180 C") needs a value of at least 10 so that "2 C flour" stays two cups.
-/// Matching ignores case.
+/// Like ``UnitParser`` it never guesses: "350 degrees" with no scale is not a temperature (nor
+/// is "350° degrees"), and a bare letter ("180 C") needs a value of at least 10 so that
+/// "2 C flour" stays two cups. Matching ignores case.
 public struct TemperatureParser: Hashable, Sendable, Codable {
     public init() {}
 
@@ -136,14 +137,16 @@ public struct TemperatureParser: Hashable, Sendable, Codable {
     // mutate them, so sharing them across threads is safe.
 
     /// Degrees with a scale: "350°F", "350 F", "350 degrees F", "180 C", "fan 220C", "160°C fan",
-    /// "200°C (fan)", "350℉", "180 degrees Celsius".
+    /// "200°C (fan)", "350℉", "180 degrees Celsius". The marker is a degree sign (°, º or ˚),
+    /// the word "degrees" or "degree" (or "deg."), or a sign followed by the word, as in
+    /// "375º degrees Fahrenheit"; the scale letter or word is required either way.
     nonisolated(unsafe) static let degrees = #/
         (?<leadFan> \b(?:fan|convection)(?:[-\ ]?(?:assisted|forced|oven))?:?\s* )?
         \b(?<value> \d+(?:\.\d+)? )
         (?:
             \s*(?<combined> [℉℃] )
           |
-            (?: \s*(?<marker> [°º˚]|degrees?|deg\.? ) )?
+            (?: \s*(?<marker> [°º˚](?:\s*(?:degrees?|deg\.?))? | degrees? | deg\.? ) )?
             \s*(?<letter> fahrenheit|celsius|centigrade|f|c )(?![a-z])
         )
         (?<trailFan> \s*(?: \(\s*(?:fan|convection)\s*\) | (?:fan|convection)(?:[-\ ]?(?:assisted|forced|oven))?(?![a-z]) ) )?
