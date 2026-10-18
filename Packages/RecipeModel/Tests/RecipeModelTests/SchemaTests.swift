@@ -61,6 +61,33 @@ struct SchemaTests {
         #expect(fetched?.currentVersion?.isCurrentOf?.title == "Focaccia")
     }
 
+    /// 04 §5.1 Ingredient lines: a note, and the produce it counts, stored beside the item.
+    @Test func ingredientKeepsNoteAndEquivalent() throws {
+        let container = try RecipeStore.makeContainer(inMemory: true)
+        let context = ModelContext(container)
+
+        let juice = Ingredient(item: "orange juice", rawText: "5 ounces (142 ml) orange juice (about 3 oranges)")
+        juice.note = "about 3 oranges"
+        juice.equivalentCountNumerator = 3
+        juice.equivalentCountDenominator = 1
+        juice.equivalentItem = "oranges"
+        let pear = Ingredient(item: "pear juice", rawText: "1 cup pear juice (about 1 ½ pears)")
+        pear.note = "about 1 1/2 pears"
+        pear.equivalentCountNumerator = 3
+        pear.equivalentCountDenominator = 2
+        pear.equivalentItem = "pears"
+        let salt = Ingredient(item: "kosher salt", rawText: "1 tsp kosher salt")
+        for model in [juice, pear, salt] as [any PersistentModel] { context.insert(model) }
+        try context.save()
+
+        let fetched = try context.fetch(FetchDescriptor<Ingredient>(sortBy: [SortDescriptor(\.item)]))
+        #expect(fetched.map(\.item) == ["kosher salt", "orange juice", "pear juice"])
+        #expect(fetched[0].note == nil && fetched[0].equivalentItem == nil && fetched[0].equivalentCountNumerator == nil)
+        #expect(fetched[1].note == "about 3 oranges")
+        #expect(fetched[1].equivalentItem == "oranges")
+        #expect(fetched[2].equivalentCountNumerator == 3 && fetched[2].equivalentCountDenominator == 2)
+    }
+
     /// Pairings live on the menu and can point at a bottle in the cellar (03 §3.9, §3.17).
     @Test func pairingLinksSlotAndCellar() throws {
         let container = try RecipeStore.makeContainer(inMemory: true)

@@ -138,6 +138,15 @@ extension RecipeSchemaV1 {
         public var unit: String?
         public var item: String = ""
         public var preparation: String?
+        /// A trailing aside that is neither preparation nor a unit equivalent: "about 3 oranges",
+        /// "plus more for the pan", "ask your butcher to do this" (04 §5.1 Ingredient lines).
+        public var note: String?
+        /// When the note names produce the line comes from ("about 3 oranges", "from 2 lemons"), how
+        /// many, as an exact rational like the quantity, so shopping can buy oranges, not juice.
+        public var equivalentCountNumerator: Int?
+        public var equivalentCountDenominator: Int?
+        /// The produce the equivalent counts, as written: "oranges", "large lemons".
+        public var equivalentItem: String?
         public var isOptional: Bool = false
         public var group: String?
         public var rawText: String = ""
