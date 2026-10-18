@@ -42,9 +42,9 @@
 
 ## Left for the rest of Phase 1
 
-- **Capture paths:** web import landed in slice 2 (below); what is left of it is listed there. **Paprika and Mela import** (More menu item not added yet).
-- **Library:** collections, smart collections, recents; the other filter chips (Cuisine, Time, Dietary, Book, Tags) and the filter sheet with tokens; Select mode; Add to menu and Share in the context menu; ingredient checkboxes, ingredient groups, headnote, provenance and "View page" on detail; viewing or restoring an older version.
-- **Exports:** PDF, plain text and Markdown.
+- **Capture paths:** web import landed in slice 2 (below); what is left of it is listed there. **Paprika and Mela import** landed in slice 3.
+- **Library:** collections, smart collections, recents; the other filter chips (Cuisine, Time, Dietary, Book, Tags) and the filter sheet with tokens; Select mode; Add to menu and Share in the context menu; ingredient checkboxes, headnote (a collapsed section landed in slice 3; groups too), provenance and "View page" on detail; viewing or restoring an older version.
+- **Exports:** PDF, plain text and Markdown landed in slice 3.
 - **iPad:** three-column `NavigationSplitView` for Recipes, sidebar sections, keyboard shortcuts (⌘N new recipe, ⌘F search), drag and drop into collections and photos onto a recipe.
 - **Pantry → Profile pane** with the units preference (`UserProfile.unitPreference`), proficiency and intelligence settings; the detail's unit toggle should start from it.
 - **Spotlight** indexing of recipes.
@@ -142,3 +142,86 @@ The 18 saved pages (19 HTML files: ChefSteps has both its saved source and a ren
 - **Model speed:** 11 to 16 seconds per page against Flow A's 2 to 6. Options: show the page reading at once and let the model refine in place, or ask the model only when the page reading lacks headings.
 - Sentence-per-step sites (Food.com's 44 steps) could be merged into paragraphs; section names from `HowToSection` are dropped.
 - "Open in app" from the extension (Flow A step 2) needs a supported way to open the containing app.
+
+## Slice 3: step photos, review fixes, library import, export
+
+*Oct 17, 2026. Step-level photos (decided in fecc78d), the five import fixes from Caleb's extraction review of the 19 saved pages, Paprika and Mela import, and sharing a recipe as PDF, Markdown or plain text.*
+
+### What landed
+
+| Area | Where | What it does |
+|---|---|---|
+| Schema | `Packages/RecipeModel/Sources/RecipeModel/Models/Library.swift`, `Enums.swift`, `Library+Versions.swift` | `RecipeImage.step` (nullify) with inverse `Step.images` (cascade), and `RecipeImageRole.stepPhoto`. `Step.sortedPhotos` helper. Edited schema v1 in place. |
+| Import fixes | `Packages/Capture/Sources/Capture/` (`WebRecipeImporter`, `PageTextReader`, `HTMLPage`, `ImportText`, `ImportedRecipe`) | Headings borrowed from the page, yield labels stripped, asides moved from steps to notes, amount/item/modifier rejoined with a comma (details below). |
+| Step photos from the web | `ImportedRecipe.swift`, `JSONLDRecipeParser.swift`, `PageTextReader.swift`, `HTMLPage.swift` | `ImportedRecipe.steps` is now `[ImportedStep]` (text plus optional `imageURL`; string literals still work). JSON-LD reads `HowToStep.image` as a URL, an `ImageObject` or an array (first kept, relative URLs resolved). The page-text reader records content images per line (skipping icons, logos, avatars, `data:` placeholders and images under 120 px; `data-src` wins for lazy loaders) and gives a numbered step the image found between its numbered line and its last body line, only when exactly one distinct image is there. A model reading keeps the photo of a step whose text it copied. |
+| Saving step photos | `RecipeCodex/Import/ImportedRecipe+Draft.swift` | After `saveImport` saves the recipe, the step photos download four at a time (same `WebPageFetcher` and page referrer as the cover, 15 MB cap per download), are re-encoded as JPEG with the longest side at 1,600 px, and are saved as `RecipeImage` role `.stepPhoto` with `step` and `recipe` set and no cook session (external storage). A photo goes to the step whose text matches the imported step, or to the same position when the preview kept the step count. |
+| Detail | `RecipeCodex/Library/RecipeDetailView.swift`, `StepPhotoViewer.swift` | Ingredient groups as section headers (03 §3.3). A step with photos shows a 64 pt thumbnail at its trailing edge (count badge when more than one); tap opens a full-screen viewer that swipes between that step's photos with a caption line ("Step 2 · Photo 1 of 2 · From the source", or "Your photo" for one with a cook session) and the step's text. A collapsed Headnote section when the recipe has one (Mela and Paprika imports fill it). More → **Share Recipe** → PDF, Markdown, Plain Text. |
+| Editor | `RecipeEditorView.swift`, `RecipeDraft.swift` | Group headings round-trip as lines ending with a colon ("Making the Ragu:"); "Reads As" shows them as headings; saving sets `Ingredient.group`. Existing step photos show read-only in a Step Photos row. When an edit makes a new version, step photos move to the new step with the same text, else to the same position when the number of steps is unchanged (a photo lives on one step at a time; the old version keeps its text). |
+| Library import | `Packages/Capture/Sources/Capture/ZipArchive.swift`, `LibraryImporter.swift`; `RecipeCodex/Import/LibraryImportView.swift`; `Tabs/RecipesView.swift` (one menu item and its sheet) | An in-memory ZIP reader (stored and deflated entries; no ZIP64 or encryption; `__MACOSX` and `._` files skipped) and a gzip reader over Foundation's raw-DEFLATE decompression. `LibraryArchive` opens `.paprikarecipes`, `.paprikarecipe`, `.melarecipes` and `.melarecipe` (by extension, else by contents) and reads one recipe at a time. Recipes → More → **Import Library…** opens a file importer, shows "Importing 3 of 240 from Paprika…" with a progress bar (Stop keeps what was added), saves each recipe through `RecipeDraft.saveImport` (change summary "Imported from Paprika" / "Imported from Mela"), skips exact duplicates (same title, ignoring case, and same source link, against the library and earlier recipes in the file) and reports added, skipped and unreadable. Only the photo the export embeds is used; covers are not downloaded for library imports. |
+| Export | `Packages/Capture/Sources/Capture/RecipeExporter.swift`; `RecipeCodex/Export/` | `ExportRecipe` (the current version as written) and `RecipeExporter.markdown` / `plainText`: title, source line, link, yield and times ("Serves 4 · Prep 15 min · Cook 1 hr 10 min"), ingredients under their group headings with the amount from Units' `formatted()` (bold in Markdown), numbered steps, notes; Markdown emphasis characters escaped. The PDF is a SwiftUI print layout drawn page by page with `ImageRenderer` into a PDF context: US Letter, title, source, link, meta and a 210 pt cover on page 1, then ingredients (38%) and steps plus notes (62%) in two columns that each continue onto later pages, blocks measured at their column width and never split, a heading kept with the block after it, and "Page 1 of 10" with the title in the footer. Shared through `ShareLink` with three `Transferable` types (`RecipePDFFile`, `RecipeMarkdownFile` as `.md`, `RecipePlainText` as text or `.txt`), each with the recipe's title as the file name. |
+
+### Import fixes on the saved pages (titles only)
+
+| Review item | Page | Before | After |
+|---|---|---|---|
+| (a) Headings from the page | Lasagne alla Bolognese al Forno (Rouxbe) | 30 ingredients in one flat list | the same 30 under 8 groups ("Making the Ragu", "Making the Besciamella", …, "Assembling the Lasagne"), shown as sections on detail |
+| (a) also applied to | Boeuf Bourguignon a La Julia Child (Food.com), Confit Byaldi (Mission Food Adventure) | flat lists | 3 groups each (the page's own component headings); no other page changed |
+| (b) Yield label | Caramelized Shallot Pasta (Alison Roman) | "YIELD — 4 servings" | "4 servings" (servings 4) |
+| (c) Asides to notes | Lamb Tartare (Bon Appétit) | 3 steps, the last "DO AHEAD: …" | 2 steps, 1 note |
+| (c) also applied to | Spinach Gratin (Food Network) | 2 steps, the second an editor's "Note: This recipe has been updated…" | 1 step, 1 note |
+| (d) Modifier rejoined | Ultimate Peking Duck (ChefSteps, rendered) | "1 Pekin duck whole" | "1 Pekin duck, whole" (other lines unchanged) |
+| (e) Groups on detail | all pages with groups | groups saved but not shown | section headers on detail; kept through an edit |
+
+**How (a) decides.** Only when the structured data has no groups and at least 4 lines: the page's lines are walked in order, and a structured line counts as found when the page shows the same line (normalized) no more than two lines ahead of the last match. A heading (a heading element or a group-heading line, not "Ingredients", not the recipe's title, at most 50 characters) names the next found line when it sits at most three lines above it. It applies when at least 80% of the lines are found and at least two different groups result. **(b)** strips "Yield", "Yields", "Servings", "Portions" with or without a separator ("YIELD —", "Yield:", "Servings 4"), and only the separator after "Serves" and "Makes" ("Serves: 4" → "Serves 4"). **(c)** moves a step that starts with "Do ahead" or "Make ahead" (any case, hyphen or space), "Note:", "Notes:", "Tip:", "Tips:", "Cook's note:" (with a colon or dash), or "NOTE"/"TIP" in capitals, to the end of the notes in order; "Tip the batter into the pan" stays a step, and a recipe whose only steps are asides keeps them. It applies to every path, including Paprika and Mela. **(d)** `HTMLPage` now records where sibling inline elements meet within a line; after a lone amount, a following line made of a capitalized name and a short lowercase last element is rejoined as "amount name, note". Steps are never split or merged.
+
+`private-fixtures.json` gained `groups`, `stepImages` and `notes` counts (still titles and counts only); `PrivateFixtureTests` checks them. Changed counts: Lamb Tartare steps 3 → 2 (1 note), Spinach Gratin steps 2 → 1 (1 note).
+
+**Step photos on the saved pages:** ChefSteps (rendered) 17 of 23 steps (the others have no photo, or two); Rouxbe's lasagne 7 of 8 (`HowToStep.image`); Serious Eats' roast potatoes 4 of 5 and cranberry sauce 1 of 1 (`HowToStep.image`); none on the other 14.
+
+### Importer field mappings
+
+| Recipe Codex | Paprika (`.paprikarecipe`, gzipped JSON) | Mela (`.melarecipe`, JSON) |
+|---|---|---|
+| Title | `name` | `title` |
+| Ingredients and groups | `ingredients`, one per line; "For the sauce:" lines become groups | `ingredients`, one per line; "# Dough" lines become groups |
+| Steps | `directions`: paragraphs when separated by blank lines, else one per line; "Step 1." numbering dropped | `instructions`, one per line; "# Section" lines dropped |
+| Notes | `notes`, then any aside steps | `notes`, then any aside steps |
+| Headnote | `description` | `text` |
+| Yield and servings | `servings` (label stripped) | `yield` (label stripped) |
+| Times | `prep_time`, `cook_time`, `total_time` ("15 mins", "1 hr 10 mins", ISO 8601, or plain minutes) | `prepTime`, `cookTime`, `totalTime` |
+| Source | `source` → site name, `source_url` → link | `link`: a web address → link, anything else (a book) → site name |
+| Cover | `photo_data` (base64), else the first of `photos[].data`; `image_url` kept but not fetched | first of `images` (base64) |
+| Course | `categories`, matched to the standard courses ("Dinner" → Main, "Salads" → Salad, "Desserts" → Dessert) | `categories`, same |
+| Favorite | `on_favorites` (1, true) | `favorite` |
+| Added date | `created` ("2021-03-14 18:22:05", local time) | `date` (seconds since 2001, Unix seconds, or ISO 8601) |
+| Not kept | `rating`, `difficulty`, `nutritional_info`, extra photos, unmatched categories | `nutrition`, `wantToCook`, extra images, unmatched categories |
+
+Library imports are saved with method `libraryFile`, confidence 0.95 and no review flag.
+
+### Decisions made in this slice
+
+- **Step photos also point at the recipe.** A step photo has both `step` and `recipe` set, so the recipe owns every image it shows; `coverImage` still only considers `.photo`.
+- **Downloads after the save.** `saveImport` returns at once and attaches step photos when they arrive, so Save never waits on 17 downloads. The Share Extension (unchanged, out of scope) uses the same call, so it starts the downloads too, but the extension may end before they finish.
+- **Photos follow their step on edit** rather than being copied (copies would double the external storage); version history keeps the old text.
+- **Recipes' More menu** gained Import Library in `Tabs/RecipesView.swift` (one button and one sheet; the rest lives in `Import/`).
+- **No new types declared.** The file importer uses dynamic types for the four extensions plus ZIP and JSON; on the simulator the `.paprikarecipes` file was selectable and other files were greyed out. No Info.plist, capability or entitlement change.
+- **Hero layout fix.** A cover wider than the screen at the hero's 320 pt height pushed recipe detail off the left edge (seen with ChefSteps' and Serious Eats' covers). The hero is now a screen-wide frame with the photo as an overlay.
+
+### Verified
+
+- `swift test`: **RecipeModel** 10 (new: a step photo links both ways, deleting the photo keeps the step, deleting the step deletes its photos; `followsCloudKitRules` passes with the new relationship). **Capture** 68: 19 saved-page cases with the new counts; 12 import-fix and step-photo tests on three new synthetic pages (`jsonld-flat-page-headings.html`, `jsonld-step-images-asides.html`, `page-text-step-photos.html`); 7 library tests on Paprika and Mela archives built in the test (stored and deflated entries, gzip, a damaged entry, `__MACOSX` files, sniffing without an extension, a book as Mela's link); 4 export snapshot tests (Markdown, plain text, a minimal recipe, times and file names); the private-library suite skips because no Paprika or Mela export is under `Docs/Fixtures/Private`. **Intelligence** 9.
+- `xcodebuild build` for the iPhone 17 Pro simulator: succeeded with no warnings (the Share Extension builds unchanged).
+- On the iPhone 17 Pro simulator, with `Docs/Fixtures/Private/HTML` served by `python3 -m http.server`: the store from slice 2 opened without a migration after the in-place schema edit. Imported the **ChefSteps rendered** page (Use Page Reading): "1 Pekin duck, whole" on detail; 17 step thumbnails at the trailing edge; tapping step 2's opened the full-screen viewer with "Step 2 · From the source" and the step text. Imported **Rouxbe's lasagne**: 8 sections on detail ("Making the Ragu" … "Assembling the Lasagne"); Edit showed them as "Heading:" lines and the step photos read-only; adding a note saved version 2 with the 8 groups and all 7 step photos moved to it (checked in the store). **Share Recipe → PDF → Save to Files**: a 10-page US Letter PDF (title, cover, meta, two columns continuing across pages, "Page 1 of 10"), looked at page by page on the Mac. **Markdown → Save to Files**: `Ultimate Peking Duck.md` with grouped bold amounts and 23 numbered steps. **Import Library** with a synthetic 3-recipe `.paprikarecipes` (one embedded photo, a "For the pan sauce:" heading, a DO AHEAD paragraph, a favorite, categories): "Added 3 recipes from Paprika."; in the store, Main/Salad/Dessert courses, favorites, the 2021 added date, the headnote, the cover, times 15/70 and 45, the DO AHEAD paragraph in notes after "Use a cast-iron pan.", the group, source links, change summary "Imported from Paprika". Importing the same file again skipped all 3.
+
+### Not verified
+
+- Mela import in the app (the same sheet and save path; covered by the Capture tests only). A real Paprika or Mela export (none under `Docs/Fixtures/Private`); a very large library's memory use (the archive is memory-mapped and read one recipe at a time). The progress bar was too quick to see with 3 recipes.
+- Swiping between two photos of one step (no imported step has two; the viewer pages with `TabView`). Plain Text sharing. Printing the PDF. Step photos when saving from the Share Extension.
+- iPad, a device, dark mode, Dynamic Type, VoiceOver for the new views.
+
+### Left for Phase 1
+
+- Unmatched Paprika/Mela categories as tags, Paprika ratings (there is no recipe-level rating yet), extra photos from library exports.
+- Taking your own step photos (Phase 3, Cook mode) and adding or removing photos in the editor.
+- `HowToSection` names as step headings, and headings borrowed for steps the way (a) borrows them for ingredients.
+- Share in the Recipes long-press menu and on the bottom toolbar (03 §3.3 puts Share there); a print layout for iPad's wider page.
