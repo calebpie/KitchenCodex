@@ -184,9 +184,13 @@ struct RecipesView: View {
     /// Back returns to it.
     private var splitLayout: some View {
         NavigationSplitView {
-            // Picking a row, even the one already picked, shows its recipes, so whatever was
-            // pushed goes; scope changes made in code (Spotlight, the review row) keep the path.
-            LibrarySidebar(selection: Binding { scope } set: { scope = $0; path = [] })
+            // Picking another row shows its recipes, so whatever was pushed goes. The list also
+            // writes back a scope set in code (Spotlight widening it to All Recipes), which must
+            // keep the recipe just pushed, so only a change pops.
+            LibrarySidebar(selection: Binding { scope } set: { newScope in
+                if newScope != scope { path = [] }
+                scope = newScope
+            })
                 .navigationTitle("Recipes")
         } detail: {
             NavigationStack(path: $path) {
@@ -483,12 +487,16 @@ struct RecipesView: View {
     /// Shows `recipe`, pushed on iPhone and over the grid on iPad (widening the sidebar's scope if
     /// it hides the recipe).
     private func open(_ recipe: Recipe) {
-        if isSplit {
-            if !(scope ?? .all).contains(recipe) { scope = .all }
-        } else {
+        let route = LibraryRoute.recipe(recipe.persistentModelID)
+        guard isSplit, !(scope ?? .all).contains(recipe) else {
             libraryView = .recipes
+            path = [route]
+            return
         }
-        path = [.recipe(recipe.persistentModelID)]
+        // A new sidebar selection pops the content column, which would drop a push made in the
+        // same update (Spotlight from Favorites), so the recipe is pushed once the scope has moved.
+        scope = .all
+        Task { path = [route] }
     }
 
     /// A new collection: selected in the sidebar on iPad, set as the Collection filter on iPhone.
