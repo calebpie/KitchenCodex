@@ -42,6 +42,11 @@ struct RecipesView: View {
     @State private var isCreatingCollection = false
     @State private var isRenamingCollection = false
     @State private var isConfirmingCollectionDeletion = false
+    /// More → Select (03 §3.2): circles on every recipe and the selection bar at the bottom.
+    @State private var isSelecting = false
+    @State private var selectedIDs: Set<PersistentIdentifier> = []
+    /// Select mode → Add to Collection → New Collection…
+    @State private var isCollectingSelection = false
 
     /// Unsorted; used for the empty state, the Filter menu's courses and resolving the selection.
     /// The collection runs its own sorted query.
@@ -71,6 +76,22 @@ struct RecipesView: View {
 
     private var reviewCount: Int { allRecipes.count(where: \.needsReview) }
 
+    /// The recipes on screen: the sidebar's scope (iPad) and the filter.
+    private var visibleRecipes: [Recipe] {
+        let scope = isSplit ? (scope ?? .all) : .all
+        return allRecipes.filter { scope.contains($0) && filter.matches($0) }
+    }
+
+    /// The selected recipes still on screen, which the selection bar acts on.
+    private var selectedRecipes: [Recipe] {
+        visibleRecipes.filter { selectedIDs.contains($0.persistentModelID) }
+    }
+
+    private var selectionTitle: String {
+        let count = selectedRecipes.count
+        return count == 0 ? "Select Recipes" : "\(count) Selected"
+    }
+
     var body: some View {
         Group {
             if isSplit { splitLayout } else { stackLayout }
@@ -86,6 +107,13 @@ struct RecipesView: View {
         }
         .collectionNamePrompt("New Collection", isPresented: $isCreatingCollection, actionTitle: "Create") { name in
             show(CollectionActions.create(named: name, in: modelContext))
+        }
+        .collectionNamePrompt("New Collection", isPresented: $isCollectingSelection, actionTitle: "Create") { name in
+            let collection = CollectionActions.create(named: name, in: modelContext)
+            for recipe in selectedRecipes where !recipe.isIn(collection) {
+                recipe.toggleMembership(in: collection)
+            }
+            try? modelContext.save()
         }
         .collectionNamePrompt("Rename Collection", isPresented: $isRenamingCollection, initialName: currentCollection?.name ?? "") { name in
             currentCollection?.name = name
@@ -106,6 +134,11 @@ struct RecipesView: View {
             router.requestedRecipeID = nil
             if let recipe = allRecipes.first(where: { $0.id == id }) { open(recipe) }
         }
+        // Another scope or view ends Select mode, and so does leaving the tab, which would otherwise
+        // keep the tab bar hidden.
+        .onChange(of: scope) { endSelection() }
+        .onChange(of: libraryView) { endSelection() }
+        .onDisappear { endSelection() }
     }
 
     // MARK: - iPhone
@@ -121,16 +154,18 @@ struct RecipesView: View {
                         }
                     }
                 } else {
-                    LibraryRecipes(sort: sort, layout: layout, grouping: grouping, scope: .all, filter: $filter, collections: collections, selection: nil) {
-                        libraryHeader(showsSwitch: true)
+                    LibraryRecipes(sort: sort, layout: layout, grouping: grouping, scope: .all, filter: $filter, collections: collections, selection: nil, multiSelection: isSelecting ? $selectedIDs : nil) {
+                        libraryHeader(showsSwitch: !isSelecting)
                     }
                 }
             }
             // The title is the switch in the content (04 §5.1 Title switch): the bar shows no title,
             // so nothing collapses into it on scroll, but the title stays set for the Back button.
-            .navigationTitle("Recipes")
+            // Select mode titles the bar with the count and trades the tab bar for its own.
+            .navigationTitle(isSelecting ? selectionTitle : "Recipes")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar(removing: .title)
+            .toolbar(removing: isSelecting ? nil : .title)
+            .toolbarVisibility(isSelecting ? .hidden : .automatic, for: .tabBar)
             .navigationDestination(for: LibraryRoute.self) { route in
                 switch route {
                 case let .recipe(recipe): RecipeDetailView(recipe: recipe)
@@ -153,12 +188,12 @@ struct RecipesView: View {
                 if scope == .shelf || allRecipes.isEmpty {
                     emptyLibrary(scope: scope)
                 } else {
-                    LibraryRecipes(sort: sort, layout: layout, grouping: grouping, scope: scope, filter: $filter, collections: collections, selection: $selectedRecipeID) {
+                    LibraryRecipes(sort: sort, layout: layout, grouping: grouping, scope: scope, filter: $filter, collections: collections, selection: $selectedRecipeID, multiSelection: isSelecting ? $selectedIDs : nil) {
                         libraryHeader(showsSwitch: false)
                     }
                 }
             }
-            .navigationTitle(LibrarySidebar.title(for: scope, books: books, collections: collections))
+            .navigationTitle(isSelecting ? selectionTitle : LibrarySidebar.title(for: scope, books: books, collections: collections))
             .toolbar { libraryToolbar }
         } detail: {
             NavigationStack {
@@ -188,7 +223,7 @@ struct RecipesView: View {
     /// imports wait for a check, and one token per active filter.
     @ViewBuilder
     private func libraryHeader(showsSwitch: Bool) -> some View {
-        let showsPrompt = activeView == .recipes && reviewCount > 0 && scope != .needsReview
+        let showsPrompt = activeView == .recipes && reviewCount > 0 && scope != .needsReview && !isSelecting
         let showsTokens = activeView == .recipes && filter.isActive
         if showsSwitch || showsPrompt || showsTokens {
             VStack(alignment: .leading, spacing: 12) {
@@ -330,7 +365,22 @@ struct RecipesView: View {
 
     @ToolbarContentBuilder
     private var libraryToolbar: some ToolbarContent {
-        if activeView == .recipes {
+        if isSelecting {
+            ToolbarItem(placement: .topBarLeading) {
+                let visible = visibleRecipes
+                let allSelected = !visible.isEmpty && visible.allSatisfy { selectedIDs.contains($0.persistentModelID) }
+                Button(allSelected ? "Deselect All" : "Select All") {
+                    selectedIDs = allSelected ? [] : Set(visible.map(\.persistentModelID))
+                }
+                .disabled(visible.isEmpty)
+            }
+            RecipeSelectionToolbar(
+                recipes: selectedRecipes,
+                onNewCollection: { isCollectingSelection = true },
+                onDelete: delete,
+                onDone: endSelection
+            )
+        } else if activeView == .recipes {
             ToolbarItem(placement: .primaryAction) {
                 // Add names the ways in (04 §5.1 Add menu); methods that haven't shipped are hidden.
                 Menu {
@@ -385,8 +435,12 @@ struct RecipesView: View {
                     }
                     .pickerStyle(.menu)
 
-                    Button("Select", systemImage: "checkmark.circle") {}
-                        .disabled(true)
+                    if !allRecipes.isEmpty {
+                        Button("Select", systemImage: "checkmark.circle") {
+                            selectedIDs = []
+                            isSelecting = true
+                        }
+                    }
                     Divider()
                     Button("New Collection…", systemImage: "rectangle.stack.badge.plus") {
                         isCreatingCollection = true
@@ -450,11 +504,33 @@ struct RecipesView: View {
             try? modelContext.save()
         }
     }
+
+    /// Delete from Select mode, the same way: selections first, then the recipes.
+    private func delete(_ recipes: [Recipe]) {
+        let ids = Set(recipes.map(\.persistentModelID))
+        if let selectedRecipeID, ids.contains(selectedRecipeID) { self.selectedRecipeID = nil }
+        selectedIDs.subtract(ids)
+        Task {
+            await Task.yield()
+            withAnimation {
+                for recipe in recipes { modelContext.delete(recipe) }
+            }
+            try? modelContext.save()
+        }
+    }
+
+    /// Leaves Select mode; the selection goes with it.
+    private func endSelection() {
+        isSelecting = false
+        selectedIDs = []
+    }
 }
 
 /// The filtered, sorted, grouped recipes as a grid or a list, under `header`. With a `selection`
 /// (iPad) a tap selects the recipe for the detail column and a recipe can be dragged onto a sidebar
-/// collection; without one (iPhone) a tap pushes the recipe.
+/// collection; without one (iPhone) a tap pushes the recipe. With a `multiSelection` (Select mode)
+/// every recipe shows a selection circle and a tap toggles it; the list's own selection extends
+/// with ⌘-click and shift-click on iPad.
 private struct LibraryRecipes<Header: View>: View {
     @Query private var recipes: [Recipe]
     let layout: RecipeLayout
@@ -463,6 +539,7 @@ private struct LibraryRecipes<Header: View>: View {
     @Binding var filter: RecipeFilter
     let collections: [RecipeCollection]
     let selection: Binding<PersistentIdentifier?>?
+    let multiSelection: Binding<Set<PersistentIdentifier>>?
     @ViewBuilder let header: Header
 
     @Environment(\.modelContext) private var modelContext
@@ -470,7 +547,7 @@ private struct LibraryRecipes<Header: View>: View {
     /// Long-press → Add to Collection → New Collection…: the recipe to put in it once named.
     @State private var collectingRecipe: Recipe?
 
-    init(sort: RecipeSort, layout: RecipeLayout, grouping: RecipeGrouping, scope: LibraryScope, filter: Binding<RecipeFilter>, collections: [RecipeCollection], selection: Binding<PersistentIdentifier?>?, @ViewBuilder header: () -> Header) {
+    init(sort: RecipeSort, layout: RecipeLayout, grouping: RecipeGrouping, scope: LibraryScope, filter: Binding<RecipeFilter>, collections: [RecipeCollection], selection: Binding<PersistentIdentifier?>?, multiSelection: Binding<Set<PersistentIdentifier>>? = nil, @ViewBuilder header: () -> Header) {
         _recipes = Query(sort: sort.descriptors, animation: .default)
         self.layout = layout
         self.grouping = grouping
@@ -478,6 +555,7 @@ private struct LibraryRecipes<Header: View>: View {
         _filter = filter
         self.collections = collections
         self.selection = selection
+        self.multiSelection = multiSelection
         self.header = header()
     }
 
@@ -591,7 +669,26 @@ private struct LibraryRecipes<Header: View>: View {
 
     private func card(_ recipe: Recipe) -> some View {
         Group {
-            if let selection {
+            if let multiSelection {
+                let id = recipe.persistentModelID
+                let isSelected = multiSelection.wrappedValue.contains(id)
+                Button {
+                    if isSelected { multiSelection.wrappedValue.remove(id) } else { multiSelection.wrappedValue.insert(id) }
+                } label: {
+                    RecipeCard(recipe: recipe)
+                        .overlay {
+                            if isSelected {
+                                RoundedRectangle(cornerRadius: 22)
+                                    .strokeBorder(.tint, lineWidth: 3)
+                            }
+                        }
+                        .overlay(alignment: .topLeading) {
+                            SelectionCircle(isSelected: isSelected)
+                                .padding(14)
+                        }
+                }
+                .accessibilityAddTraits(isSelected ? .isSelected : [])
+            } else if let selection {
                 let isSelected = selection.wrappedValue == recipe.persistentModelID
                 Button {
                     selection.wrappedValue = recipe.persistentModelID
@@ -618,7 +715,17 @@ private struct LibraryRecipes<Header: View>: View {
 
     @ViewBuilder
     private func list(_ sections: [RecipeGrouping.Section], isEmpty: Bool) -> some View {
-        if let selection {
+        if let multiSelection {
+            // The list's own circles, in edit mode; rows select rather than push.
+            List(selection: multiSelection) {
+                listContent(sections, isEmpty: isEmpty) { recipe in
+                    RecipeRow(recipe: recipe)
+                        .tag(recipe.persistentModelID)
+                }
+            }
+            .listStyle(.plain)
+            .environment(\.editMode, .constant(.active))
+        } else if let selection {
             List(selection: selection) {
                 listContent(sections, isEmpty: isEmpty) { recipe in
                     RecipeRow(recipe: recipe)
