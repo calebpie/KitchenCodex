@@ -52,9 +52,13 @@ public struct ImportedRecipe: Sendable, Equatable {
     public var prepTime: Duration?
     public var cookTime: Duration?
     public var totalTime: Duration?
-    /// Raw `recipeCategory` and `recipeCuisine`, when the page gives them.
+    /// Raw `recipeCategory` and `recipeCuisine`, when the page gives them. A library export's
+    /// categories are joined with commas here, which is how the course matcher reads them.
     public var category: String?
     public var cuisine: String?
+    /// A library export's categories, each as written, in order. They become tags; the page's
+    /// `recipeCategory` does not.
+    public var categories: [String] = []
     /// Group headings ("For the dressing") keyed by the index of the first ingredient in the group.
     public var ingredientGroups: [Int: String]
     public var method: ImportMethod?

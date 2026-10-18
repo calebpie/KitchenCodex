@@ -29,9 +29,10 @@ extension RecipeDraft {
 
     /// Saves a new recipe from an import (or a manual entry started from a failed one), then records
     /// where it came from: the source line, the capture confidence and the review flag. Ingredient
-    /// groups travel in the ingredients text as "Heading:" lines. `imported.method == nil` means the
-    /// cook typed it in. Step photos the source shows are downloaded after the save and attached as
-    /// they arrive (see `attachStepPhotos`).
+    /// groups travel in the ingredients text as "Heading:" lines. A library export's categories
+    /// become tags (see `tags(named:in:)`). `imported.method == nil` means the cook typed it in.
+    /// Step photos the source shows are downloaded after the save and attached as they arrive (see
+    /// `attachStepPhotos`).
     @discardableResult
     func saveImport(_ imported: ImportedRecipe, in context: ModelContext) -> Recipe {
         var draft = self
@@ -41,6 +42,9 @@ extension RecipeDraft {
         let recipe = draft.save(to: nil, comparedWith: RecipeDraft(), in: context)
         recipe.cuisine = recipe.cuisine ?? imported.cuisine
         recipe.isFavorite = imported.isFavorite
+        if !imported.categories.isEmpty {
+            recipe.tags = Self.tags(named: imported.categories, in: context)
+        }
         if let headnote = imported.headnote?.trimmed, !headnote.isEmpty { recipe.headnote = headnote }
         if let created = imported.createdAt {
             recipe.createdAt = created
@@ -66,6 +70,26 @@ extension RecipeDraft {
             }
         }
         return recipe
+    }
+
+    /// One tag per name: the library's tag of that name, ignoring case and accents, else a new one
+    /// named as written. Paprika and Mela categories arrive this way, so "weeknight" from one recipe
+    /// and "Weeknight" from the next share a tag.
+    static func tags(named names: [String], in context: ModelContext) -> [Tag] {
+        var existing = (try? context.fetch(FetchDescriptor<Tag>())) ?? []
+        var result: [Tag] = []
+        for name in names {
+            let tag: Tag
+            if let match = existing.first(where: { $0.name.compare(name, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame }) {
+                tag = match
+            } else {
+                tag = Tag(name: name)
+                context.insert(tag)
+                existing.append(tag)
+            }
+            if !result.contains(where: { $0 === tag }) { result.append(tag) }
+        }
+        return result
     }
 
     /// Downloads and prepares the import's cover the way the editor prepares a picked photo. An
@@ -167,7 +191,9 @@ extension ImportedRecipe {
 
 extension RecipeCourse {
     /// The standard course for a page's `recipeCategory` ("Main Course", "side-dish",
-    /// "Dinner, Main Course, Poultry", "Desserts or Baked Goods"), if one fits.
+    /// "Dinner, Main Course, Poultry", "Desserts or Baked Goods"), if one fits: the first
+    /// comma-separated part that names a course decides. Paprika and Mela categories arrive joined
+    /// the same way, so "Weeknight, Dinner" is a Main; every one of them is also a tag.
     static func match(category: String?) -> String? {
         guard let category else { return nil }
         let table: [(course: String, words: [String])] = [

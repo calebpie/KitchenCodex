@@ -60,6 +60,7 @@ struct LibraryImportTests {
         #expect(chicken.imageURL?.absoluteString == "https://example.test/chicken.jpg")
         #expect(chicken.imageData == Data(base64Encoded: Self.pixel))
         #expect(chicken.category == "Weeknight, Dinner")
+        #expect(chicken.categories == ["Weeknight", "Dinner"])
         #expect(chicken.isFavorite)
         #expect(chicken.createdAt != nil)
         #expect(chicken.method == .libraryFile)
@@ -70,6 +71,7 @@ struct LibraryImportTests {
         #expect(salad.steps.map(\.text) == ["Wash the lettuce.", "Toss with the vinaigrette."])
         #expect(salad.yield == nil)
         #expect(salad.category == nil)
+        #expect(salad.categories.isEmpty)
         #expect(salad.sourceURL == nil)
         #expect(salad.siteName == nil)
         #expect(!salad.isFavorite)
@@ -81,6 +83,32 @@ struct LibraryImportTests {
         #expect(library.format == .paprika)
         #expect(library.count == 1)
         #expect(try library.recipe(at: 0).title == "Green Salad")
+    }
+
+    /// Every category becomes a tag: each kept once, as written, whether a string or a named object.
+    @Test func carriesEveryCategory() throws {
+        var record = Self.salad
+        record["categories"] = ["Salads", "  weeknight ", ["name": "Vegetarian"], "Weeknight", "", "Salads"]
+        let salad = PaprikaImporter.recipe(from: record)
+        #expect(salad.categories == ["Salads", "weeknight", "Vegetarian"])
+        #expect(salad.category == "Salads, weeknight, Vegetarian")
+    }
+
+    /// A rating of 4 or 5 makes a favorite; a lower one, or none, leaves `on_favorites` to decide.
+    @Test(arguments: [(5, 0, true), (4, 0, true), (3, 0, false), (0, 0, false), (3, 1, true)])
+    func ratingFourOrMoreIsAFavorite(rating: Int, onFavorites: Int, isFavorite: Bool) throws {
+        var record = Self.salad
+        record["rating"] = rating
+        record["on_favorites"] = onFavorites
+        let archive = try TestArchives.zip([("Green Salad.paprikarecipe", try Self.paprikaEntry(record), true)])
+        let salad = try LibraryArchive(data: archive, fileName: "export.paprikarecipes").recipe(at: 0)
+        #expect(salad.isFavorite == isFavorite)
+    }
+
+    @Test func aRatingWrittenAsTextCounts() {
+        var record = Self.salad
+        record["rating"] = "4"
+        #expect(PaprikaImporter.recipe(from: record).isFavorite)
     }
 
     @Test func reportsADamagedEntryAndKeepsTheRest() throws {
@@ -121,6 +149,7 @@ struct LibraryImportTests {
         #expect(bread.sourceURL?.absoluteString == "https://example.test/bread")
         #expect(bread.imageData == Data(base64Encoded: Self.pixel))
         #expect(bread.category == "Bread, Baking")
+        #expect(bread.categories == ["Bread", "Baking"])
         #expect(bread.isFavorite)
         #expect(bread.createdAt == Date(timeIntervalSinceReferenceDate: 700_000_000))
         #expect(bread.importedFrom == "Mela")

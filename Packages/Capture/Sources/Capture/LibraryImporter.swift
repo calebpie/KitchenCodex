@@ -146,11 +146,12 @@ public struct LibraryArchive: Sendable {
 /// | `prep_time`, `cook_time`, `total_time` ("15 mins", "1 hr 10 mins") | times |
 /// | `source`, `source_url` | site name, source URL |
 /// | `image_url`, `photo_data` (base64) | cover |
-/// | `categories` | course, where one matches |
-/// | `on_favorites` | favorite |
+/// | `categories` | tags, each one; and the course, where one names a course |
+/// | `on_favorites`, `rating` (0–5) | favorite when on favorites or rated 4 or more |
 /// | `created` ("2021-03-14 18:22:05") | added date |
 ///
-/// `rating`, `difficulty`, `nutritional_info` and extra `photos` are not kept (no field for them yet).
+/// `difficulty`, `nutritional_info`, extra `photos` and ratings below 4 are not kept (no field for
+/// them yet).
 public enum PaprikaImporter {
     public static func recipe(from json: [String: Any]) -> ImportedRecipe {
         let ingredients = ImportText.ingredientList([LibraryFields.string(json["ingredients"]) ?? ""])
@@ -172,7 +173,8 @@ public enum PaprikaImporter {
         )
         recipe.notes = LibraryFields.string(json["notes"]).map { [$0] } ?? []
         recipe.headnote = LibraryFields.string(json["description"])
-        recipe.isFavorite = LibraryFields.bool(json["on_favorites"])
+        recipe.categories = LibraryFields.categoryNames(json["categories"])
+        recipe.isFavorite = LibraryFields.bool(json["on_favorites"]) || (LibraryFields.int(json["rating"]) ?? 0) >= LibraryFields.favoriteRating
         recipe.imageData = LibraryFields.base64(json["photo_data"])
             ?? (json["photos"] as? [[String: Any]])?.lazy.compactMap { LibraryFields.base64($0["data"]) }.first
         recipe.createdAt = LibraryFields.date(json["created"])
@@ -195,11 +197,11 @@ public enum PaprikaImporter {
 /// | `prepTime`, `cookTime`, `totalTime` | times |
 /// | `link` (a URL, or a book's name) | source URL, else site name |
 /// | `images` (base64, first kept) | cover |
-/// | `categories` | course, where one matches |
+/// | `categories` | tags, each one; and the course, where one names a course |
 /// | `favorite` | favorite |
 /// | `date` (seconds since 2001, or ISO 8601) | added date |
 ///
-/// `nutrition`, `wantToCook` and further images are not kept.
+/// `nutrition`, `wantToCook` and further images are not kept. Mela exports no rating.
 public enum MelaImporter {
     public static func recipe(from json: [String: Any]) -> ImportedRecipe {
         let ingredientText = (LibraryFields.string(json["ingredients"]) ?? "")
@@ -236,6 +238,7 @@ public enum MelaImporter {
         )
         recipe.notes = LibraryFields.string(json["notes"]).map { [$0] } ?? []
         recipe.headnote = LibraryFields.string(json["text"])
+        recipe.categories = LibraryFields.categoryNames(json["categories"])
         recipe.isFavorite = LibraryFields.bool(json["favorite"])
         recipe.imageData = (json["images"] as? [Any])?.lazy.compactMap { LibraryFields.base64($0) }.first
         recipe.createdAt = LibraryFields.date(json["date"])
@@ -280,12 +283,32 @@ enum LibraryFields {
 
     /// Categories joined with commas, which is how the course matcher reads a page's `recipeCategory`.
     static func categories(_ value: Any?) -> String? {
+        let names = categoryNames(value)
+        return names.isEmpty ? nil : names.joined(separator: ", ")
+    }
+
+    /// Each category once, as written, in order: strings or `{"name": …}` objects; a repeat that
+    /// differs only in case is dropped.
+    static func categoryNames(_ value: Any?) -> [String] {
         let names: [String]
         switch value {
         case let array as [Any]: names = array.compactMap { string($0) ?? string(($0 as? [String: Any])?["name"]) }
         default: names = string(value).map { [$0] } ?? []
         }
-        return names.isEmpty ? nil : names.joined(separator: ", ")
+        var seen: Set<String> = []
+        return names.map(ImportText.inline).filter { !$0.isEmpty && seen.insert($0.lowercased()).inserted }
+    }
+
+    /// A Paprika rating at or above this makes the recipe a favorite.
+    static let favoriteRating = 4
+
+    static func int(_ value: Any?) -> Int? {
+        switch value {
+        case let b as Bool: b ? 1 : 0
+        case let n as NSNumber: n.intValue
+        case let s as String: Int(s.trimmingCharacters(in: .whitespaces))
+        default: nil
+        }
     }
 
     static func bool(_ value: Any?) -> Bool {
