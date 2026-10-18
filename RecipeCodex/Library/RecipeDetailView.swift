@@ -462,8 +462,9 @@ private struct IngredientLine: View {
 
     /// Scaled exactly, then re-expressed in a system, then rounded to what a cook can measure.
     /// Until the cook taps US or Metric, an amount written in the other system is converted to the
-    /// preferred one; one already in it (and any spoon) stays as written, changing unit only when
-    /// scaling makes the written unit awkward (¼ cup × 1.5 is 6 tbsp).
+    /// preferred one (04 §5.1 Units preference); one already in it, any spoon, count, and metric
+    /// weight under the US preference stays as written, changing unit only when scaling makes the
+    /// written unit awkward (¼ cup × 1.5 is 6 tbsp).
     private var amount: String? {
         guard let quantity = ingredient.quantity, quantity.unit != .toTaste else { return nil }
         var shown = quantity.scaled(by: factor)
@@ -473,11 +474,14 @@ private struct IngredientLine: View {
         return shown.friendlyRounded().formatted()
     }
 
-    /// The system to display an amount in, or nil to leave it as written.
+    /// The system to display an amount in, or nil to leave it as written. Grams and kilograms stay
+    /// metric under the US preference so precise recipes keep their weights; millilitres and litres
+    /// still become cups. Tapping US or Metric converts everything.
     static func targetSystem(for unit: CookingUnit?, tapped: MeasurementSystem?, preferred: MeasurementSystem, isScaled: Bool) -> MeasurementSystem? {
         if let tapped { return tapped }
         guard let unit, let own = unit.system else { return nil }
-        if own != preferred, unit.isConvertible, !unit.isSpoon { return preferred }
+        let keepsMetricWeight = preferred == .us && own == .metric && unit.isMass
+        if own != preferred, unit.isConvertible, !unit.isSpoon, !keepsMetricWeight { return preferred }
         return isScaled ? own : nil
     }
 
