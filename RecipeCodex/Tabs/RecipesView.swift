@@ -17,6 +17,7 @@ struct RecipesView: View {
     @State private var filter = RecipeFilter()
     @State private var isAddingRecipe = false
     @State private var isImportingFromWeb = false
+    @State private var isImportingLibrary = false
     @State private var path: [Recipe] = []
     /// Set by the import sheet; opened once the sheet has gone.
     @State private var importedRecipe: Recipe?
@@ -115,6 +116,10 @@ struct RecipesView: View {
 
                             Button("Select", systemImage: "checkmark.circle") {}
                                 .disabled(true)
+                            Divider()
+                            Button("Import Library…", systemImage: "tray.and.arrow.down") {
+                                isImportingLibrary = true
+                            }
                         case .books:
                             Button("Sort", systemImage: "arrow.up.arrow.down") {}
                                 .disabled(true)
@@ -129,6 +134,9 @@ struct RecipesView: View {
             }
             .sheet(isPresented: $isImportingFromWeb, onDismiss: openImportedRecipe) {
                 WebImportView { recipe in importedRecipe = recipe }
+            }
+            .sheet(isPresented: $isImportingLibrary) {
+                LibraryImportView()
             }
         }
     }

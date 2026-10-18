@@ -44,6 +44,15 @@ enum Fixtures {
         return String(decoding: try Data(contentsOf: directory.appending(path: name)), as: UTF8.self)
     }
 
+    /// Paprika and Mela exports anywhere under `Docs/Fixtures/Private` (Caleb's own library, gitignored).
+    static let privateLibraries: [URL] = {
+        guard let root = privateDirectory?.deletingLastPathComponent(),
+              let walker = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil) else { return [] }
+        let extensions = Set(["paprikarecipes", "paprikarecipe", "melarecipes", "melarecipe"])
+        return walker.compactMap { $0 as? URL }.filter { extensions.contains($0.pathExtension.lowercased()) }
+            .sorted { $0.path < $1.path }
+    }()
+
     // MARK: - Expectations
 
     /// What each private page should import as: titles and counts only, never page text.
