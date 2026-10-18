@@ -47,13 +47,13 @@ Each entry gives purpose, layout on both devices, key interactions, states, and 
 
 **Purpose.** Browse and filter the collection.
 
-**iPhone.** Large title "Recipes," trailing Add (+) and More (⋯). Under the title, a two-segment view switch: **Recipes · Books**. The Recipes view is the library described here; the Books view is the shelf (3.7). Add is contextual and names the way in (04 §5.1 "Add menu"): Import from Web, Scan Page, From Photo, Paste Text, Enter Manually, then Import from Paprika or Mela in the Recipes view, unshipped methods hidden until they land; Add Book (ISBN) and, in Phase 2, Scan Sources Page in the Books view. More holds View As (Grid/List), Sort By, **Group By** (None · Course · Book · Collection; default Course, persisted; a lone section hides its header) and Select. A **Filter** button sits beside More (the funnel symbol, tinted while active); its menu has checkable sections (Course, several allowed; Cooked state; Favorites; Collection; Book; Tag; later Cuisine, Time and Dietary) and Clear Filters. Nothing shows under the title until a filter is active; then a row of removable tokens, one per filter, plus Clear, scrolls with the content (decided Oct 17, 2026, 04 §5.1 "Recipes filters"; replaces the always-visible chip row). Content toggles between a two-column card grid (image-led) and a list (text-led). Cards show image, title, time, and a small badge for "Never cooked" or the book icon.
+**iPhone.** Large title "Recipes," trailing Add (+) and More (⋯). Under the title, a two-segment view switch: **Recipes · Books**, which scrolls away with the content along with any active-filter tokens; only the navigation bar floats (decided Oct 17, 2026, 04 §5.1 "Floating headers"). The Recipes view is the library described here; the Books view is the shelf (3.7). Add is contextual and names the way in (04 §5.1 "Add menu"): Import from Web, Scan Page, From Photo, Paste Text, Enter Manually, then Import from Paprika or Mela in the Recipes view, unshipped methods hidden until they land; Add Book (ISBN) and, in Phase 2, Scan Sources Page in the Books view. More holds View As (Grid/List), Sort By, **Group By** (None · Course · Book · Collection; default Course, persisted; a lone section hides its header) and Select. A **Filter** button sits beside More (the funnel symbol, tinted while active); its menu has checkable sections (Course, several allowed; Cooked state; Favorites; Collection; Book; Tag; later Cuisine, Time and Dietary) and Clear Filters. Nothing shows under the title until a filter is active; then a row of removable tokens, one per filter, plus Clear, scrolls with the content (decided Oct 17, 2026, 04 §5.1 "Recipes filters"; replaces the always-visible chip row). Content toggles between a two-column card grid (image-led) and a list (text-led). Cards show image, title, time, and a small badge for "Never cooked" or the book icon.
 
 **iPad.** Three columns: sidebar (collections, smart collections, tags), list with filters, detail. Drag a recipe from the list onto a collection in the sidebar or into a menu in a second window.
 
 **Interactions.** Long-press for context menu. Pull down to reveal the search field? No: search is the Search tab; the Recipes screen has a filter, not a search, to honor the "one place to search" guidance. Swipe actions: Favorite, Add to list.
 
-**HIG notes.** Filter is a toolbar action, as in Mail, and Group By a View Options submenu, as in Files; active filters read as tokens, never as controls, and never hide the content. Grid cells have concentric corner radii. Images extend under the floating bars with a scroll edge effect.
+**HIG notes.** Filter is a toolbar action, as in Mail, and Group By a View Options submenu, as in Files; active filters read as tokens, never as controls, and never hide the content. Grid cells have concentric corner radii. Images extend under the floating bars with a scroll edge effect; the view switch and filter tokens are content, not a pinned header.
 
 ### 3.3 Recipe detail
 
@@ -65,7 +65,7 @@ Each entry gives purpose, layout on both devices, key interactions, states, and 
 
 **States.** Imported with low confidence: a yellow "Check 2 ingredients" row at the top that scrolls to the suspect items. Scanned: a "View page" button opens the original image.
 
-**HIG notes.** One prominent action (Cook). Large title collapses on scroll. Highlighted times are buttons, not just color.
+**HIG notes.** One prominent action (Cook). Large title collapses on scroll; the top edge uses the hard scroll-edge style so step text does not ghost under the title bar (04 §5.1 "Floating headers"). Highlighted times are buttons, not just color.
 
 ### 3.4 Add menu and import preview
 
@@ -253,5 +253,6 @@ Resolved Oct 17, 2026, from your review:
 20. **Add menu.** Items name the way in (Import from Web, Scan Page, From Photo, Paste Text, Enter Manually, Import from Paprika or Mela); "New Recipe" is dropped and unshipped methods are hidden (3.2, 3.4). Added Oct 17, 2026 from `Docs/Specs/ux-notes.md` row 11.
 21. **Detail share.** Share leaves the detail bottom bar for More; Cook floats alone (§2, 3.3). Added Oct 17, 2026 from `Docs/Specs/ux-notes.md` row 12.
 22. **Step photos.** The step text wraps around the inline trailing thumbnail (narrow beside it, full width below), via TextKit 2 exclusion paths; stacked only at accessibility type sizes (3.3). Added Oct 17, 2026 from `Docs/Specs/ux-notes.md` row 13.
+23. **Floating headers.** The Recipes view switch and filter tokens scroll with the content instead of pinning under the bar; recipe detail uses the hard scroll-edge style (3.2, 3.3). Added Oct 17, 2026 from `Docs/Specs/ux-notes.md` row 14.
 
 Still open: nothing from this document. UX notes gathered between Phase 1 slices live in `Docs/Specs/ux-notes.md`.
