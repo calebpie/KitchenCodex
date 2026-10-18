@@ -8,10 +8,10 @@ enum AppTab: String, Hashable, CaseIterable {
 }
 
 struct RootTabView: View {
-    @State private var selection: AppTab = .recipes
+    @State private var router = AppRouter()
 
     var body: some View {
-        TabView(selection: $selection) {
+        TabView(selection: $router.selectedTab) {
             Tab("Recipes", systemImage: "book.closed", value: .recipes) {
                 RecipesView()
             }
@@ -30,6 +30,7 @@ struct RootTabView: View {
         }
         // iPhone: bottom tab bar. iPad: top tab bar that the user can convert into a sidebar.
         .tabViewStyle(.sidebarAdaptable)
+        .environment(router)
     }
 }
 

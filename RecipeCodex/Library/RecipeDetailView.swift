@@ -7,8 +7,12 @@ import Units
 /// Read, scale, and start cooking (03 §3.3).
 struct RecipeDetailView: View {
     let recipe: Recipe
+    /// Set by the iPad split view, which deletes the recipe and clears its selection. Without it the
+    /// detail pops itself and deletes the recipe once it is gone.
+    var onDelete: (() -> Void)?
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.modelContext) private var modelContext
 
     /// Servings chosen with the stepper, or `nil` for the recipe as written.
@@ -22,12 +26,15 @@ struct RecipeDetailView: View {
     @State private var isDeleting = false
     @State private var showsNavigationTitle = false
     @State private var viewedStepPhotos: StepPhotoSelection?
+    @State private var contentWidth: CGFloat = 0
 
     private static let batchSteps: [Rational] = [Rational(1, 4), Rational(1, 2), Rational(3, 4), .one, Rational(3, 2), Rational(2), Rational(3), Rational(4)]
     private let heroHeight: CGFloat = 320
 
     private var version: RecipeVersion? { recipe.currentVersion }
     private var hasHero: Bool { recipe.coverImageData != nil }
+    /// iPad with room to spare: ingredients and steps side by side (03 §3.3).
+    private var isSideBySide: Bool { sizeClass == .regular && contentWidth >= 820 }
 
     var body: some View {
         ScrollView {
@@ -40,6 +47,8 @@ struct RecipeDetailView: View {
                         .frame(height: heroHeight)
                         .overlay { RecipeCoverImage(recipe: recipe, pointSize: 440, usesFullPhoto: true) }
                         .clipped()
+                        // iPad: the hero carries on under the sidebar (03 §3.3).
+                        .backgroundExtensionEffect(isEnabled: sizeClass == .regular)
                 }
 
                 VStack(alignment: .leading, spacing: 28) {
@@ -48,23 +57,41 @@ struct RecipeDetailView: View {
                         headnoteSection
                     }
                     if let version {
-                        scalingControls(for: version)
-                        ingredientsSection(for: version)
-                        stepsSection(for: version)
-                        if !version.notes.isEmpty {
-                            notesSection(version.notes)
+                        if isSideBySide {
+                            HStack(alignment: .top, spacing: 40) {
+                                VStack(alignment: .leading, spacing: 28) {
+                                    scalingControls(for: version)
+                                    ingredientsSection(for: version)
+                                }
+                                .frame(width: (min(contentWidth, 1_100) - 104) * 0.4, alignment: .leading)
+                                VStack(alignment: .leading, spacing: 28) {
+                                    stepsSection(for: version)
+                                    if !version.notes.isEmpty {
+                                        notesSection(version.notes)
+                                    }
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                        } else {
+                            scalingControls(for: version)
+                            ingredientsSection(for: version)
+                            stepsSection(for: version)
+                            if !version.notes.isEmpty {
+                                notesSection(version.notes)
+                            }
                         }
                     }
                     versionsSection
                 }
-                .padding(.horizontal)
+                .padding(.horizontal, isSideBySide ? 32 : 16)
                 .padding(.top, hasHero ? 20 : 8)
                 .padding(.bottom, 32)
-                .frame(maxWidth: 720, alignment: .leading)
+                .frame(maxWidth: isSideBySide ? 1_100 : 720, alignment: .leading)
                 .frame(maxWidth: .infinity)
             }
         }
         // The hero runs under the navigation bar; the soft edge effect keeps Back and the toolbar legible over it.
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { contentWidth = $0 }
         .ignoresSafeArea(edges: hasHero ? .top : [])
         .scrollEdgeEffectStyle(.soft, for: .top)
         .onScrollGeometryChange(for: Bool.self) { geometry in
@@ -93,8 +120,12 @@ struct RecipeDetailView: View {
                 }
                 .confirmationDialog("Delete “\(recipe.title)”?", isPresented: $isConfirmingDelete, titleVisibility: .visible) {
                     Button("Delete Recipe", role: .destructive) {
-                        isDeleting = true
-                        dismiss()
+                        if let onDelete {
+                            onDelete()
+                        } else {
+                            isDeleting = true
+                            dismiss()
+                        }
                     }
                 } message: {
                     Text("The recipe and all its versions will be deleted.")
@@ -113,8 +144,9 @@ struct RecipeDetailView: View {
                 .accessibilityHint("Cook mode is coming in a later version.")
             }
         }
-        // The bottom toolbar (Cook) only shows without the tab bar; detail is a focused, pushed screen.
-        .toolbarVisibility(.hidden, for: .tabBar)
+        // iPhone: the bottom toolbar (Cook) only shows without the tab bar; detail is a focused,
+        // pushed screen. iPad keeps its tab bar at the top.
+        .toolbarVisibility(sizeClass == .compact ? .hidden : .automatic, for: .tabBar)
         .sheet(isPresented: $isEditing) {
             RecipeEditorView(recipe: recipe)
         }
