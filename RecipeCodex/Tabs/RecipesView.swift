@@ -126,7 +126,11 @@ struct RecipesView: View {
                     }
                 }
             }
+            // The title is the switch in the content (04 §5.1 Title switch): the bar shows no title,
+            // so nothing collapses into it on scroll, but the title stays set for the Back button.
             .navigationTitle("Recipes")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar(removing: .title)
             .navigationDestination(for: LibraryRoute.self) { route in
                 switch route {
                 case let .recipe(recipe): RecipeDetailView(recipe: recipe)
@@ -189,13 +193,8 @@ struct RecipesView: View {
         if showsSwitch || showsPrompt || showsTokens {
             VStack(alignment: .leading, spacing: 12) {
                 if showsSwitch {
-                    Picker("View", selection: $libraryView) {
-                        ForEach(LibraryView.allCases) { view in
-                            Text(view.rawValue).tag(view)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .padding(.horizontal)
+                    LibraryTitleSwitch(selection: $libraryView)
+                        .padding(.horizontal)
                 }
                 if showsPrompt {
                     NeedsALookRow(count: reviewCount) {
@@ -353,13 +352,12 @@ struct RecipesView: View {
             ToolbarItem(placement: .primaryAction) {
                 filterMenu
             }
-        }
-        // Primary placement, not .secondaryAction: the latter nests this menu inside the
-        // system overflow menu, so More would open a menu holding only "More".
-        ToolbarItem(placement: .primaryAction) {
-            Menu {
-                switch activeView {
-                case .recipes:
+            // Primary placement, not .secondaryAction: the latter nests this menu inside the
+            // system overflow menu, so More would open a menu holding only "More". The Books view
+            // has no More until the shelf has something to sort (04 §5.1 Add menu: hidden, not
+            // disabled), and no Add until Add Book ships.
+            ToolbarItem(placement: .primaryAction) {
+                Menu {
                     Picker(selection: $layout) {
                         ForEach(RecipeLayout.allCases) { option in
                             Label(option.title, systemImage: option.systemImage).tag(option)
@@ -401,12 +399,9 @@ struct RecipesView: View {
                             isConfirmingCollectionDeletion = true
                         }
                     }
-                case .books:
-                    Button("Sort", systemImage: "arrow.up.arrow.down") {}
-                        .disabled(true)
+                } label: {
+                    Label("More", systemImage: "ellipsis")
                 }
-            } label: {
-                Label("More", systemImage: "ellipsis")
             }
         }
     }
@@ -772,6 +767,47 @@ private struct FilterTokens: View {
             .padding(.horizontal)
         }
         .scrollIndicators(.hidden)
+    }
+}
+
+/// The large title as the view switch (04 §5.1 Title switch): "Recipes" and "Books" side by side in
+/// large-title type a fixed gap apart, the shown view in the primary color and the other in
+/// secondary. Each word is a button with the selected trait; VoiceOver reads the pair as a segmented
+/// control. At accessibility sizes the words stack.
+private struct LibraryTitleSwitch: View {
+    @Binding var selection: RecipesView.LibraryView
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+            : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 20))
+        layout {
+            ForEach(RecipesView.LibraryView.allCases) { view in
+                let isSelected = selection == view
+                Button {
+                    selection = view
+                } label: {
+                    Text(view.rawValue)
+                        .font(.largeTitle.bold())
+                        .foregroundStyle(isSelected ? .primary : .secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(isSelected ? .isSelected : [])
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityRepresentation {
+            Picker("Library", selection: $selection) {
+                ForEach(RecipesView.LibraryView.allCases) { view in
+                    Text(view.rawValue).tag(view)
+                }
+            }
+            .pickerStyle(.segmented)
+        }
     }
 }
 
