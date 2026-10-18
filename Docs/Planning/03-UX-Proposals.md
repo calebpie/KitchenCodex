@@ -177,18 +177,18 @@ A sheet with a five-star rating, a one-line "how did it go," optional photo (off
 
 **Purpose.** Everything you have to cook with, in one tab: ingredients, tools, suppliers, bottles, kitchens and your own settings. Planning and shopping read from it.
 
-**iPhone.** Large title "Pantry," trailing Add (+) and More (⋯), both contextual to the pane. Under the title, a scrolling pane selector (Pantry · Tools · Sources · Cellar & Bar · Kitchens · Profile) in the same chip style as the Recipes filters; it opens on Pantry. Each pane is a grouped list:
+**iPhone.** Large title "Pantry." The root is a hub (decided Oct 17, 2026, 04 §5.1 "Pantry hub"): a Profile card at the top in the Settings style (name, units, temperature preference; tap opens Profile), then an inset grouped list with one row per pane (Staples · Tools · Sources · Cellar & Bar · Kitchens), each with its symbol, name and a live summary line ("142 staples · 3 low", "two ovens, five burners", "4 stores", "12 bottles", "Home"). Tapping a row pushes the pane; Add (+) and More (⋯) appear on the pane, contextual to it. An earlier proposal of filter-style chips under the title was dropped: six chips do not fit the width and chips read as filters, not destinations. Each pane is a grouped list:
 
-- **Pantry.** Ingredients grouped by store section, each with an in-stock toggle and a staple flag; swipe to add to the current shopping list. "Used up" marks from cook mode land here. Low staples show a dot.
+- **Staples** (the pane formerly named Pantry). Ingredients grouped by store section, each with an in-stock toggle and a staple flag; swipe to add to the current shopping list. "Used up" marks from cook mode land here. Low staples show a dot.
 - **Tools.** Checklist with counts and capacities (two ovens, five burners, a 7-quart Dutch oven), per kitchen. Feeds the scheduler's resource limits and the recipe "needs" badges.
 - **Sources.** Stores you frequent and specialty suppliers, grouped Equipment · Food · Drink the way cookbooks print them: name, what they carry, phone, website, address. Added by hand, from a URL, or by scanning a book's Sources page (3.7), in which case the book is shown as the origin. A **Frequented** toggle makes a store a shopping stop (3.10); an ingredient can name a preferred source. Row actions: Call, Website, Directions, Add to stops.
 - **Cellar & Bar.** Two segments. Cellar: wine by color, region and vintage with bottle counts, a drink-by note and an "open" state. Bar: spirits, liqueurs, mixers and bitters. Add by hand or from a label photo (Vision reads producer and vintage; you confirm). Pairings in the menu builder (3.9) pick from here and show "on hand" or "to buy."
 - **Kitchens.** Home and others (a rental, a friend's), each with its own tools and pantry; the active kitchen is the default for new events.
 - **Profile.** Proficiency (three options with a sentence each), units, voice and hands-free, kitchen theme (toggle), intelligence (model choice and what is shared), export and backup. Guests stay under Plan, where they are used.
 
-**iPad.** The panes are sidebar sections; three columns for Sources and Cellar & Bar (group, list, detail), two for the rest.
+**iPad.** The hub rows are the Pantry sidebar, in the same order with the same symbols, so hub and sidebar are one list; three columns for Sources and Cellar & Bar (group, list, detail), two for the rest.
 
-**HIG notes.** Toggles for state that is read elsewhere (in stock, frequented, open), never buttons. Phone numbers and websites are tappable detail rows, not raw text. The pane selector is a view filter, not navigation: Back always returns to the previous tab, never the previous pane.
+**HIG notes.** Toggles for state that is read elsewhere (in stock, frequented, open), never buttons. Phone numbers and websites are tappable detail rows, not raw text. The hub is navigation: a pane is pushed, and Back returns to the hub. The hub is the HIG list-hub idiom (Health Browse, Files Browse, Settings); each row's summary is live data, never static copy.
 
 ### 3.18 Search
 
@@ -200,7 +200,7 @@ Three skippable screens (tools, proficiency, pantry), then the Recipes tab, whos
 
 ## 4. iPad specifics
 
-- **Navigation.** Top tab bar convertible to sidebar; sidebar sections per tab; user collections pinnable. Three-column `NavigationSplitView` for Recipes (both views) and for Pantry's Sources and Cellar & Bar; two-column for Plan.
+- **Navigation.** Floating Liquid Glass tab bar at the top, never a tab sidebar (decided Oct 17, 2026, 04 §5.1 "iPad tabs"); each tab's own split-view sidebar is the only left column, with sections per tab; user collections pinnable. Three-column `NavigationSplitView` for Recipes (both views) and for Pantry's Sources and Cellar & Bar; two-column for Plan.
 - **Windows.** Recipes, Plan and Cook mode can each open in their own window. Cook mode window is useful on a stand while the planner stays open on the Mac via iPhone Mirroring or Sidecar later.
 - **Menu bar and keyboard.** File (New recipe, Import, Scan), Edit, View (Recipes/Books, Grid/List, Filters), Recipe (Cook, Scale, Add to menu), Plan (New event, Finalize, Replan), Window. Shortcuts: ⌘N new, ⌘I import, ⌘F search, ⌘⇧C cook, space to advance in cook mode, ⌘R replan.
 - **Pointer.** Hover effects on cards and timeline tasks; pointer changes over resizable timeline edges.
@@ -240,7 +240,7 @@ Resolved Oct 17, 2026, from your review:
 7. **Now Cooking accessory on iPad.** Window only; the accessory is an iPhone surface (3.14).
 8. **Heavy-reasoning model.** Apple cloud by default, Claude as a setting in Profile → Intelligence.
 9. **Event dates.** Set in Plan and editable until service starts (3.9).
+10. **iPad tabs.** Floating Liquid Glass tab bar at the top, never a tab sidebar; each tab's split-view sidebar is the only left column (§4, 04 §5.1). Added Oct 17, 2026 from `Docs/Specs/ux-notes.md` row 1.
+11. **Pantry hub.** The Pantry tab root on iPhone is a Profile card plus an inset grouped list of panes with live summaries, each pushing its pane; the first pane is renamed Staples; the same rows are the iPad sidebar (3.17). Replaces the chip selector. Added Oct 17, 2026 from `Docs/Specs/ux-notes.md` row 2.
 
-Still open:
-
-1. Pantry pane selector on iPhone: chips under the title (proposed), or a segmented control for the four most-used panes with the rest in More?
+Still open: nothing from this document. UX notes gathered between Phase 1 slices live in `Docs/Specs/ux-notes.md`.

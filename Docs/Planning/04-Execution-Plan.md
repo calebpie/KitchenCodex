@@ -158,13 +158,14 @@ Roughly seven months part-time to the full proposal, with a usable library at si
 | Units preference | An amount written in the other system is shown in the preferred one, except metric weights (g, kg), which stay as written under the US preference so precise recipes keep their grams; spoons and counts stay as written. The US/Metric control on detail still converts every amount on tap. |
 | Liquid ounces | Ounces of a liquid ingredient (juice, milk, cream, stock, water, oil, wine, syrup…) are always fluid ounces, never weight, whether or not the line says "fl"; a metric volume in parentheses ("5 ounces (142 ml)") confirms it. |
 | Sub-recipes on one page | A web page or book spread that carries several components is offered as a split into linked recipes at import, always user-confirmed; the parent inlines them at cook time and each is searchable on its own. |
+| iPad tabs | On iPad the five tabs show as the floating Liquid Glass tab bar at the top, never as a tab sidebar; each tab's own `NavigationSplitView` sidebar (Recipes: All Recipes, Smart Collections, Collections, Books) is the only left column. Replaces "top tab bar convertible to sidebar" (03 §4). Tracked in `Docs/Specs/ux-notes.md` row 1. |
+| Pantry hub | The Pantry tab's root on iPhone is a hub, not a chip selector: a Profile card at the top (name, units, temperature preference) in the Settings style, then an inset grouped list with one row per pane (icon, name, a live summary such as "142 staples · 3 low" or "12 bottles"), each row pushing its pane, so Back returns to the hub. The first pane is renamed **Staples** so the hub does not list a row called Pantry. On iPad the same rows are the Pantry sidebar, so hub and sidebar are one list. Tracked in `Docs/Specs/ux-notes.md` row 2. |
 
 ### 5.2 Still needed from you
 
 | Decision | What it means | Recommendation |
 |---|---|---|
 | First dinner fixture | A real upcoming dinner (date, guest count, the actual menu you intend to cook) that becomes the scenario the scheduler is built and tested against in Phases 4 and 5: its recipes get step annotations first, and its timeline is the one judged against what really happened. | Name one when you have it on the calendar; needed by the start of Phase 4, not before. |
-| Pantry pane selector on iPhone | Chips under the title, or a segmented control for four panes with the rest in More (03 §7). | Chips; decide after seeing it in Phase 4. |
 | Where References live | A third view in Recipes (Recipes · Books · References), or a section inside the Books view. Search covers them either way; the choice only affects the library's top-level switch and how a scanned chapter sits next to its book. | Third view in Recipes; decide when the first article is captured in Phase 2. |
 
 ## 6. Risks to the plan
