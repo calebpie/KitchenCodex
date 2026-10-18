@@ -138,7 +138,7 @@ struct TemperatureParserTests {
         ]),
         ("375º degrees Fahrenheit (190º degrees Celsius)", [Temperature(375, .fahrenheit), Temperature(190, .celsius)]),
         ("375° degrees F / 190° degrees C / gas 5", [Temperature(375, .fahrenheit), Temperature(190, .celsius), Temperature(5, .gasMark)]),
-    ])
+    ] as [(String, [Temperature])])
     func keepsEveryAlternativeInOrder(text: String, alternatives: [Temperature]) {
         let parsed = TemperatureParser.parse(text)
         #expect(parsed?.alternatives == alternatives)
