@@ -4,9 +4,9 @@ import SwiftUI
 
 /// Everything you have to cook with (03 §3.17), as a hub (04 §5.1 Pantry hub): one row per pane,
 /// Staples · Tools · Cellar & Bar · Sources, each with a live summary, and Profile as the hub's
-/// toolbar button. On iPad the same rows are the sidebar. There is no Kitchens pane: one implicit
-/// Home kitchen sits behind the panes and is never shown (04 §5.1 Kitchens). Phase 1 fills
-/// Profile; Phase 4 fills the panes.
+/// toolbar button. On iPad the same rows are the sidebar, with Profile at its foot. There is no
+/// Kitchens pane: one implicit Home kitchen sits behind the panes and is never shown (04 §5.1
+/// Kitchens). Phase 1 fills Profile; Phase 4 fills the panes.
 struct PantryView: View {
     enum Pane: String, CaseIterable, Identifiable {
         case staples = "Staples"
@@ -54,7 +54,12 @@ struct PantryView: View {
                     PantryHubRows()
                 }
                 .navigationTitle("Pantry")
-                .toolbar { profileButton { selection = .profile } }
+                // Profile sits at the sidebar's foot, where Notes and Reminders put the sidebar's
+                // own control, so the top bar holds only the system's sidebar toggle. A trailing
+                // item there also made the column reserve the tab bar's height as a white band.
+                .toolbar {
+                    profileButton(placement: .bottomBar, isShown: selection == .profile) { selection = .profile }
+                }
             } detail: {
                 NavigationStack {
                     if let selection {
@@ -72,16 +77,18 @@ struct PantryView: View {
                 .listStyle(.insetGrouped)
                 .navigationTitle("Pantry")
                 .navigationDestination(for: Destination.self) { destination($0) }
-                .toolbar { profileButton { path.append(.profile) } }
+                .toolbar { profileButton(placement: .primaryAction) { path.append(.profile) } }
             }
         }
     }
 
     /// The only profile button in the app (04 §5.1 Pantry hub): the standard account glyph at the
-    /// hub's trailing edge, or in the iPad sidebar's toolbar.
-    private func profileButton(action: @escaping () -> Void) -> some ToolbarContent {
-        ToolbarItem(placement: .primaryAction) {
-            Button("Profile", systemImage: "person.crop.circle", action: action)
+    /// hub's trailing edge, or at the foot of the iPad sidebar, filled while Profile is shown there
+    /// since no sidebar row is selected then.
+    private func profileButton(placement: ToolbarItemPlacement, isShown: Bool = false, action: @escaping () -> Void) -> some ToolbarContent {
+        ToolbarItem(placement: placement) {
+            Button("Profile", systemImage: isShown ? "person.crop.circle.fill" : "person.crop.circle", action: action)
+                .accessibilityAddTraits(isShown ? .isSelected : [])
         }
     }
 
