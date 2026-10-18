@@ -33,9 +33,12 @@ struct RecipeDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 if hasHero {
-                    RecipeCoverImage(recipe: recipe, pointSize: 440, usesFullPhoto: true)
-                        .frame(height: heroHeight)
+                    // The photo fills a screen-wide frame as an overlay, so a wide or tall photo
+                    // never widens the page.
+                    Color.clear
                         .frame(maxWidth: .infinity)
+                        .frame(height: heroHeight)
+                        .overlay { RecipeCoverImage(recipe: recipe, pointSize: 440, usesFullPhoto: true) }
                         .clipped()
                 }
 

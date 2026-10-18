@@ -133,11 +133,17 @@ struct LibraryImportView: View {
         }
     }
 
-    /// "Added 12 recipes from Paprika. Skipped 3 already in your library. 1 couldn't be read."
+    /// "Added 12 recipes from Paprika. Skipped 3 already in your library. 1 couldn't be read.", or
+    /// "All 3 recipes are already in your library." when nothing was new.
     static func report(_ summary: Summary) -> String {
         func recipes(_ count: Int) -> String { count == 1 ? "1 recipe" : "\(count) recipes" }
-        var sentences = ["Added \(recipes(summary.added)) from \(summary.appName)."]
-        if summary.skipped > 0 { sentences.append("Skipped \(summary.skipped) already in your library.") }
+        var sentences: [String] = []
+        if summary.added > 0 || summary.skipped == 0 {
+            sentences.append("Added \(recipes(summary.added)) from \(summary.appName).")
+            if summary.skipped > 0 { sentences.append("Skipped \(summary.skipped) already in your library.") }
+        } else {
+            sentences.append(summary.skipped == 1 ? "The recipe is already in your library." : "All \(summary.skipped) recipes are already in your library.")
+        }
         if summary.unreadable > 0 { sentences.append("\(summary.unreadable) couldn't be read.") }
         if summary.stopped { sentences.append("Stopped before the end; run the import again to add the rest.") }
         return sentences.joined(separator: " ")
