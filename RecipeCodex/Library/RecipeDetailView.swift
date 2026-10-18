@@ -19,8 +19,9 @@ struct RecipeDetailView: View {
     @State private var servings: Int?
     /// Multiplier for recipes that give no servings.
     @State private var batchIndex = RecipeDetailView.batchSteps.firstIndex(of: .one)!
-    /// `nil` shows each ingredient as written; once the cook picks a system everything converts to it.
+    /// `nil` follows the Profile's units preference; once the cook picks a system everything converts to it.
     @State private var unitSystem: MeasurementSystem?
+    @Query(sort: [SortDescriptor(\UserProfile.createdAt)]) private var profiles: [UserProfile]
     @State private var isEditing = false
     @State private var isConfirmingDelete = false
     @State private var isDeleting = false
@@ -32,6 +33,8 @@ struct RecipeDetailView: View {
     private let heroHeight: CGFloat = 320
 
     private var version: RecipeVersion? { recipe.currentVersion }
+    /// Pantry → Profile → Units; US until a profile exists.
+    private var preferredSystem: MeasurementSystem { profiles.first?.unitPreference.measurementSystem ?? .us }
     private var hasHero: Bool { recipe.coverImageData != nil }
     /// iPad with room to spare: ingredients and steps side by side (03 §3.3).
     private var isSideBySide: Bool { sizeClass == .regular && contentWidth >= 820 }
@@ -261,7 +264,7 @@ struct RecipeDetailView: View {
             }
 
             if hasMeasuredIngredients(version) {
-                Picker("Units", selection: Binding { unitSystem ?? dominantSystem(version) } set: { unitSystem = $0 }) {
+                Picker("Units", selection: Binding { unitSystem ?? preferredSystem } set: { unitSystem = $0 }) {
                     Text("US").tag(MeasurementSystem.us)
                     Text("Metric").tag(MeasurementSystem.metric)
                 }
@@ -269,10 +272,6 @@ struct RecipeDetailView: View {
             }
         }
         .animation(.default, value: servings)
-    }
-
-    private func dominantSystem(_ version: RecipeVersion) -> MeasurementSystem {
-        MeasurementSystem.dominant(in: version.sortedIngredients.map(\.cookingUnit)) ?? .us
     }
 
     private func hasMeasuredIngredients(_ version: RecipeVersion) -> Bool {
@@ -298,7 +297,7 @@ struct RecipeDetailView: View {
                             .accessibilityAddTraits(.isHeader)
                     }
                     ForEach(group.ingredients) { ingredient in
-                        IngredientLine(ingredient: ingredient, factor: factor, system: unitSystem)
+                        IngredientLine(ingredient: ingredient, factor: factor, system: unitSystem, preferred: preferredSystem)
                     }
                 }
             }
@@ -426,7 +425,10 @@ private struct SectionTitle: View {
 private struct IngredientLine: View {
     let ingredient: Ingredient
     let factor: Rational
+    /// The system the cook tapped, or nil to follow `preferred`.
     let system: MeasurementSystem?
+    /// The Profile's units preference.
+    let preferred: MeasurementSystem
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
@@ -445,16 +447,25 @@ private struct IngredientLine: View {
         .animation(.default, value: amount)
     }
 
-    /// Scaled exactly, then re-expressed in the chosen system, then rounded to what a cook can
-    /// measure. Until the cook taps US or Metric the amount stays as written: no conversion, and a
-    /// unit change only when scaling makes the written unit awkward (¼ cup × 1.5 is 6 tbsp).
+    /// Scaled exactly, then re-expressed in a system, then rounded to what a cook can measure.
+    /// Until the cook taps US or Metric, an amount written in the other system is converted to the
+    /// preferred one; one already in it (and any spoon) stays as written, changing unit only when
+    /// scaling makes the written unit awkward (¼ cup × 1.5 is 6 tbsp).
     private var amount: String? {
         guard let quantity = ingredient.quantity, quantity.unit != .toTaste else { return nil }
         var shown = quantity.scaled(by: factor)
-        if let system = system ?? (factor == .one ? nil : quantity.unit?.system) {
-            shown = shown.displayed(in: system)
+        if let target = Self.targetSystem(for: quantity.unit, tapped: system, preferred: preferred, isScaled: factor != .one) {
+            shown = shown.displayed(in: target)
         }
         return shown.friendlyRounded().formatted()
+    }
+
+    /// The system to display an amount in, or nil to leave it as written.
+    static func targetSystem(for unit: CookingUnit?, tapped: MeasurementSystem?, preferred: MeasurementSystem, isScaled: Bool) -> MeasurementSystem? {
+        if let tapped { return tapped }
+        guard let unit, let own = unit.system else { return nil }
+        if own != preferred, unit.isConvertible, !unit.isSpoon { return preferred }
+        return isScaled ? own : nil
     }
 
     private var description: String {

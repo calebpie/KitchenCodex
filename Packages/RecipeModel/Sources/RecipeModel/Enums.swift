@@ -42,6 +42,11 @@ public enum UnitPreference: String, Codable, Sendable, CaseIterable {
     case us, metric
 }
 
+/// Preferred temperature unit, independent of `UnitPreference` (a metric cook may still bake in °F).
+public enum TemperaturePreference: String, Codable, Sendable, CaseIterable {
+    case fahrenheit, celsius
+}
+
 /// What kind of supplier a `Source` is (03 §3.17 Sources pane).
 public enum SourceKind: String, Codable, Sendable, CaseIterable {
     /// A shop you can walk into; a frequented store becomes a shopping stop.

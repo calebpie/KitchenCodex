@@ -1,7 +1,9 @@
+import RecipeModel
+import SwiftData
 import SwiftUI
 
 /// Everything you have to cook with (03 §3.17): ingredients, tools, sources, cellar and bar,
-/// kitchens, and your profile. Phase 1 fills Profile; Phase 4 fills the rest.
+/// kitchens, and your profile. Phase 1 fills Profile (`ProfilePane`); Phase 4 fills the rest.
 struct PantryView: View {
     enum Pane: String, CaseIterable, Identifiable {
         case pantry = "Pantry"
@@ -40,26 +42,43 @@ struct PantryView: View {
 
     var body: some View {
         NavigationStack {
-            ContentUnavailableView {
-                Label(pane.rawValue, systemImage: pane.symbol)
-            } description: {
-                Text(pane.emptyDescription)
+            Group {
+                switch pane {
+                case .profile:
+                    ProfilePane()
+                default:
+                    ContentUnavailableView {
+                        Label(pane.rawValue, systemImage: pane.symbol)
+                    } description: {
+                        Text(pane.emptyDescription)
+                    }
+                }
             }
             .navigationTitle("Pantry")
-            .safeAreaInset(edge: .top) {
+            // A bar, not a plain inset, so a scrolling pane passes under it with the scroll edge effect.
+            .safeAreaBar(edge: .top) {
                 // A scrolling pane selector in the Recipes filter-chip style (03 §3.17).
-                ScrollView(.horizontal) {
-                    HStack(spacing: 8) {
-                        ForEach(Pane.allCases) { candidate in
-                            Button(candidate.rawValue) { pane = candidate }
-                                .buttonStyle(.bordered)
-                                .tint(candidate == pane ? .accentColor : .secondary)
+                ScrollViewReader { proxy in
+                    ScrollView(.horizontal) {
+                        HStack(spacing: 8) {
+                            ForEach(Pane.allCases) { candidate in
+                                Button(candidate.rawValue) { pane = candidate }
+                                    .buttonStyle(.bordered)
+                                    .tint(candidate == pane ? .accentColor : .secondary)
+                                    .id(candidate)
+                            }
                         }
+                        .padding(.horizontal)
+                        .padding(.bottom, 8)
                     }
-                    .padding(.horizontal)
-                    .padding(.bottom, 8)
+                    // Keep the selected pane's chip in view; the bar is rebuilt when the pane's
+                    // content changes between a scroll view and a static view.
+                    .onAppear { proxy.scrollTo(pane, anchor: .center) }
+                    .onChange(of: pane) { _, selected in
+                        withAnimation { proxy.scrollTo(selected, anchor: .center) }
+                    }
+                    .scrollIndicators(.hidden)
                 }
-                .scrollIndicators(.hidden)
             }
         }
     }
@@ -67,4 +86,5 @@ struct PantryView: View {
 
 #Preview {
     PantryView()
+        .modelContainer(try! RecipeStore.makeContainer(inMemory: true))
 }

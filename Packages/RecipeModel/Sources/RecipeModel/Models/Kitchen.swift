@@ -122,6 +122,8 @@ extension RecipeSchemaV1 {
         public var proficiency: Proficiency = Proficiency.confident
         public var concurrencyLimit: Int = 2
         public var unitPreference: UnitPreference = UnitPreference.us
+        /// Part of the units preference (04 §5.1): temperatures are shown in this unit, the original kept.
+        public var temperaturePreference: TemperaturePreference = TemperaturePreference.fahrenheit
         public var voiceCommandsEnabled: Bool = false
         /// The high-contrast kitchen theme is a toggle, never automatic (03 §3.12).
         public var kitchenThemeEnabled: Bool = false
