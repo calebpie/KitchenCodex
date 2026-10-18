@@ -3,8 +3,9 @@ import SwiftData
 import SwiftUI
 
 /// Everything you have to cook with (03 §3.17), as a hub (04 §5.1 Pantry hub): one row per pane,
-/// Staples · Tools · Cellar & Bar · Sources, each with a live summary, and Profile as the hub's
-/// toolbar button. On iPad the same rows are the sidebar, with Profile at its foot. There is no
+/// Staples · Tools · Cellar & Bar · Sources, each with the pane's purpose until it has content and
+/// a live summary after, and Profile as the hub's toolbar button. On iPad the same rows are the
+/// sidebar, with Profile at its foot. There is no
 /// Kitchens pane: one implicit Home kitchen sits behind the panes and is never shown (04 §5.1
 /// Kitchens). Phase 1 fills Profile; Phase 4 fills the panes.
 struct PantryView: View {
@@ -25,12 +26,14 @@ struct PantryView: View {
             }
         }
 
+        /// What the pane is for, naming the benefit: the hub row's second line while the pane is
+        /// empty, and the pane's own placeholder. Short enough for two lines in the iPad sidebar.
         var emptyDescription: String {
             switch self {
-            case .staples: "Staples you keep on hand. The shopping list subtracts what is here."
-            case .tools: "Ovens, burners, mixers and pots. The schedule plans around them."
-            case .cellarAndBar: "Wine and spirits on hand, so pairings know what is already in the house."
-            case .sources: "Stores you frequent and specialty suppliers, including those listed in your cookbooks."
+            case .staples: "Ingredients on hand, so the shopping list skips them."
+            case .tools: "Ovens, burners and pots, so the schedule plans around them."
+            case .cellarAndBar: "Wine and spirits in the house, so pairings know what's here."
+            case .sources: "Stores and suppliers; frequent ones become shopping stops."
             }
         }
     }
@@ -110,8 +113,9 @@ struct PantryView: View {
     }
 }
 
-/// One row per pane with its symbol, name and a summary of what is in it ("3 staples · 1 out",
-/// "12 bottles"), or "Nothing yet". Rows push their pane on iPhone and select it on iPad.
+/// One row per pane with its symbol, name and a second line (04 §5.1 Pantry hub): what the pane is
+/// for while it is empty, then a summary of what is in it ("3 staples · 1 out", "12 bottles").
+/// Rows push their pane on iPhone and select it on iPad, where they are the sidebar.
 private struct PantryHubRows: View {
     @Query private var staples: [PantryItem]
     @Query private var tools: [Tool]
@@ -125,9 +129,10 @@ private struct PantryHubRows: View {
                     Label {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(pane.rawValue)
-                            Text(summary(for: pane))
+                            Text(summary(for: pane) ?? pane.emptyDescription)
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
+                                .lineLimit(2)
                         }
                     } icon: {
                         Image(systemName: pane.symbol)
@@ -138,11 +143,12 @@ private struct PantryHubRows: View {
         }
     }
 
-    private func summary(for pane: PantryView.Pane) -> String {
+    /// What is in the pane, or nil while it is empty.
+    private func summary(for pane: PantryView.Pane) -> String? {
         switch pane {
         case .staples:
             let kept = staples.filter(\.isStaple)
-            guard !kept.isEmpty else { return "Nothing yet" }
+            guard !kept.isEmpty else { return nil }
             let out = kept.count { !$0.isInStock }
             let count = kept.count == 1 ? "1 staple" : "\(kept.count) staples"
             return out == 0 ? count : "\(count) · \(out) out"
@@ -155,9 +161,9 @@ private struct PantryHubRows: View {
         }
     }
 
-    private func counted(_ count: Int, _ singular: String, _ plural: String) -> String {
+    private func counted(_ count: Int, _ singular: String, _ plural: String) -> String? {
         switch count {
-        case 0: "Nothing yet"
+        case 0: nil
         case 1: "1 \(singular)"
         default: "\(count) \(plural)"
         }
