@@ -155,6 +155,8 @@ Roughly seven months part-time to the full proposal, with a usable library at si
 | Make-ahead | Whether a component can be made ahead is its hold rule (KnowledgeBase, by component type, overridable per recipe), not its position among the steps. |
 | Parameterized steps | Steps like "20 mins per kg for medium-rare" carry a duration formula with inputs (weight, doneness); inputs are asked in Plan when the recipe joins a menu. A probe temperature outranks the time estimate for proteins. |
 | Temperatures | Shown in the preferred unit (°F or °C, part of the units preference), original kept and reachable; "240C/fan 220C/gas 9" forms parsed. |
+| Units preference | An amount written in the other system is shown in the preferred one, except metric weights (g, kg), which stay as written under the US preference so precise recipes keep their grams; spoons and counts stay as written. The US/Metric control on detail still converts every amount on tap. |
+| Liquid ounces | Ounces of a liquid ingredient (juice, milk, cream, stock, water, oil, wine, syrup…) are always fluid ounces, never weight, whether or not the line says "fl"; a metric volume in parentheses ("5 ounces (142 ml)") confirms it. |
 | Sub-recipes on one page | A web page or book spread that carries several components is offered as a split into linked recipes at import, always user-confirmed; the parent inlines them at cook time and each is searchable on its own. |
 
 ### 5.2 Still needed from you
