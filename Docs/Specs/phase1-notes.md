@@ -632,7 +632,7 @@ Structured pages never waited for the model; the 11 to 16 seconds were the page-
 | Recipe, version, ingredient and step models; manual entry; structured ingredient parser | Done: slice 1, with notes, note forms, produce equivalents, liquid ounces and leading preparations added in slices 5–9 (schema v1 edited in place, four one-time re-reads). |
 | Share Extension with JSON-LD parsing and on-device model fallback; in-app browser import | Done: the extension (slice 2), the model guard (5), the model asked only when the reading lacks something, inside Flow A's time (10); Import from Web in the app with a hidden web view for JavaScript-built pages (4). Not built: a browsing in-app browser with a Save button (the sheet's web view reads the same pages), and "Open in app" from the extension, which needs a URL type in Info.plist (Caleb's call). |
 | Step photos | Done (slices 3, 6, 8): imported per step, thumbnails with the text wrapping, the viewer. Your own photos come with cook mode (Phase 3). |
-| Paprika/Mela import | Done (slices 3, 7), on synthetic exports only. |
+| Paprika/Mela import | Done (slices 3, 7), on synthetic exports only; there is no real library to import (Caleb, Oct 20, 2026). |
 | Recipe detail: scaling, friendly rounding, unit toggle, provenance; temperatures in the preferred unit with the original kept; groups as sections | Done (slices 1, 3–9), with ingredient checks (10). Provenance is the linked source line and View Page in review; the Reader tips section waits for reader-comment summaries (Phase 6). |
 | Recipes tab with the Recipes · Cookbooks switch, filters, collections, smart collections, favorites, recents; Pantry shell with Profile; Search tab | Done, except "recents": Recently Added sort and recent searches exist; a Recently Cooked collection needs cook history (Phase 3). Cookbooks stays empty until Phase 2. |
 | PDF, text and Markdown export | Done (slice 3), the library as a zip of Markdown files (7), the PDF as a Letter or A4 document page (10). |
@@ -642,7 +642,7 @@ Structured pages never waited for the model; the 11 to 16 seconds were the page-
 
 **Left for Caleb by hand**
 
-- Import the real Paprika export (Recipes → Add → Import from Paprika or Mela…) and look over the result: counts, skipped duplicates, categories as tags, covers, any line that reads oddly.
+- ~~Import the real Paprika export~~ Struck Oct 20, 2026: Caleb has no Paprika or Mela library to import, so the importers stay tested on the synthetic exports and the exit rests on the web recipes.
 - Confirm iPhone to iPad sync on the two devices through iCloud (the simulators run local stores; phase0-notes lists the sync proof as his).
 - Install the device build (it builds and signs) and share a few recipe pages from Safari on the phone.
 - VoiceOver on the new controls (ingredient checks as toggles, the title switch, step pills, the Profile button), and accessibility text sizes on the checks.
