@@ -5,9 +5,11 @@ import Units
 
 /// A step's text as written, with each temperature shown as a pill in the cook's preferred unit
 /// (03 §3.3 and §3.12, 04 §5.1 Temperatures): "Roast at 220°C (200°C fan)" reads "Roast at 425°F"
-/// for a Fahrenheit cook. Each duration is a pill too, in the short form ("about 10 minutes" reads
-/// "10 min", "1 to 1 1/2 hours" "1–1½ hr"), which neither Units nor scaling changes. The original
-/// wording is kept; tapping the pill or the edit menu shows it as written (04 §5.1 Step pills).
+/// for a Fahrenheit cook. Each duration's value is a pill too, in the short form ("1 to 1 1/2 hours"
+/// reads "1–1½ hr"), which neither Units nor scaling changes, while the words that qualify it stay as
+/// text beside it: "about 10 minutes" reads "about [10 min]", "up to 2 days" "up to [2 days]". The
+/// original wording is kept; tapping the pill or the edit menu shows the whole mention as written
+/// (04 §5.1 Step pills).
 /// The headnote and the notes use the same parts; ingredient lines take only the temperatures.
 /// `StepTextView` lays the text out; this type finds the mentions and what they read. A nil
 /// scale (Units → As Written) keeps every temperature as written, still marked as a pill.
@@ -31,10 +33,12 @@ enum StepText {
         case temperature(TemperatureMention)
         case duration(DurationMention)
 
+        /// What the pill covers: a whole temperature, and only a duration's number and unit
+        /// (`valueRange`), so "at least" in "at least 6 hours" stays as words.
         var range: Range<String.Index> {
             switch self {
             case let .temperature(mention): mention.range
-            case let .duration(mention): mention.range
+            case let .duration(mention): mention.valueRange
             }
         }
     }
@@ -62,7 +66,8 @@ enum StepText {
     }
 
     /// The text split around its pills: every temperature and, with `includesDurations` (steps,
-    /// the headnote and the notes), every duration. Mentions that overlap become pills side by
+    /// the headnote and the notes), every duration's value, its qualifying words left as text; a
+    /// duration pill's original is the whole mention. Mentions that overlap become pills side by
     /// side over the words they share, never one inside another.
     static func parts(of text: String, in scale: TemperatureScale?, includesDurations: Bool = false) -> [Part] {
         var parts: [Part] = []
@@ -117,7 +122,9 @@ enum StepText {
     static let sameTemperatureSpread = Rational(12)
 
     /// The step as VoiceOver should read it: temperatures in the preferred unit and durations,
-    /// both spelled out ("8 to 10 minutes"). As Written reads temperatures as the recipe wrote them.
+    /// both spelled out, a duration's qualifying words read as written around its value ("at
+    /// least 6 hours", "another 8 to 10 minutes"). As Written reads temperatures as the recipe
+    /// wrote them.
     static func spoken(_ text: String, in scale: TemperatureScale?) -> String {
         var result = ""
         var position = text.startIndex
