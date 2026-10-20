@@ -1,0 +1,137 @@
+UIWindow abs=(0.0 0.0; 1032.0 1376.0)
+ _UITouchFallbackView abs=(0.0 0.0; 1032.0 1376.0)
+ UITransitionView abs=(0.0 0.0; 1032.0 1376.0)
+  UIDropShadowView abs=(0.0 0.0; 1032.0 1376.0)
+   _UIHostingView<ModifiedContent<LazyView<ModifiedContent<RootTabView, _TaskModifier2>>, RootModifier>> abs=(0.0 0.0; 1032.0 1376.0)
+    UIKitPlatformViewHost<PlatformViewControllerRepresentableAdaptor<UIKitAdaptableTabView>> abs=(0.0 0.0; 1032.0 1376.0)
+     UILayoutContainerView abs=(0.0 0.0; 1032.0 1376.0)
+      UITransitionView abs=(0.0 0.0; 1032.0 1376.0)
+       UIViewControllerWrapperView abs=(0.0 0.0; 1032.0 1376.0)
+        _UIHostingView<RootView> abs=(0.0 0.0; 1032.0 1376.0)
+         UIKitPlatformViewHost<PlatformViewControllerRepresentableAdaptor<NavigationStackRepresentable>> abs=(0.0 0.0; 1032.0 1376.0)
+          UILayoutContainerView abs=(0.0 0.0; 1032.0 1376.0)
+           UINavigationTransitionView abs=(0.0 0.0; 1032.0 1376.0)
+            UIViewControllerWrapperView abs=(0.0 0.0; 1032.0 1376.0)
+             HostingView abs=(0.0 0.0; 1032.0 1376.0)
+              PlatformContainer abs=(0.0 0.0; 1032.0 1376.0)
+               HostingScrollView abs=(0.0 0.0; 1032.0 1376.0) offset=(0.0, -138.0) inset=UIEdgeInsets(top: 138.0, left: 0.0, bottom: 20.0, right: 0.0)
+                _UITouchPassthroughView abs=(0.0 0.0; 1032.0 1376.0)
+                 BackdropView abs=(0.0 0.0; 1032.0 126.0)
+                PlatformGroupContainer abs=(0.0 138.0; 1032.0 1026.5)
+                 PlatformContainer abs=(0.0 194.5; 1032.0 44.0)
+                  HostingScrollView abs=(0.0 194.5; 1032.0 44.0) offset=(0.0, 0.0) inset=UIEdgeInsets(top: 0.0, left: 0.0, bottom: 0.0, right: 0.0)
+                   PlatformGroupContainer abs=(0.0 194.5; 261.0 44.0)
+                 PortalGroupMarkerView abs=(16.0 302.5; 241.0 242.0)
+                  PortalGroupMarkerView abs=(16.0 302.5; 241.0 242.0)
+                 PortalGroupMarkerView abs=(16.0 604.5; 241.0 241.5)
+                  PortalGroupMarkerView abs=(16.0 604.5; 241.0 241.5)
+                 PortalGroupMarkerView abs=(16.0 906.0; 241.0 242.0)
+                  PortalGroupMarkerView abs=(16.0 906.0; 241.0 242.0)
+                 PortalGroupMarkerView abs=(16.0 1877.5; 241.0 263.5) [invisible]
+                  PortalGroupMarkerView abs=(16.0 1877.5; 241.0 263.5)
+                 PortalGroupMarkerView abs=(16.0 928.0; 241.0 264.0) [invisible]
+                  PortalGroupMarkerView abs=(16.0 928.0; 241.0 264.0)
+                 PortalGroupMarkerView abs=(16.0 1553.5; 241.0 264.0) [invisible]
+                  PortalGroupMarkerView abs=(16.0 1553.5; 241.0 264.0)
+                 PortalGroupMarkerView abs=(269.0 1877.5; 241.0 263.5) [invisible]
+                  PortalGroupMarkerView abs=(269.0 1877.5; 241.0 263.5)
+                 PortalGroupMarkerView abs=(16.0 302.5; 241.0 242.0) [invisible]
+                  PortalGroupMarkerView abs=(16.0 302.5; 241.0 242.0)
+                 PortalGroupMarkerView abs=(16.0 1252.0; 241.0 241.5) [invisible]
+                  PortalGroupMarkerView abs=(16.0 1252.0; 241.0 241.5)
+                 PortalGroupMarkerView abs=(16.0 604.5; 241.0 263.5) [invisible]
+                  PortalGroupMarkerView abs=(16.0 604.5; 241.0 263.5)
+                 PortalGroupMarkerView abs=(269.0 604.5; 241.0 263.5) [invisible]
+                  PortalGroupMarkerView abs=(269.0 604.5; 241.0 263.5)
+                _UINavigationBarLargeTitleView abs=(0.0 86.0; 1032.0 52.0)
+                 UILabel abs=(20.0 89.5; 126.5 41.0) text='Recipes' font=34.0
+                _UITouchPassthroughView abs=(0.0 0.0; 1032.0 1376.0)
+                 ScrollEdgeEffectView abs=(0.0 0.0; 1032.0 126.0) [invisible]
+                _UIScrollViewScrollIndicator abs=(1026.0 141.0; 3.0 823.5) [invisible]
+                 UIView abs=(1026.0 141.0; 3.0 823.5) radius=1.5
+           UIKitNavigationBar abs=(0.0 32.0; 1032.0 106.0)
+            _UIBarBackground abs=(0.0 0.0; 1032.0 138.0)
+            NavigationBarLargeTitleView abs=(0.0 86.0; 1032.0 52.0)
+            NavigationBarContentView abs=(0.0 32.0; 1032.0 54.0)
+             NavigationBarTransitionContainer abs=(0.0 32.0; 1032.0 54.0)
+              HostedViewContainer abs=(0.0 32.0; 1032.0 54.0)
+              UIView abs=(0.0 32.0; 1032.0 54.0)
+              NavigationBarPlatterContainer_v2 abs=(0.0 32.0; 1032.0 54.0)
+               PlatterContainerHostingView<NavigationBarPlatterContent> abs=(0.0 32.0; 1032.0 54.0)
+                _UIInheritedView abs=(0.0 32.0; 1032.0 54.0)
+                 _UIInheritedView abs=(0.0 32.0; 1032.0 54.0)
+                  _UIInheritedView abs=(0.0 32.0; 0.0 0.0)
+                   UIPlatformGlassInteractionView abs=(867.0 32.0; 155.0 44.0)
+                    _UIInheritedView abs=(867.0 32.0; 41.0 44.0)
+                     UICorePlatformViewHost<PlatformViewRepresentableAdaptor<NavigationBarPlatterRepresentable>> abs=(871.0 36.0; 37.0 36.0)
+                      ItemWrapperView abs=(871.0 36.0; 37.0 36.0)
+                       _UIButtonBarButton abs=(871.0 36.0; 37.0 36.0)
+                        _UIModernBarButton abs=(878.0 43.0; 23.0 22.0)
+                         UIImageView abs=(878.0 43.0; 23.0 22.0)
+                    _UIInheritedView abs=(924.0 32.0; 40.0 44.0)
+                     UICorePlatformViewHost<PlatformViewRepresentableAdaptor<NavigationBarPlatterRepresentable>> abs=(924.0 36.0; 40.0 36.0)
+                      ItemWrapperView abs=(924.0 36.0; 40.0 36.0)
+                       _UIButtonBarButton abs=(924.0 36.0; 40.0 36.0)
+                        _UIModernBarButton abs=(931.0 41.0; 26.0 26.0)
+                         UIImageView abs=(931.0 41.0; 26.0 26.0)
+                    _UIInheritedView abs=(980.0 32.0; 42.0 44.0)
+                     UICorePlatformViewHost<PlatformViewRepresentableAdaptor<NavigationBarPlatterRepresentable>> abs=(980.0 36.0; 38.0 36.0)
+                      ItemWrapperView abs=(980.0 36.0; 38.0 36.0)
+                       _UIButtonBarButton abs=(980.0 36.0; 38.0 36.0)
+                        _UIModernBarButton abs=(987.0 49.5; 24.0 8.5)
+                         UIImageView abs=(987.0 49.5; 24.0 8.5)
+               _UIPointerInteractionAssistantEffectContainerView abs=(0.0 32.0; 0.0 0.0)
+            _UIPointerInteractionAssistantEffectContainerView abs=(0.0 32.0; 0.0 0.0)
+           _UIFloatingBarContainerView abs=(0.0 0.0; 1032.0 1376.0) effRadius=30.0/30.0
+            FloatingBarHostingView<FloatingBarContainer> abs=(0.0 0.0; 1032.0 1376.0)
+            _UIPointerInteractionAssistantEffectContainerView abs=(0.0 0.0; 0.0 0.0)
+      _UITabContainerView abs=(0.0 0.0; 1032.0 1376.0)
+       _UIFloatingTabBar abs=(0.0 32.0; 1032.0 44.0)
+        UIVisualEffectView abs=(301.75 32.0; 428.5 44.0)
+         _UIVisualEffectContentView abs=(301.75 32.0; 428.5 44.0) radius=22.0
+          _UIFloatingTabBarSelectionContainerView abs=(301.75 32.0; 428.5 44.0) radius=22.0
+           _UILiquidLensView abs=(361.75 36.0; 94.0 36.0) effRadius=18.0/18.0 [invisible]
+            UIView abs=(361.75 36.0; 94.0 36.0)
+             _UITabSelectionView abs=(361.75 36.0; 94.0 36.0) effRadius=18.0/18.0
+          UIView abs=(301.75 32.0; 428.5 44.0) radius=22.0
+           UIView abs=(301.75 32.0; 428.5 44.0) radius=22.0
+            _UIFloatingTabBarCollectionView abs=(361.75 32.0; 316.0 44.0) offset=(0.0, 0.0) inset=UIEdgeInsets(top: 0.0, left: 0.0, bottom: 0.0, right: 0.0)
+             _UIFloatingTabBarItemCell abs=(361.75 36.0; 94.0 36.0) radius=18.0
+              _UIFloatingTabBarItemView abs=(361.75 36.0; 94.0 36.0)
+               _UITabSelectionView abs=(361.75 36.0; 94.0 36.0) effRadius=18.0/18.0
+               UILabel abs=(377.25 44.0; 63.0 20.5) text='Recipes' font=17.0
+             _UIFloatingTabBarItemCell abs=(455.75 36.0; 83.0 36.0) radius=18.0
+              _UIFloatingTabBarItemView abs=(455.75 36.0; 83.0 36.0)
+               _UITabSelectionView abs=(455.75 36.0; 83.0 36.0) effRadius=18.0/18.0 [invisible]
+               UILabel abs=(471.75 44.0; 51.0 20.5) text='Pantry' font=17.0
+             _UIFloatingTabBarItemCell abs=(538.75 36.0; 66.0 36.0) radius=18.0
+              _UIFloatingTabBarItemView abs=(538.75 36.0; 66.0 36.0)
+               _UITabSelectionView abs=(538.75 36.0; 66.0 36.0) effRadius=18.0/18.0 [invisible]
+               UILabel abs=(554.75 44.0; 34.0 20.5) text='Plan' font=17.0
+             _UIFloatingTabBarItemCell abs=(604.75 36.0; 73.0 36.0) radius=18.0
+              _UIFloatingTabBarItemView abs=(604.75 36.0; 73.0 36.0)
+               _UITabSelectionView abs=(604.75 36.0; 73.0 36.0) effRadius=18.0/18.0 [invisible]
+               UILabel abs=(620.75 44.0; 41.0 20.5) text='Cook' font=17.0
+           _UIFloatingTabBarPinnedItemsView abs=(677.75 32.0; 48.5 44.0)
+            _UIFloatingTabBarItemView abs=(677.75 36.0; 48.5 36.0)
+             _UITabSelectionView abs=(677.75 36.0; 48.5 36.0) effRadius=18.0/18.0 [invisible]
+             UIImageView abs=(691.75 44.0; 20.5 20.0)
+           _UIFloatingTabBarPageButton abs=(275.25 36.0; 26.5 36.0)
+            UIButton abs=(275.25 36.0; 36.5 36.0) [invisible]
+             _UISystemBackgroundView abs=(275.25 36.0; 36.5 36.0)
+              UIView abs=(275.25 36.0; 36.5 36.0)
+               UIImageView abs=(287.25 45.0; 12.5 18.0)
+           _UIFloatingTabBarPageButton abs=(730.25 36.0; 26.5 36.0)
+            UIButton abs=(720.25 36.0; 36.5 36.0) [invisible]
+             _UISystemBackgroundView abs=(720.25 36.0; 36.5 36.0)
+              UIView abs=(720.25 36.0; 36.5 36.0)
+               UIImageView abs=(732.25 45.0; 12.5 18.0)
+           UIButton abs=(305.75 36.0; 56.0 36.0) radius=17.0
+            _UISystemBackgroundView abs=(305.75 36.0; 56.0 36.0) effRadius=17.0/17.0
+             UIView abs=(305.75 36.0; 56.0 36.0) effRadius=17.0/17.0
+              UIImageView abs=(321.75 45.0; 24.0 18.5)
+          DestOutView abs=(301.75 32.0; 94.0 36.0) radius=18.0 [invisible]
+
+SAFEAREA UIEdgeInsets(top: 32.0, left: 0.0, bottom: 20.0, right: 0.0)
+STATUSBAR Optional((0.0, 0.0, 1032.0, 32.0))
+SCALE 2.0 BOUNDS (0.0, 0.0, 1032.0, 1376.0) ORIENT 1 SIZECLASS h=2 v=2 STYLE 1

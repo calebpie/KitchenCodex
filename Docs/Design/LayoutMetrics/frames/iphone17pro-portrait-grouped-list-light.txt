@@ -1,0 +1,141 @@
+UIWindow abs=(0.0 0.0; 402.0 874.0)
+ _UITouchFallbackView abs=(0.0 0.0; 402.0 874.0)
+ UITransitionView abs=(0.0 0.0; 402.0 874.0)
+  UIDropShadowView abs=(0.0 0.0; 402.0 874.0)
+   _UIHostingView<ModifiedContent<LazyView<ModifiedContent<RootTabView, _TaskModifier2>>, RootModifier>> abs=(0.0 0.0; 402.0 874.0)
+    UIKitPlatformViewHost<PlatformViewControllerRepresentableAdaptor<UIKitAdaptableTabView>> abs=(0.0 0.0; 402.0 874.0)
+     UILayoutContainerView abs=(0.0 0.0; 402.0 874.0)
+      UITransitionView abs=(0.0 0.0; 402.0 874.0)
+       UIViewControllerWrapperView abs=(0.0 0.0; 402.0 874.0)
+        _UIHostingView<RootView> abs=(0.0 0.0; 402.0 874.0)
+         UIKitPlatformViewHost<PlatformViewControllerRepresentableAdaptor<NavigationStackRepresentable>> abs=(0.0 0.0; 402.0 874.0)
+          UILayoutContainerView abs=(0.0 0.0; 402.0 874.0)
+           UINavigationTransitionView abs=(0.0 0.0; 402.0 874.0)
+            UIViewControllerWrapperView abs=(0.0 0.0; 402.0 874.0)
+             HostingView abs=(0.0 0.0; 402.0 874.0)
+              UIKitPlatformViewHost<ListRepresentable<CollectionViewListDataSource<Never>, SelectionManagerBox<Never>>> abs=(0.0 0.0; 402.0 874.0)
+               UpdateCoalescingCollectionView abs=(0.0 0.0; 402.0 874.0) offset=(0.0, -168.0) inset=UIEdgeInsets(top: 168.0, left: 0.0, bottom: 83.0, right: 0.0)
+                _UITouchPassthroughView abs=(0.0 0.0; 402.0 874.0)
+                 BackdropView abs=(0.0 0.0; 402.0 156.0)
+                 BackdropView abs=(0.0 741.0; 402.0 133.0)
+                _UICollectionViewListLayoutSectionBackgroundColorDecorationView abs=(-16.0 -1580.0; 434.0 3877.3333333333335)
+                ListCollectionViewCell abs=(16.0 168.0; 370.0 90.33333333333331) effRadius=26.0/0.0
+                 _UISystemBackgroundView abs=(16.0 168.0; 370.0 90.33333333333331)
+                  UIView abs=(16.0 168.0; 370.0 90.33333333333331)
+                 _UICollectionViewListCellContentView abs=(16.0 168.0; 370.0 90.33333333333331)
+                  CellHostingView<ModifiedContent<_ViewList_View, CollectionViewCellModifier>> abs=(16.0 168.0; 370.0 90.33333333333331)
+                ListCollectionViewCell abs=(16.0 258.33333333333337; 370.0 90.33333333333331)
+                 _UISystemBackgroundView abs=(16.0 258.33333333333337; 370.0 90.33333333333331)
+                  UIView abs=(16.0 258.33333333333337; 370.0 90.33333333333331)
+                 _UICollectionViewListCellContentView abs=(16.0 258.33333333333337; 370.0 90.33333333333331)
+                  CellHostingView<ModifiedContent<_ViewList_View, CollectionViewCellModifier>> abs=(16.0 258.33333333333337; 370.0 90.33333333333331)
+                ListCollectionViewCell abs=(16.0 348.66666666666663; 370.0 90.33333333333331)
+                 _UISystemBackgroundView abs=(16.0 348.66666666666663; 370.0 90.33333333333331)
+                  UIView abs=(16.0 348.66666666666663; 370.0 90.33333333333331)
+                 _UICollectionViewListCellContentView abs=(16.0 348.66666666666663; 370.0 90.33333333333331)
+                  CellHostingView<ModifiedContent<_ViewList_View, CollectionViewCellModifier>> abs=(16.0 348.66666666666663; 370.0 90.33333333333331)
+                ListCollectionViewCell abs=(16.0 439.0; 370.0 90.33333333333337) effRadius=0.0/26.0
+                 _UISystemBackgroundView abs=(16.0 439.0; 370.0 90.33333333333337)
+                  UIView abs=(16.0 439.0; 370.0 90.33333333333337)
+                 _UICollectionViewListCellContentView abs=(16.0 439.0; 370.0 90.33333333333337)
+                  CellHostingView<ModifiedContent<_ViewList_View, CollectionViewCellModifier>> abs=(16.0 439.0; 370.0 90.33333333333337)
+                _UICollectionViewListSeparatorView abs=(72.0 257.3333333333333; 298.0 1.0)
+                _UICollectionViewListSeparatorView abs=(72.0 347.66666666666663; 298.0 1.0)
+                _UICollectionViewListSeparatorView abs=(72.0 438.0; 298.0 1.0)
+                _UINavigationBarLargeTitleView abs=(0.0 116.0; 402.0 52.0)
+                 UILabel abs=(15.999999999999993 119.66666666666667; 103.66666666666666 40.66666666666667) text='Pantry' font=34.0
+                _UITouchPassthroughView abs=(0.0 0.0; 402.0 874.0)
+                 ScrollEdgeEffectView abs=(0.0 0.0; 402.0 156.0) [invisible]
+                 ScrollEdgeEffectView abs=(0.0 741.0; 402.0 133.0) [invisible]
+                _UIScrollViewScrollIndicator abs=(396.0 781.0; 3.0 7.0) [invisible]
+                 UIView abs=(396.0 781.0; 3.0 7.0) radius=1.5
+           UIKitNavigationBar abs=(0.0 62.0; 402.0 106.0)
+            _UIBarBackground abs=(0.0 0.0; 402.0 168.0)
+            NavigationBarLargeTitleView abs=(0.0 116.0; 402.0 52.0)
+            NavigationBarContentView abs=(0.0 62.0; 402.0 54.0)
+             NavigationBarTransitionContainer abs=(0.0 62.0; 402.0 54.0)
+              HostedViewContainer abs=(0.0 62.0; 402.0 54.0)
+               HostedViewWrapper abs=(174.66666666666666 88.66666666666666; 52.666666666666686 20.66666666666667) [invisible]
+                _UINavigationBarTitleControl abs=(174.66666666666666 88.66666666666666; 52.666666666666686 20.66666666666667)
+                 _UIIntrinsicContentSizeInvalidationForwardingWrapperView abs=(174.66666666666666 88.66666666666666; 52.66666666666666 20.66666666666667)
+                  UILabel abs=(174.66666666666666 88.66666666666666; 52.33333333333334 20.66666666666667) text='Pantry' font=17.0
+              UIView abs=(0.0 62.0; 402.0 54.0)
+              NavigationBarPlatterContainer_v2 abs=(0.0 62.0; 402.0 54.0)
+               PlatterContainerHostingView<NavigationBarPlatterContent> abs=(0.0 62.0; 402.0 54.0)
+                _UIInheritedView abs=(0.0 62.0; 402.0 54.0)
+                 _UIInheritedView abs=(0.0 62.0; 402.0 54.0)
+                  _UIInheritedView abs=(0.0 62.0; 0.0 0.0)
+                   UIPlatformGlassInteractionView abs=(342.0 62.0; 44.0 44.0)
+                    _UIInheritedView abs=(342.0 62.0; 44.0 44.0)
+                     UICorePlatformViewHost<PlatformViewRepresentableAdaptor<NavigationBarPlatterRepresentable>> abs=(346.0 66.0; 36.0 36.0)
+                      ItemWrapperView abs=(346.0 66.0; 36.0 36.0)
+                       _UIButtonBarButton abs=(346.0 66.0; 36.0 36.0)
+                        _UIModernBarButton abs=(348.0 71.33333333333333; 32.0 26.0)
+                         UIImageView abs=(351.0 71.33333333333333; 26.0 26.0)
+               _UIPointerInteractionAssistantEffectContainerView abs=(0.0 62.0; 0.0 0.0)
+            _UIPointerInteractionAssistantEffectContainerView abs=(0.0 62.0; 0.0 0.0)
+           _UIFloatingBarContainerView abs=(0.0 0.0; 402.0 874.0) effRadius=62.0/62.0
+            FloatingBarHostingView<FloatingBarContainer> abs=(0.0 0.0; 402.0 874.0)
+            _UIPointerInteractionAssistantEffectContainerView abs=(0.0 0.0; 0.0 0.0)
+      _UITabContainerView abs=(0.0 0.0; 402.0 874.0)
+       _UIBottomTabBarGroupView abs=(0.0 791.0; 402.0 83.0)
+        _UITouchPassthroughView abs=(0.0 0.0; 402.0 874.0)
+         UITabBar abs=(0.0 791.0; 402.0 83.0)
+          _UITabBarAuxiliaryView abs=(319.0 791.0; 62.0 62.0)
+           _UITabBarItemPlatterView abs=(319.0 791.0; 62.0 62.0) effRadius=31.0/31.0
+            ContentView abs=(319.0 791.0; 62.0 62.0) effRadius=31.0/31.0
+             _UITabButton abs=(319.0 791.0; 62.0 62.0) effRadius=31.0/31.0
+              UIImageView abs=(336.0 808.6666666666666; 28.0 26.66666666666663)
+              TitleWrapperView abs=(319.0 791.0; 62.0 62.0) [invisible]
+               Label abs=(350.0 840.6666666666666; 0.0 0.0) text='Search' font=10.0
+            BadgeContainerView abs=(319.0 791.0; 62.0 62.0)
+          _UITabBarItemPlatterView abs=(21.0 791.0; 290.0 62.0) effRadius=31.0/31.0
+           SelectedContentView abs=(21.0 791.0; 290.0 62.0)
+            _UITabButton abs=(25.0 795.0; 76.0 54.0) effRadius=27.0/27.0
+             UIImageView abs=(50.333333333333336 800.6666666666666; 25.333333333333336 28.66666666666663)
+             TitleWrapperView abs=(25.0 795.0; 76.0 54.0)
+              Label abs=(43.33333333333333 830.0; 39.66666666666667 12.0) text='Recipes' font=10.0
+            _UITabButton abs=(93.66666666666667 795.0; 76.00000000000001 54.0) effRadius=27.0/27.0
+             UIImageView abs=(119.33333333333334 799.6666666666666; 24.666666666666657 30.33333333333337)
+             TitleWrapperView abs=(93.66666666666667 795.0; 76.00000000000001 54.0)
+              Label abs=(115.33333333333334 830.0; 33.0 12.0) text='Pantry' font=10.0
+            _UITabButton abs=(162.33333333333334 795.0; 76.0 54.0) effRadius=27.0/27.0
+             UIImageView abs=(186.0 802.3333333333334; 29.0 25.0)
+             TitleWrapperView abs=(162.33333333333334 795.0; 76.0 54.0)
+              Label abs=(189.33333333333334 830.0; 22.0 12.0) text='Plan' font=10.0
+            _UITabButton abs=(231.0 795.0; 76.0 54.0) effRadius=27.0/27.0
+             UIImageView abs=(248.66666666666669 801.6666666666666; 41.0 26.66666666666663)
+             TitleWrapperView abs=(231.0 795.0; 76.0 54.0)
+              Label abs=(256.0 830.0; 26.0 12.0) text='Cook' font=10.0
+           _UILiquidLensView abs=(93.66666666666669 795.0; 76.0 54.0) effRadius=27.0/27.0
+            UIView abs=(93.66666666666669 795.0; 76.0 54.0)
+             _UITabSelectionView abs=(93.66666666666669 795.0; 76.0 54.0) effRadius=27.0/27.0
+             ClearGlassView abs=(93.66666666666669 795.0; 76.0 54.0) effRadius=27.0/27.0
+              UIView abs=(93.66666666666669 795.0; 76.0 54.0)
+               SDFView abs=(93.66666666666669 795.0; 76.0 54.0)
+                SDFElementView abs=(93.66666666666669 795.0; 76.0 54.0) effRadius=27.0/27.0
+               _UIPortalView abs=(93.66666666666669 795.0; 76.0 54.0) effRadius=27.0/27.0
+              UIView abs=(93.66666666666669 795.0; 76.0 54.0) effRadius=27.0/27.0
+           ContentView abs=(21.0 791.0; 290.0 62.0) effRadius=31.0/31.0
+            _UITabButton abs=(25.0 795.0; 76.0 54.0) effRadius=27.0/27.0
+             UIImageView abs=(50.333333333333336 800.6666666666666; 25.333333333333336 28.66666666666663)
+             TitleWrapperView abs=(25.0 795.0; 76.0 54.0)
+              Label abs=(43.66666666666667 830.0; 39.0 12.0) text='Recipes' font=10.0
+            _UITabButton abs=(93.66666666666667 795.0; 76.00000000000001 54.0) effRadius=27.0/27.0
+             UIImageView abs=(119.33333333333334 799.6666666666666; 24.666666666666657 30.33333333333337)
+             TitleWrapperView abs=(93.66666666666667 795.0; 76.00000000000001 54.0)
+              Label abs=(115.66666666666667 830.0; 32.33333333333333 12.0) text='Pantry' font=10.0
+            _UITabButton abs=(162.33333333333334 795.0; 76.0 54.0) effRadius=27.0/27.0
+             UIImageView abs=(186.0 802.3333333333334; 29.0 25.0)
+             TitleWrapperView abs=(162.33333333333334 795.0; 76.0 54.0)
+              Label abs=(189.66666666666669 830.0; 21.333333333333343 12.0) text='Plan' font=10.0
+            _UITabButton abs=(231.0 795.0; 76.0 54.0) effRadius=27.0/27.0
+             UIImageView abs=(248.66666666666669 801.6666666666666; 41.0 26.66666666666663)
+             TitleWrapperView abs=(231.0 795.0; 76.0 54.0)
+              Label abs=(256.3333333333333 830.0; 25.666666666666686 12.0) text='Cook' font=10.0
+           DestOutView abs=(21.0 791.0; 76.00000000000001 54.0) radius=27.0
+           BadgeContainerView abs=(21.0 791.0; 290.0 62.0)
+
+SAFEAREA UIEdgeInsets(top: 62.0, left: 0.0, bottom: 34.0, right: 0.0)
+STATUSBAR Optional((0.0, 0.0, 402.0, 54.0))
+SCALE 3.0 BOUNDS (0.0, 0.0, 402.0, 874.0) ORIENT 1 SIZECLASS h=1 v=2 STYLE 1

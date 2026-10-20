@@ -1,0 +1,15 @@
+UIView abs=(1370.0 89.0; 3.0 820.0) layer=1.5 eff=0.0/0.0
+_UIFloatingBarContainerView abs=(0.0 0.0; 1376.0 1032.0) layer=0.0 eff=30.0/30.0
+_UIVisualEffectContentView abs=(473.75 32.0; 428.5 44.0) layer=22.0 eff=0.0/0.0
+_UIFloatingTabBarSelectionContainerView abs=(473.75 32.0; 428.5 44.0) layer=22.0 eff=0.0/0.0
+_UITabSelectionView abs=(533.75 36.0; 94.0 36.0) layer=0.0 eff=18.0/18.0
+UIView abs=(473.75 32.0; 428.5 44.0) layer=22.0 eff=0.0/0.0
+UIView abs=(473.75 32.0; 428.5 44.0) layer=22.0 eff=0.0/0.0
+_UIFloatingTabBarItemCell abs=(533.75 36.0; 94.0 36.0) layer=18.0 eff=0.0/0.0
+_UITabSelectionView abs=(533.75 36.0; 94.0 36.0) layer=0.0 eff=18.0/18.0
+_UIFloatingTabBarItemCell abs=(627.75 36.0; 83.0 36.0) layer=18.0 eff=0.0/0.0
+_UIFloatingTabBarItemCell abs=(710.75 36.0; 66.0 36.0) layer=18.0 eff=0.0/0.0
+_UIFloatingTabBarItemCell abs=(776.75 36.0; 73.0 36.0) layer=18.0 eff=0.0/0.0
+UIButton abs=(477.75 36.0; 56.0 36.0) layer=17.0 eff=0.0/0.0
+_UISystemBackgroundView abs=(477.75 36.0; 56.0 36.0) layer=0.0 eff=17.0/17.0
+UIView abs=(477.75 36.0; 56.0 36.0) layer=0.0 eff=17.0/17.0

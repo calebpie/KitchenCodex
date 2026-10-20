@@ -1,0 +1,5 @@
+UIHostingController<ModifiedContent<LazyView<ModifiedContent<RootTabVi abs=(0.0 0.0; 874.0 402.0) safe=(t 0.0 l 62.0 b 20.0 r 62.0) margins=(t 0.0 l 78.0 b 20.0 r 78.0) sysMin=(l 16.0 r 16.0) readable=78.0-796.0
+UIKitTabBarController abs=(0.0 0.0; 874.0 402.0) safe=(t 0.0 l 62.0 b 20.0 r 62.0) margins=(t 0.0 l 78.0 b 20.0 r 78.0) sysMin=(l 16.0 r 16.0) readable=78.0-796.0
+TabHostingController abs=(0.0 0.0; 874.0 402.0) safe=(t 0.0 l 62.0 b 64.0 r 62.0) margins=(t 0.0 l 78.0 b 64.0 r 78.0) sysMin=(l 16.0 r 16.0) readable=78.0-796.0
+UIKitNavigationController abs=(0.0 0.0; 874.0 402.0) safe=(t 0.0 l 62.0 b 64.0 r 62.0) margins=(t 0.0 l 78.0 b 64.0 r 78.0) sysMin=(l 16.0 r 16.0) readable=78.0-796.0
+NavigationStackHostingController<AnyView> abs=(0.0 0.0; 874.0 402.0) safe=(t 78.0 l 62.0 b 64.0 r 62.0) margins=(t 78.0 l 78.0 b 64.0 r 78.0) sysMin=(l 16.0 r 16.0) readable=78.0-796.0
