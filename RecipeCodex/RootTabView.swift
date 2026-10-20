@@ -20,6 +20,14 @@ enum AppTab: Hashable {
     /// iPad: Profile, from the account glyph in the sidebar's bottom bar.
     case profile
 
+    /// The tab that shows this page: a section tab's own, Recipes for the library on iPhone.
+    static func page(for scope: LibraryScope) -> AppTab {
+        scope == .all ? .recipes : .library(scope)
+    }
+
+    /// The Recipes tab or one of its sidebar sections: a page of the library.
+    var isLibraryPage: Bool { topLevel == .recipes }
+
     /// The top-level tab this one sits under, which Search takes its scope from and a compact
     /// window falls back to.
     var topLevel: AppTab {
@@ -195,6 +203,8 @@ struct RootTabView: View {
             Text("The recipes stay in your library.")
         }
         .environment(router)
+        // The menu bar and keyboard shortcuts act on this window (RecipeCodexCommands).
+        .focusedSceneValue(router)
         // A recipe, or one of its ingredients, tapped in Spotlight (RecipeSpotlightIndexer) opens in Recipes.
         .onContinueUserActivity(CSSearchableItemActionType) { activity in
             guard let identifier = activity.userInfo?[CSSearchableItemActivityIdentifier] as? String,

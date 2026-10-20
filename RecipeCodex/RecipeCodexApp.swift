@@ -41,6 +41,8 @@ struct RecipeCodexApp: App {
                 }
         }
         .modelContainer(container)
+        // The iPad menu bar and hardware-keyboard shortcuts (03 §4).
+        .commands { RecipeCodexCommands() }
         .onChange(of: scenePhase) { _, phase in
             // Recipes saved by the Share Extension, or synced from another device, arrive while the
             // app is away; index them when it comes back.

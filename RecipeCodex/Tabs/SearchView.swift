@@ -50,7 +50,10 @@ enum SearchRoute: Hashable {
 /// natural language.
 struct SearchView: View {
     @Environment(AppRouter.self) private var router
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var query = ""
+    /// The search field's focus, which ⌘F sets; the system presents the search around it.
+    @FocusState private var isSearchFieldFocused: Bool
     @State private var path: [SearchRoute] = []
     /// Recent searches, newest first, one per line.
     @AppStorage("search.recent") private var recentText = ""
@@ -91,12 +94,22 @@ struct SearchView: View {
                 }
             }
             .searchable(text: $query, prompt: router.searchScope.prompt)
+            .searchFocused($isSearchFieldFocused)
             .searchScopes($router.searchScope, activation: .onSearchPresentation) {
                 ForEach(SearchScope.allCases) { scope in
                     Text(scope.title).tag(scope)
                 }
             }
             .onSubmit(of: .search) { remember(query) }
+            // ⌘F (RecipeCodexCommands): on iPhone selecting the tab starts the search, scopes and
+            // all; in the iPad sidebar it shows Search without starting it, so there the command
+            // also focuses the field, ready to type. Not an `isPresented` binding, which kept the
+            // scope bar from appearing when the iPhone's bubble was tapped.
+            .onChange(of: router.isSearchFieldRequested, initial: true) { _, isRequested in
+                guard isRequested else { return }
+                router.isSearchFieldRequested = false
+                if sizeClass == .regular { isSearchFieldFocused = true }
+            }
             .onChange(of: path) { old, new in
                 // Opening a result keeps the search that found it.
                 if new.count > old.count { remember(query) }

@@ -163,6 +163,14 @@ struct RecipesView: View {
             currentCollection?.name = name
             try? modelContext.save()
         }
+        .onChange(of: router.libraryRequest, initial: true) { _, request in
+            // File menu requests go to the library page on screen (RecipeCodexCommands).
+            guard let request, router.selectedTab == AppTab.page(for: scope) else { return }
+            router.libraryRequest = nil
+            start(request)
+        }
+        // The View menu acts on this page while its grid or shelf is on screen.
+        .focusedSceneValue(\.libraryPage, isPageOnScreen ? pageCommands : nil)
         .onChange(of: router.requestedRecipeID, initial: true) { _, id in
             // Spotlight and other tabs open recipes in the Recipes tab, the whole library.
             guard scope == .all, let id else { return }
@@ -173,6 +181,44 @@ struct RecipesView: View {
         // the tab bar hidden.
         .onChange(of: libraryView) { endSelection() }
         .onDisappear { endSelection() }
+    }
+
+    // MARK: - Menu bar
+
+    /// This page's grid, list or shelf is what the window shows: its tab is selected, nothing is
+    /// pushed over it and Select mode is off.
+    private var isPageOnScreen: Bool {
+        router.selectedTab == AppTab.page(for: scope) && path.isEmpty && !isSelecting
+    }
+
+    /// What the View menu changes on this page (03 §4): the Recipes · Cookbooks view (the title
+    /// switch on iPhone, the Recipes and All Cookbooks tabs on iPad), Grid or List, and the filter.
+    private var pageCommands: LibraryPageCommands {
+        LibraryPageCommands(
+            view: Binding {
+                activeView
+            } set: { view in
+                guard view != activeView else { return }
+                if isWide {
+                    router.show(view == .books ? .shelf : .all)
+                } else {
+                    libraryView = view
+                }
+            },
+            layout: $layout,
+            showsRecipes: activeView == .recipes && !allRecipes.isEmpty,
+            filterItems: filterItems
+        )
+    }
+
+    /// Starts what the File menu asked for, unless one of this page's sheets is already up.
+    private func start(_ request: LibraryRequest) {
+        guard !isAddingRecipe, !isImportingFromWeb, !isImportingLibrary else { return }
+        switch request {
+        case .enterManually: isAddingRecipe = true
+        case .importFromWeb: isImportingFromWeb = true
+        case .importLibrary: isImportingLibrary = true
+        }
     }
 
     /// The page's title: on iPhone the switch's view, which Back reads; on iPad the sidebar tab's name.
@@ -298,44 +344,10 @@ struct RecipesView: View {
     }
 
     /// Filter (04 §5.1 Recipes filters): checkable sections; the menu closes after each choice, as
-    /// menus do. Collections are sidebar tabs on iPad, so the section is iPhone only.
+    /// menus do. The View menu's Filter holds the same items.
     private var filterMenu: some View {
         Menu {
-            let courses = filterCourses
-            if !courses.isEmpty {
-                Section("Course") {
-                    ForEach(courses, id: \.self) { course in
-                        Toggle(course, isOn: Binding {
-                            filter.courses.contains(course)
-                        } set: { isOn in
-                            if isOn { filter.courses.insert(course) } else { filter.courses.remove(course) }
-                        })
-                    }
-                }
-            }
-            Section("Cooked") {
-                ForEach([CookedFilter.neverCooked, .cooked]) { option in
-                    Toggle(option.title, isOn: Binding { filter.cooked == option } set: { filter.cooked = $0 ? option : .any })
-                }
-            }
-            Section {
-                Toggle("Favorites", systemImage: "heart", isOn: $filter.favorites)
-                Toggle("Needs a Look", systemImage: "exclamationmark.bubble", isOn: $filter.needsReview)
-            }
-            if !isWide, !collections.isEmpty {
-                filterSubmenu("Collection", systemImage: "rectangle.stack", items: collections.map { ($0.persistentModelID, $0.name) }, selection: $filter.collection)
-            }
-            if !books.isEmpty {
-                filterSubmenu("Cookbook", systemImage: "book", items: books.map { ($0.persistentModelID, $0.title.isEmpty ? "Untitled Cookbook" : $0.title) }, selection: $filter.book)
-            }
-            if !tags.isEmpty {
-                filterSubmenu("Tag", systemImage: "tag", items: tags.map { ($0.persistentModelID, $0.name) }, selection: $filter.tag)
-            }
-            if filter.isActive {
-                Section {
-                    Button("Clear Filters", systemImage: "xmark.circle") { filter = RecipeFilter() }
-                }
-            }
+            filterItems
         } label: {
             Label("Filter", systemImage: filter.isActive ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
         }
@@ -343,15 +355,15 @@ struct RecipesView: View {
         .accessibilityValue(filter.isActive ? "\(filterTokens.count) active" : "None")
     }
 
-    /// A submenu with one checkable item per collection, cookbook or tag; checking another replaces it.
-    private func filterSubmenu(_ title: String, systemImage: String, items: [(PersistentIdentifier, String)], selection: Binding<PersistentIdentifier?>) -> some View {
-        Menu {
-            ForEach(items, id: \.0) { id, name in
-                Toggle(name, isOn: Binding { selection.wrappedValue == id } set: { selection.wrappedValue = $0 ? id : nil })
-            }
-        } label: {
-            Label(title, systemImage: systemImage)
-        }
+    /// The Filter menu's sections. Collections are sidebar tabs on iPad, so the section is iPhone only.
+    private var filterItems: RecipeFilterMenuItems {
+        RecipeFilterMenuItems(
+            filter: $filter,
+            courses: filterCourses,
+            collections: isWide ? [] : collections.map { ($0.persistentModelID, $0.name) },
+            books: books.map { ($0.persistentModelID, $0.title.isEmpty ? "Untitled Cookbook" : $0.title) },
+            tags: tags.map { ($0.persistentModelID, $0.name) }
+        )
     }
 
     // MARK: - Toolbar
@@ -380,10 +392,10 @@ struct RecipesView: View {
                     Button("Import from Web", systemImage: "link") {
                         isImportingFromWeb = true
                     }
+                    // ⌘N is File → New Recipe, from any tab (RecipeCodexCommands).
                     Button("Enter Manually", systemImage: "square.and.pencil") {
                         isAddingRecipe = true
                     }
-                    .keyboardShortcut("n")
                     Divider()
                     Button("Import from Paprika or Mela…", systemImage: "tray.and.arrow.down") {
                         isImportingLibrary = true
@@ -816,6 +828,67 @@ private struct RecipeRowDragSource: ViewModifier {
             }
         } else {
             content
+        }
+    }
+}
+
+/// The Filter menu's checkable sections (04 §5.1 Recipes filters), shared by the toolbar's Filter
+/// and the menu bar's View → Filter: Course (several), Cooked, Favorites and Needs a Look, then a
+/// submenu each for Collection, Cookbook and Tag when there are any, and Clear Filters.
+struct RecipeFilterMenuItems: View {
+    @Binding var filter: RecipeFilter
+    /// Courses the library uses, in the standard order.
+    let courses: [String]
+    /// Empty on iPad, where collections are sidebar tabs.
+    let collections: [(PersistentIdentifier, String)]
+    let books: [(PersistentIdentifier, String)]
+    let tags: [(PersistentIdentifier, String)]
+
+    var body: some View {
+        if !courses.isEmpty {
+            Section("Course") {
+                ForEach(courses, id: \.self) { course in
+                    Toggle(course, isOn: Binding {
+                        filter.courses.contains(course)
+                    } set: { isOn in
+                        if isOn { filter.courses.insert(course) } else { filter.courses.remove(course) }
+                    })
+                }
+            }
+        }
+        Section("Cooked") {
+            ForEach([CookedFilter.neverCooked, .cooked]) { option in
+                Toggle(option.title, isOn: Binding { filter.cooked == option } set: { filter.cooked = $0 ? option : .any })
+            }
+        }
+        Section {
+            Toggle("Favorites", systemImage: "heart", isOn: $filter.favorites)
+            Toggle("Needs a Look", systemImage: "exclamationmark.bubble", isOn: $filter.needsReview)
+        }
+        if !collections.isEmpty {
+            submenu("Collection", systemImage: "rectangle.stack", items: collections, selection: $filter.collection)
+        }
+        if !books.isEmpty {
+            submenu("Cookbook", systemImage: "book", items: books, selection: $filter.book)
+        }
+        if !tags.isEmpty {
+            submenu("Tag", systemImage: "tag", items: tags, selection: $filter.tag)
+        }
+        if filter.isActive {
+            Section {
+                Button("Clear Filters", systemImage: "xmark.circle") { filter = RecipeFilter() }
+            }
+        }
+    }
+
+    /// A submenu with one checkable item per collection, cookbook or tag; checking another replaces it.
+    private func submenu(_ title: String, systemImage: String, items: [(PersistentIdentifier, String)], selection: Binding<PersistentIdentifier?>) -> some View {
+        Menu {
+            ForEach(items, id: \.0) { id, name in
+                Toggle(name, isOn: Binding { selection.wrappedValue == id } set: { selection.wrappedValue = $0 ? id : nil })
+            }
+        } label: {
+            Label(title, systemImage: systemImage)
         }
     }
 }
