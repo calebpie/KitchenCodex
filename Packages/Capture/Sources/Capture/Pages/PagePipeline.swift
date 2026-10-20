@@ -108,7 +108,9 @@ public struct PagePipeline: Sendable {
     public func refine(_ reading: PageReading, image: CGImage?, progress: Progress? = nil) async -> PageReading {
         guard let model, model.isAvailable, reading.kind == .recipe else { return reading }
         var refined = reading
-        for index in refined.recipes.indices where Self.wantsModel(refined.recipes[index]) {
+        // A first recipe that continues a page before the photos (nothing to stitch it to) is the
+        // cook's to name or skip, not the model's.
+        for index in refined.recipes.indices where Self.wantsModel(refined.recipes[index]) && !(index == 0 && reading.isContinuation) {
             let text = Self.text(of: refined.recipes[index], in: refined)
             guard !text.isEmpty else { continue }
             progress?(.refining(title: refined.recipes[index].title))

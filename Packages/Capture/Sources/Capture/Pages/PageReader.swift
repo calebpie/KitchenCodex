@@ -12,8 +12,8 @@ public struct PageScan: Sendable {
     public var pixelWidth: Int
     public var pixelHeight: Int
     /// Quarter turns counterclockwise the page was read at, beyond its EXIF orientation: 0 for a page
-    /// shot upright, 1 or 3 for a book turned sideways on the table (3 is a quarter turn clockwise).
-    /// Rects are in the turned frame.
+    /// shot upright, 1 or 3 for a book turned sideways on the table (3 is a quarter turn clockwise), 2
+    /// for one shot upside down. Rects are in the turned frame.
     public var quarterTurns: Int
     /// The paper: the largest bright, unsaturated area of the image (the page or the spread), nil
     /// when the image is all photo or all background.
@@ -90,6 +90,13 @@ public struct PageReader: Sendable {
             }
             turns = best.turns
             observation = best.observation
+        } else if let document = observation?.document, Self.readsBackward(document) {
+            // The page is upside down in the photo: its lines run right to left.
+            let candidate = try await request.perform(on: image, orientation: .down).first
+            if let candidate, Self.horizontalScore(candidate.document) > Self.horizontalScore(document) {
+                turns = 2
+                observation = candidate
+            }
         }
 
         let turnedWidth = turns % 2 == 0 ? image.width : image.height
@@ -243,13 +250,27 @@ public struct PageReader: Sendable {
         return Double(tall.count) > Double(lines.count) * 0.5
     }
 
-    /// Characters on lines that run across, weighted by confidence.
+    /// Characters on lines that run across and forward, weighted by confidence. The recognizer reads
+    /// a page's words in either of two opposite frames alike, so a quarter turn and its opposite
+    /// score within a few percent; only in the frame the text reads in does a line run from its
+    /// top-left corner rightward, and only those lines count.
     static func horizontalScore(_ document: DocumentObservation.Container) -> Double {
         document.paragraphs.flatMap(\.lines).reduce(0) { total, line in
             let box = line.boundingRegion.boundingBox
-            guard box.width > box.height else { return total }
+            guard box.width > box.height, line.topRight.x > line.topLeft.x else { return total }
             return total + Double(line.transcript.count) * Double(line.confidence)
         }
+    }
+
+    /// Most lines run across but right to left: a page photographed upside down.
+    static func readsBackward(_ document: DocumentObservation.Container) -> Bool {
+        let lines = document.paragraphs.flatMap(\.lines).filter { $0.transcript.count >= 6 }
+        guard lines.count >= 4 else { return false }
+        let backward = lines.filter { line in
+            let box = line.boundingRegion.boundingBox
+            return box.width > box.height && line.topRight.x < line.topLeft.x
+        }
+        return Double(backward.count) > Double(lines.count) * 0.5
     }
 }
 

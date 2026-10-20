@@ -85,10 +85,30 @@ enum PageLines {
                 }
             }
             // A later line that is the name in another language.
-            if index > 0, isAlternateTitle(part, pageLanguage: pageLanguage) { break }
+            if index > 0, isAlternateTitle(part, pageLanguage: pageLanguage) {
+                // The name may start after a dash on the line before ("PEAR TART—TARTE FINE" over
+                // "AUX POIRES"): that line's last segment goes with it when it isn't the reader's.
+                if let last = kept.last, let dash = last.lastIndex(where: { "—–-".contains($0) }) {
+                    let before = last[..<dash].trimmingCharacters(in: .whitespaces)
+                    let after = last[last.index(after: dash)...].trimmingCharacters(in: .whitespaces)
+                    if before.contains(where: \.isLetter), language(of: after) != pageLanguage,
+                       isAlternateTitle(after + " " + part, pageLanguage: pageLanguage) {
+                        kept[kept.count - 1] = before
+                    }
+                }
+                break
+            }
             kept.append(part)
         }
         return PageText.join(kept.isEmpty ? parts : kept)
+    }
+
+    /// The language a short text reads as, among the ones cookbooks pair with English.
+    static func language(of text: String) -> NLLanguage? {
+        let recognizer = NLLanguageRecognizer()
+        recognizer.languageConstraints = [.english, .french, .italian, .spanish, .german, .portuguese]
+        recognizer.processString(text.lowercased())
+        return recognizer.dominantLanguage
     }
 
     /// Small words that mark a title as French, Italian or Spanish.

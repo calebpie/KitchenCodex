@@ -167,6 +167,9 @@ struct PagePipelineTests {
         #expect(title(["TWICE-BAKED POTATOES"]) == "Twice-Baked Potatoes")
         #expect(title(["Mint-Walnut Pesto"]) == "Mint-Walnut Pesto")
         #expect(title(["SPICED CARROTS", "WITH YOGURT AND DILL"]) == "Spiced Carrots with Yogurt and Dill")
+        // The other name begins after a dash and wraps to the next line.
+        #expect(title(["PEAR TART—TARTE FINE", "AUX POIRES"]) == "Pear Tart")
+        #expect(title(["SLOW-ROASTED DUCK", "CANARD RÔTI"]) == "Slow-Roasted Duck")
     }
 
     @Test func aTitleKeepsItsAlternateInTheRegions() {

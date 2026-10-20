@@ -272,8 +272,9 @@ public struct PageReading: Sendable {
     /// Time to read (OCR and structure), per page.
     public var durations: [Duration]
     /// Quarter turns counterclockwise each page was read at beyond its EXIF orientation
-    /// (`PageScan.quarterTurns`): 0 for a page shot upright, 1 or 3 for a book turned sideways. The
-    /// blocks' rects are in the turned frame, so a page scan stored upright matches them.
+    /// (`PageScan.quarterTurns`): 0 for a page shot upright, 1 or 3 for a book turned sideways, 2
+    /// for one upside down. The blocks' rects are in the turned frame, so a page scan stored upright
+    /// matches them.
     public var quarterTurns: [Int] = []
 
     public init(files: [String], blocks: [PageBlock], kind: PageKind, reason: String? = nil, recipes: [PageRecipe] = [], pageNumbers: [Int?] = [], quality: [PageQualityReading?] = [], ocrConfidence: Double = 0, isContinuation: Bool = false, durations: [Duration] = []) {
