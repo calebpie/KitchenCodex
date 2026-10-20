@@ -643,8 +643,8 @@ Structured pages never waited for the model; the 11 to 16 seconds were the page-
 **Left for Caleb by hand**
 
 - ~~Import the real Paprika export~~ Struck Oct 20, 2026: Caleb has no Paprika or Mela library to import, so the importers stay tested on the synthetic exports and the exit rests on the web recipes.
-- Confirm iPhone to iPad sync on the two devices through iCloud (the simulators run local stores; phase0-notes lists the sync proof as his).
-- Install the device build (it builds and signs) and share a few recipe pages from Safari on the phone.
+- ~~Confirm iPhone to iPad sync on the two devices through iCloud~~ Done Oct 20, 2026: with the same build (072c966) on both devices, a recipe typed on the iPad Pro reached the iPhone through iCloud. (The simulators run local stores.)
+- ~~Install the device build (it builds and signs)~~ Installed Oct 20, 2026 on the iPhone 17 Pro and the iPad Pro 13-inch (M4) with `xcrun devicectl` from a build of 072c966. Still his: share a few recipe pages from Safari on the phone.
 - VoiceOver on the new controls (ingredient checks as toggles, the title switch, step pills, the Profile button), and accessibility text sizes on the checks.
 - The iPad in portrait and in a compact window.
 - The iPad menu bar with a keyboard or pointer: File (New Recipe, Import from Web, Import from Paprika or Mela…), View (Recipes / Cookbooks, Grid / List, Filter, Search), and the open ux-notes rows 39–45.
