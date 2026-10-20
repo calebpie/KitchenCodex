@@ -9,6 +9,8 @@ enum LibraryRequest: Equatable {
     case enterManually
     /// File → Import from Web (⌘I).
     case importFromWeb
+    /// File → Scan Page…
+    case scanPage
     /// File → Import from Paprika or Mela…
     case importLibrary
 }

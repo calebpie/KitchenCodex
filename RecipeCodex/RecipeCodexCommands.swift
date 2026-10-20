@@ -34,6 +34,8 @@ struct RecipeCodexCommands: Commands {
             Button("Import from Web") { router?.request(.importFromWeb) }
                 .keyboardShortcut("i")
                 .disabled(router == nil)
+            Button("Scan Page…") { router?.request(.scanPage) }
+                .disabled(router == nil)
             Button("Import from Paprika or Mela…") { router?.request(.importLibrary) }
                 .disabled(router == nil)
         }

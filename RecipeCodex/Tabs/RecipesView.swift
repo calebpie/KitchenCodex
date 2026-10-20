@@ -47,12 +47,14 @@ struct RecipesView: View {
     @State private var isImportingFromWeb = false
     @State private var isImportingLibrary = false
     @State private var isAddingCookbook = false
+    /// Add → Scan Page (02 Flow B): From Photo and Files until the camera arrives (slice 4).
+    @State private var isScanningPage = false
     /// Set by Add Cookbook; its detail opens once the sheet has gone.
     @State private var addedBook: Book?
     /// What is pushed over the grid. One path for both widths, so an open recipe stays open when
     /// an iPad window changes width.
     @State private var path: [LibraryRoute] = []
-    /// Set by the import sheet; opened once the sheet has gone.
+    /// Set by the import and scan sheets; opened once the sheet has gone.
     @State private var importedRecipe: Recipe?
     @State private var isCreatingCollection = false
     @State private var isRenamingCollection = false
@@ -161,6 +163,12 @@ struct RecipesView: View {
         .sheet(isPresented: $isAddingCookbook, onDismiss: openAddedBook) {
             AddCookbookView { book in addedBook = book }
         }
+        .sheet(isPresented: $isScanningPage, onDismiss: openImportedRecipe) {
+            // One recipe saved opens it; several leave the library to show them.
+            ScanPageView { recipes in importedRecipe = recipes.count == 1 ? recipes.first : nil }
+                // iPad: the page beside the recipe in review wants the room (03 §3.6).
+                .presentationSizing(.page)
+        }
         .collectionNamePrompt("New Collection", isPresented: $isCreatingCollection, actionTitle: "Create") { name in
             show(CollectionActions.create(named: name, in: modelContext))
         }
@@ -229,10 +237,11 @@ struct RecipesView: View {
 
     /// Starts what the File menu asked for, unless one of this page's sheets is already up.
     private func start(_ request: LibraryRequest) {
-        guard !isAddingRecipe, !isImportingFromWeb, !isImportingLibrary, !isAddingCookbook, !isShowingFilter else { return }
+        guard !isAddingRecipe, !isImportingFromWeb, !isImportingLibrary, !isAddingCookbook, !isScanningPage, !isShowingFilter else { return }
         switch request {
         case .enterManually: isAddingRecipe = true
         case .importFromWeb: isImportingFromWeb = true
+        case .scanPage: isScanningPage = true
         case .importLibrary: isImportingLibrary = true
         }
     }
@@ -320,7 +329,7 @@ struct RecipesView: View {
             ContentUnavailableView {
                 Label("No recipes yet", systemImage: "book.closed")
             } description: {
-                Text("Import one from the web or from Paprika or Mela, share one from Safari, or enter one manually.")
+                Text("Scan a cookbook page, import one from the web or from Paprika or Mela, share one from Safari, or enter one manually.")
             }
         }
     }
@@ -392,22 +401,7 @@ struct RecipesView: View {
             )
         } else if activeView == .recipes {
             ToolbarItem(placement: .primaryAction) {
-                // Add names the ways in (04 §5.1 Add menu); methods that haven't shipped are hidden.
-                Menu {
-                    Button("Import from Web", systemImage: "link") {
-                        isImportingFromWeb = true
-                    }
-                    // ⌘N is File → New Recipe, from any tab (RecipeCodexCommands).
-                    Button("Enter Manually", systemImage: "square.and.pencil") {
-                        isAddingRecipe = true
-                    }
-                    Divider()
-                    Button("Import from Paprika or Mela…", systemImage: "tray.and.arrow.down") {
-                        isImportingLibrary = true
-                    }
-                } label: {
-                    Label("Add", systemImage: "plus")
-                }
+                addMenu
             }
             ToolbarItem(placement: .primaryAction) {
                 filterButton
@@ -483,14 +477,10 @@ struct RecipesView: View {
                 }
             }
         } else {
-            // The Cookbooks view (03 §3.7): Add names the way in (04 §5.1 Add menu); Scan Sources
-            // Page joins it with its slice. More appears once the shelf has something to sort.
+            // The Cookbooks view (03 §3.7): the same Add menu, with Add Cookbook where Scan Cookbook
+            // goes in slice 5. More appears once the shelf has something to sort.
             ToolbarItem(placement: .primaryAction) {
-                Menu {
-                    Button("Add Cookbook", systemImage: "barcode") { isAddingCookbook = true }
-                } label: {
-                    Label("Add", systemImage: "plus")
-                }
+                addMenu
             }
             if !books.isEmpty {
                 ToolbarItem(placement: .primaryAction) {
@@ -508,6 +498,33 @@ struct RecipesView: View {
                     }
                 }
             }
+        }
+    }
+
+    /// Add (+), the same on Recipes and Cookbooks (04 §5.1 Add menu, ux-notes row 51): the ways in,
+    /// never the outcome; methods that haven't shipped are hidden. Add Cookbook stays on the
+    /// Cookbooks view until Scan Cookbook takes its place (slice 5).
+    private var addMenu: some View {
+        Menu {
+            // ⌘N is File → New Recipe, from any tab (RecipeCodexCommands).
+            Button("Enter Manually", systemImage: "square.and.pencil") {
+                isAddingRecipe = true
+            }
+            Button("Import from Web", systemImage: "link") {
+                isImportingFromWeb = true
+            }
+            Button("Scan Page", systemImage: "doc.viewfinder") {
+                isScanningPage = true
+            }
+            if activeView == .books {
+                Button("Add Cookbook", systemImage: "barcode") { isAddingCookbook = true }
+            }
+            Divider()
+            Button("Import from Paprika or Mela…", systemImage: "tray.and.arrow.down") {
+                isImportingLibrary = true
+            }
+        } label: {
+            Label("Add", systemImage: "plus")
         }
     }
 

@@ -30,6 +30,11 @@ struct RecipeDetailView: View {
     @Query(sort: [SortDescriptor(\UserProfile.createdAt)]) private var profiles: [UserProfile]
     @State private var isEditing = false
     @State private var isReviewing = false
+    /// Scanned recipes: View Page and Review Scan (03 §3.3, §3.6).
+    @State private var isViewingPage = false
+    @State private var isReviewingScan = false
+    /// The cooked chip's Cooking History (04 §5.1 "Cooked chip").
+    @State private var isShowingHistory = false
     @State private var isConfirmingDelete = false
     @State private var isDeleting = false
     @State private var showsNavigationTitle = false
@@ -98,6 +103,13 @@ struct RecipeDetailView: View {
                         recipe.isFavorite.toggle()
                     }
                     AddToCollectionMenu(recipe: recipe) { isNamingCollection = true }
+                    if recipe.isScanned {
+                        // Every scanned recipe keeps Review (02 Flow B step 5), so an auto-accepted
+                        // scan can be checked against its page later.
+                        Divider()
+                        Button("View Page", systemImage: "doc.text.image") { isViewingPage = true }
+                        Button("Review Scan", systemImage: "rectangle.and.text.magnifyingglass") { isReviewingScan = true }
+                    }
                     if let version, hasMeasuredIngredients(version) || hasTemperatures(version) {
                         Divider()
                         Picker(selection: $units) {
@@ -151,6 +163,16 @@ struct RecipeDetailView: View {
         .sheet(isPresented: $isReviewing) {
             RecipeEditorView(recipe: recipe, isReviewing: true)
         }
+        .sheet(isPresented: $isReviewingScan) {
+            StoredScanReview(recipe: recipe)
+                .presentationSizing(.page)
+        }
+        .sheet(isPresented: $isShowingHistory) {
+            CookingHistoryView(recipe: recipe)
+        }
+        .fullScreenCover(isPresented: $isViewingPage) {
+            PageScanViewer(recipe: recipe)
+        }
         .fullScreenCover(item: $viewedStepPhotos) { selection in
             StepPhotoViewer(selection: selection)
         }
@@ -187,8 +209,11 @@ struct RecipeDetailView: View {
 
                 VStack(alignment: .leading, spacing: 28) {
                     if recipe.needsReview {
-                        ReviewBanner(recipe: recipe) { isReviewing = true }
-                            .transition(.opacity)
+                        // A scanned recipe is reviewed against its page.
+                        ReviewBanner(recipe: recipe, onViewPage: { isViewingPage = true }) {
+                            if recipe.isScanned { isReviewingScan = true } else { isReviewing = true }
+                        }
+                        .transition(.opacity)
                     }
                     header
                     if !recipe.headnote.isEmpty {
@@ -265,12 +290,31 @@ struct RecipeDetailView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
+            if recipe.isScanned {
+                scannedLine
+            }
 
             metadata
         }
     }
 
     private var sourceLine: String { recipe.sourceLine }
+
+    /// The scanned state (03 §3.3): how it came in, "Accepted automatically" or when it was
+    /// reviewed, and View Page.
+    private var scannedLine: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Text(recipe.scanProvenance)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+            Button("View Page", systemImage: "doc.text.image") { isViewingPage = true }
+                .font(.subheadline)
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+        }
+    }
 
     private var metadata: some View {
         ViewThatFits(in: .horizontal) {
@@ -293,11 +337,12 @@ struct RecipeDetailView: View {
         if let course = recipe.course {
             Label(course, systemImage: "menucard")
         }
-        if recipe.isNeverCooked {
-            NeverCookedBadge()
-        } else {
-            Label("Cooked \(recipe.cookCount)×", systemImage: "checkmark.circle")
+        // The cooked chip opens Cooking History, where past cooks are added (ux-notes row 54).
+        Button { isShowingHistory = true } label: {
+            CookedChip(recipe: recipe)
         }
+        .buttonStyle(.plain)
+        .accessibilityHint("Shows when it was cooked, and adds a past cook.")
     }
 
     // MARK: - Scaling

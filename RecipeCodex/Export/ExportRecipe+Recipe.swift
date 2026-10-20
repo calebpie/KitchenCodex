@@ -44,14 +44,31 @@ extension Recipe {
     /// or "Added by hand" with the date.
     var sourceLine: String {
         if let book {
+            if let first = source?.firstPage, let last = source?.lastPage, last != first {
+                return "\(book.title), pp. \(first)–\(last)"
+            }
             let page = pageNumber.map { ", p. \($0)" } ?? ""
             return "\(book.title)\(page)"
+        }
+        if let source, source.url == nil, source.captureMethod == .photo || source.captureMethod == .scan {
+            // A recipe card or a clipping, scanned with no book (04 §5.1 "Which book").
+            return pageNumber.map { "A scanned page, p. \($0)" } ?? "A scanned page"
         }
         if let source {
             let site = source.siteName ?? source.url?.host() ?? ""
             return [site, source.author].compactMap { $0?.isEmpty == false ? $0 : nil }.joined(separator: " · ")
         }
         return "Added by hand · \(createdAt.formatted(date: .abbreviated, time: .omitted))"
+    }
+}
+
+extension Recipe {
+    /// How a scanned recipe came in, for detail's scanned state: "From a photo · Accepted
+    /// automatically", "From a photo · Reviewed Oct 20".
+    var scanProvenance: String {
+        let method = source?.captureMethod == .scan ? "Scanned" : "From a photo"
+        guard let reviewed = source?.reviewedAt else { return "\(method) · Accepted automatically" }
+        return "\(method) · Reviewed \(reviewed.formatted(.dateTime.month(.abbreviated).day()))"
     }
 }
 

@@ -1,12 +1,17 @@
 import Capture
+import OSLog
+import PhotosUI
 import RecipeModel
 import SwiftData
 import SwiftUI
+import UniformTypeIdentifiers
 
-/// Cookbooks → Add → Add Cookbook (Flow C steps 1–2, 03 §3.7): type an ISBN or search by title,
-/// confirm the book on its card, and it goes on the shelf with its cover. When nothing is found,
-/// or the card is wrong, the details can be entered by hand. The barcode scanner sits beside the
-/// ISBN field once the app may use the camera (`ISBNScanner`).
+/// Cookbooks → Add → Add Cookbook (Flow C steps 1–2, 03 §3.7), barcode first (04 §5.1 "Add
+/// Cookbook", ux-notes rows 47 and 48): a photo of the barcode on the back cover, from Photos or
+/// Files, is read for its ISBN, looked up, and the book confirmed on its card goes on the shelf
+/// with its cover. The live scanner sits first once the device can scan (slice 4); there is no
+/// typed ISBN and no title search. When nothing is found, or the card is wrong, the details can be
+/// entered by hand. Which book? opens it for a new book too.
 struct AddCookbookView: View {
     /// The new book, or the one already on the shelf with that ISBN; the shelf opens it once the
     /// sheet has gone.
@@ -16,49 +21,40 @@ struct AddCookbookView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var books: [Book]
 
-    private enum Query: Equatable {
-        case isbn(String)
-        case title(String)
-    }
-
     private enum Phase: Equatable {
         case idle
-        case looking(Query)
-        case found([BookCandidate], Query)
-        case failed(BookLookupError, Query)
+        case reading
+        /// The photo has no barcode that reads as an ISBN.
+        case noBarcode
+        case looking(String)
+        case found(BookCandidate)
+        case failed(BookLookupError, String)
     }
 
-    private enum Field { case isbn, title }
-
-    @State private var isbnText = ""
-    @State private var titleQuery = ""
     @State private var phase = Phase.idle
     @State private var work: Task<Void, Never>?
-    /// The candidate being added while its cover downloads.
-    @State private var addingID: BookCandidate.ID?
+    @State private var isAdding = false
     /// Details by hand: the form in place of the lookup, and what it started from.
     @State private var manualDraft: BookDraft?
     @State private var manualStart: BookDraft?
     @State private var isConfirmingDiscard = false
     @State private var isScanning = false
-    @FocusState private var focusedField: Field?
+    @State private var isChoosingPhoto = false
+    @State private var isChoosingFile = false
+    @State private var photoItem: PhotosPickerItem?
 
     /// Open Library, and Google Books once a key is configured (none is yet).
     private let lookup = BookLookup(googleBooksKey: Bundle.main.object(forInfoDictionaryKey: "GoogleBooksAPIKey") as? String)
 
-    private var normalizedISBN: String? { ISBN.normalized(isbnText) }
-
-    /// Ten or thirteen characters typed that aren't an ISBN: worth saying before the lookup.
-    private var isISBNMistyped: Bool {
-        let count = isbnText.filter { $0.isNumber || $0 == "X" || $0 == "x" }.count
-        return (count == 10 || count >= 13) && normalizedISBN == nil
-    }
-
     private var hasManualChanges: Bool { manualDraft != manualStart }
 
-    /// What the details by hand start from: the ISBN and title the cook typed.
-    private var prefill: BookDraft {
-        BookDraft(title: titleQuery.trimmingCharacters(in: .whitespacesAndNewlines), isbn: normalizedISBN ?? "")
+    /// The ISBN read, which details by hand start from.
+    private var readISBN: String? {
+        switch phase {
+        case let .looking(isbn), let .failed(_, isbn): isbn
+        case let .found(candidate): candidate.isbn13
+        default: nil
+        }
     }
 
     var body: some View {
@@ -67,7 +63,7 @@ struct AddCookbookView: View {
                 if manualDraft != nil {
                     BookInfoForm(draft: Binding { manualDraft ?? BookDraft() } set: { manualDraft = $0 })
                 } else {
-                    lookupForm
+                    barcodeForm
                 }
             }
             .navigationTitle("Add Cookbook")
@@ -91,55 +87,47 @@ struct AddCookbookView: View {
                 }
             }
         }
-        .interactiveDismissDisabled(hasManualChanges || addingID != nil)
+        .interactiveDismissDisabled(hasManualChanges || isAdding)
         .fullScreenCover(isPresented: $isScanning) {
             ISBNScannerSheet { isbn in
                 isScanning = false
-                isbnText = isbn
-                lookUpISBN()
+                lookUp(isbn)
             }
+        }
+        .photosPicker(isPresented: $isChoosingPhoto, selection: $photoItem, matching: .images, preferredItemEncoding: .current, photoLibrary: .shared())
+        .fileImporter(isPresented: $isChoosingFile, allowedContentTypes: [.image]) { result in
+            guard case let .success(url) = result else { return }
+            read {
+                let scoped = url.startAccessingSecurityScopedResource()
+                defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                return try? Data(contentsOf: url)
+            }
+        }
+        .onChange(of: photoItem) { _, item in
+            guard let item else { return }
+            photoItem = nil
+            read { try? await item.loadTransferable(type: Data.self) }
         }
         .onDisappear { work?.cancel() }
     }
 
-    // MARK: - Lookup
+    // MARK: - The barcode
 
-    private var lookupForm: some View {
+    private var barcodeForm: some View {
         Form {
             Section {
-                HStack {
-                    TextField("ISBN", text: $isbnText, prompt: Text("10 or 13 digits"))
-                        .keyboardType(.numberPad)
-                        .focused($focusedField, equals: .isbn)
-                        .accessibilityLabel("ISBN")
-                    // Hidden until the app may use the camera.
-                    if ISBNScanner.isAvailable {
-                        Button("Scan Barcode", systemImage: "barcode.viewfinder") { isScanning = true }
-                            .labelStyle(.iconOnly)
-                            .buttonStyle(.borderless)
-                    }
+                // The live scanner, once the device can scan (slice 4); never on the simulator.
+                if ISBNScanner.isAvailable {
+                    Button("Scan Barcode", systemImage: "barcode.viewfinder") { isScanning = true }
                 }
-                Button("Look Up ISBN", systemImage: "magnifyingglass") { lookUpISBN() }
-                    .disabled(normalizedISBN == nil)
+                Button("Choose Photo", systemImage: "photo") { isChoosingPhoto = true }
+                Button("Choose File", systemImage: "folder") { isChoosingFile = true }
             } header: {
-                Text("ISBN")
+                Text("Barcode")
             } footer: {
-                if isISBNMistyped {
-                    Text("Those digits aren't a valid ISBN. Check them against the barcode.")
-                        .foregroundStyle(.red)
-                } else {
-                    Text("The number over the barcode on the back cover, or on the copyright page.")
-                }
+                Text("A photo of the barcode on the back cover. Recipe Codex reads the ISBN under it and finds the book.")
             }
-
-            Section("Search by Title") {
-                TextField("Title", text: $titleQuery)
-                    .submitLabel(.search)
-                    .focused($focusedField, equals: .title)
-                    .onSubmit(searchTitle)
-                Button("Search Titles", systemImage: "text.magnifyingglass") { searchTitle() }
-                    .disabled(titleQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
+            .disabled(phase == .reading || isAdding)
 
             results
         }
@@ -150,38 +138,44 @@ struct AddCookbookView: View {
         switch phase {
         case .idle:
             EmptyView()
-        case .looking:
+        case .reading:
+            progress("Reading the barcode…")
+        case let .looking(isbn):
+            progress("Looking up ISBN \(isbn)…")
+        case .noBarcode:
             Section {
-                HStack(spacing: 12) {
-                    ProgressView()
-                    Text("Looking up…")
-                        .foregroundStyle(.secondary)
-                }
+                Label("No ISBN barcode could be read in that photo. Try a closer, straighter photo of the back cover.", systemImage: "barcode")
+                    .foregroundStyle(.secondary)
+                enterByHand(title: "Enter Details by Hand")
             }
-        case let .found(candidates, query):
+        case let .found(candidate):
             Section {
-                ForEach(candidates) { candidate in
-                    BookCandidateCard(candidate: candidate, state: state(of: candidate)) {
-                        add(candidate)
-                    }
+                BookCandidateCard(candidate: candidate, state: state(of: candidate)) {
+                    add(candidate)
                 }
             } header: {
-                if case .title = query {
-                    Text(candidates.count == 1 ? "1 Result" : "\(candidates.count) Results")
-                } else {
-                    Text("Found")
-                }
+                Text("Found")
             } footer: {
-                Text("From \(candidates.first?.source.rawValue ?? "Open Library").")
+                Text("From \(candidate.source.rawValue).")
             }
             Section {
                 enterByHand(title: "Not It? Enter Details by Hand")
             }
-        case let .failed(error, query):
+        case let .failed(error, _):
             Section {
-                Label(message(for: error, query: query), systemImage: error == .notFound ? "book.closed" : "wifi.exclamationmark")
+                Label(message(for: error), systemImage: error == .notFound ? "book.closed" : "wifi.exclamationmark")
                     .foregroundStyle(.secondary)
                 enterByHand(title: "Enter Details by Hand")
+            }
+        }
+    }
+
+    private func progress(_ text: String) -> some View {
+        Section {
+            HStack(spacing: 12) {
+                ProgressView()
+                Text(text)
+                    .foregroundStyle(.secondary)
             }
         }
     }
@@ -189,25 +183,25 @@ struct AddCookbookView: View {
     private func enterByHand(title: String) -> some View {
         Button(title, systemImage: "square.and.pencil") {
             work?.cancel()
-            manualDraft = prefill
-            manualStart = prefill
+            let start = BookDraft(isbn: readISBN ?? "")
+            manualDraft = start
+            manualStart = start
         }
     }
 
-    private func message(for error: BookLookupError, query: Query) -> String {
-        switch (error, query) {
-        case (.notFound, .isbn): "No cookbook found for that ISBN."
-        case let (.notFound, .title(title)): "No cookbook found for “\(title)”."
-        case (.invalidISBN, _): "Those digits aren't a valid ISBN."
-        case (.offline, _): "You appear to be offline. Try again when you're connected, or enter the details by hand."
-        case (.badResponse, _): "Open Library didn't answer as expected. Try again later, or enter the details by hand."
+    private func message(for error: BookLookupError) -> String {
+        switch error {
+        case .notFound: "No cookbook found for that ISBN."
+        case .invalidISBN: "That barcode isn't a valid ISBN."
+        case .offline: "You appear to be offline. Try again when you're connected, or enter the details by hand."
+        case .badResponse: "Open Library didn't answer as expected. Try again later, or enter the details by hand."
         }
     }
 
     private func state(of candidate: BookCandidate) -> BookCandidateCard.State {
-        if addingID == candidate.id { return .adding }
+        if isAdding { return .adding }
         if shelved(candidate) != nil { return .onShelf }
-        return addingID == nil ? .ready : .disabled
+        return .ready
     }
 
     /// The book already on the shelf with this ISBN.
@@ -216,47 +210,65 @@ struct AddCookbookView: View {
         return books.first { $0.isbn == isbn }
     }
 
-    private func lookUpISBN() {
-        guard let isbn = normalizedISBN else { return }
-        run(.isbn(isbn)) { [lookup] () async throws(BookLookupError) -> [BookCandidate] in
-            [try await lookup.lookup(isbn: isbn)]
-        }
-    }
-
-    private func searchTitle() {
-        let title = titleQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !title.isEmpty else { return }
-        run(.title(title)) { [lookup] () async throws(BookLookupError) -> [BookCandidate] in
-            try await lookup.search(title: title)
-        }
-    }
-
-    private func run(_ query: Query, _ operation: @escaping () async throws(BookLookupError) -> [BookCandidate]) {
+    /// Reads the barcode off the photo `load` gives, then looks its ISBN up.
+    private func read(_ load: @escaping () async -> Data?) {
         work?.cancel()
-        focusedField = nil
-        phase = .looking(query)
+        phase = .reading
         work = Task {
+            guard let data = await load() else {
+                phase = .noBarcode
+                return
+            }
+            let isbn = await Self.isbn(in: data)
+            guard !Task.isCancelled else { return }
+            if let isbn { lookUp(isbn) } else { phase = .noBarcode }
+        }
+    }
+
+    /// Vision's barcode reading, off the main actor. Why a photo gave no ISBN goes to the log
+    /// (category "books").
+    @concurrent
+    nonisolated private static func isbn(in data: Data) async -> String? {
+        let url = FileManager.default.temporaryDirectory.appending(path: "barcode-\(UUID().uuidString)")
+        guard (try? data.write(to: url)) != nil else { return nil }
+        defer { try? FileManager.default.removeItem(at: url) }
+        do {
+            let isbn = try await ISBNBarcode.read(contentsOf: url)
+            if isbn == nil { logger.info("Add Cookbook: no ISBN barcode in a \(data.count) byte photo") }
+            return isbn
+        } catch {
+            logger.error("Add Cookbook: the barcode photo couldn't be read: \(error, privacy: .public)")
+            return nil
+        }
+    }
+
+    nonisolated private static let logger = Logger(subsystem: "com.calebpietrafesa.RecipeCodex", category: "books")
+
+    private func lookUp(_ isbn: String) {
+        work?.cancel()
+        phase = .looking(isbn)
+        work = Task { [lookup] in
             do throws(BookLookupError) {
-                let candidates = try await operation()
+                let candidate = try await lookup.lookup(isbn: isbn)
                 guard !Task.isCancelled else { return }
-                phase = .found(candidates, query)
+                phase = .found(candidate)
             } catch {
                 guard !Task.isCancelled else { return }
-                phase = .failed(error, query)
+                phase = .failed(error, isbn)
             }
         }
     }
 
     // MARK: - Adding
 
-    /// Confirms a card: the book with its cover, downloaded and downsampled as recipe covers are.
+    /// Confirms the card: the book with its cover, downloaded and downsampled as recipe covers are.
     /// A book already on the shelf by that ISBN opens instead.
     private func add(_ candidate: BookCandidate) {
         if let book = shelved(candidate) {
             finish(book)
             return
         }
-        addingID = candidate.id
+        isAdding = true
         Task {
             var cover: Data?
             if let url = candidate.coverURL, let data = try? await lookup.coverImage(at: url) {
@@ -267,7 +279,7 @@ struct AddCookbookView: View {
             book.coverImageData = cover
             modelContext.insert(book)
             try? modelContext.save()
-            addingID = nil
+            isAdding = false
             finish(book)
         }
     }
@@ -291,8 +303,6 @@ struct AddCookbookView: View {
 private struct BookCandidateCard: View {
     enum State {
         case ready
-        /// Another card is being added.
-        case disabled
         case adding
         /// A book with this ISBN is already on the shelf; the button opens it.
         case onShelf
@@ -358,10 +368,9 @@ private struct BookCandidateCard: View {
             Button("On Shelf", action: onAdd)
                 .buttonStyle(.bordered)
                 .accessibilityHint("Opens the cookbook already on your shelf.")
-        case .ready, .disabled:
+        case .ready:
             Button("Add", action: onAdd)
                 .buttonStyle(.borderedProminent)
-                .disabled(state == .disabled)
                 .accessibilityLabel("Add \(candidate.title)")
         }
     }

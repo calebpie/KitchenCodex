@@ -54,6 +54,12 @@ extension RecipeDraft {
         let source = SourceInfo(url: imported.sourceURL, author: imported.author)
         source.siteName = imported.siteName ?? imported.sourceURL?.host()
         source.importedAt = .now
+        // How it came in (04 §5.1 "Which book"); a scan sets its own after saving.
+        switch imported.method {
+        case .libraryFile?: source.captureMethod = .library
+        case nil: source.captureMethod = .manual
+        default: source.captureMethod = .web
+        }
         context.insert(source)
         recipe.source = source
 

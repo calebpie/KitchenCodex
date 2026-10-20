@@ -1,3 +1,4 @@
+import Capture
 import RecipeModel
 import SwiftData
 import SwiftUI
@@ -40,6 +41,8 @@ extension Recipe {
 /// editor at the ingredients), View Page, and Looks Right to clear it without changes.
 struct ReviewBanner: View {
     let recipe: Recipe
+    /// A scanned recipe's View Page; a web import links its page instead.
+    var onViewPage: (() -> Void)?
     var onReview: () -> Void
 
     @Environment(\.modelContext) private var modelContext
@@ -73,7 +76,10 @@ struct ReviewBanner: View {
             HStack(spacing: 12) {
                 Button("Review", action: onReview)
                     .buttonStyle(.borderedProminent)
-                if let url = recipe.source?.url {
+                if recipe.isScanned, let onViewPage {
+                    Button("View Page", systemImage: "doc.text.image", action: onViewPage)
+                        .buttonStyle(.bordered)
+                } else if let url = recipe.source?.url {
                     Link(destination: url) {
                         Label("View Page", systemImage: "safari")
                     }
@@ -93,6 +99,13 @@ struct ReviewBanner: View {
 
     private var detail: String {
         var parts: [String] = []
+        if recipe.isScanned {
+            // The reasons the scan asked for a look (04 §5.1 "Scan review").
+            let reasons = (recipe.currentVersion?.reviewReasons ?? []).compactMap(ReviewReason.init(rawValue:)).filter { !ScanGate.forcing.contains($0) }
+            parts.append("Scanned with low confidence\(reasons.isEmpty ? "" : ": " + reasons.map(\.label).joined(separator: ", ")).")
+            parts.append("Compare it with the page.")
+            return parts.joined(separator: " ")
+        }
         if let site = recipe.source?.siteName ?? recipe.source?.url?.host() {
             parts.append("Imported from \(site) with low confidence.")
         } else {
