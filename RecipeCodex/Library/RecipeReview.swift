@@ -16,17 +16,43 @@ extension Ingredient {
 }
 
 extension Recipe {
+    /// Whether a line of this recipe asks for a look. A scanned recipe asks only about amounts the
+    /// scan couldn't read, as review does (ux-notes rows 58 and 67); a line with no amount ("Kosher
+    /// salt") reads cleanly there. Other imports flag a line with no amount or item.
+    func needsCheck(_ ingredient: Ingredient) -> Bool {
+        isScanned ? PageRegionText.isUnreadIngredient(ingredient.rawText) : ingredient.needsCheck
+    }
+
     /// The current version's ingredients that did not read cleanly, in order.
     var ingredientsToCheck: [Ingredient] {
-        (currentVersion?.sortedIngredients ?? []).filter(\.needsCheck)
+        (currentVersion?.sortedIngredients ?? []).filter(needsCheck)
     }
 
     /// "Check 3 ingredients", or "Check this recipe" when every line read cleanly but the import
-    /// still had low confidence (its steps, say).
+    /// still had low confidence (its steps, say). A scanned recipe says what the scan found: "1 line
+    /// to check against the page" (ux-notes row 67).
     var reviewTitle: String {
         let count = ingredientsToCheck.count
+        if isScanned {
+            if count > 0 { return count == 1 ? "1 line to check against the page" : "\(count) lines to check against the page" }
+            return scanFinding
+        }
         if count == 0 { return "Check this recipe" }
         return count == 1 ? "Check 1 ingredient" : "Check \(count) ingredients"
+    }
+
+    /// The scan's own reasons (`RecipeVersion.reviewReasons`) beyond the forced ones.
+    var scanReasons: [ReviewReason] {
+        (currentVersion?.reviewReasons ?? []).compactMap(ReviewReason.init(rawValue:)).filter { !ScanGate.forcing.contains($0) }
+    }
+
+    /// What a scan with every line read asked about, in the same words.
+    private var scanFinding: String {
+        let reasons = scanReasons
+        if reasons.contains(.stepCountDisagrees) { return "The steps to check against the page" }
+        if reasons.contains(.unassignedRegion) { return "Unplaced text to check against the page" }
+        if reasons.contains(.lowOCRConfidence) { return "Faint print to check against the page" }
+        return "Check it against the page"
     }
 
     /// The cook has looked: the current version no longer needs review.
@@ -100,9 +126,18 @@ struct ReviewBanner: View {
     private var detail: String {
         var parts: [String] = []
         if recipe.isScanned {
-            // The reasons the scan asked for a look (04 §5.1 "Scan review").
-            let reasons = (recipe.currentVersion?.reviewReasons ?? []).compactMap(ReviewReason.init(rawValue:)).filter { !ScanGate.forcing.contains($0) }
-            parts.append("Scanned with low confidence\(reasons.isEmpty ? "" : ": " + reasons.map(\.label).joined(separator: ", ")).")
+            // What the scan found (04 §5.1 "Scan review", ux-notes row 67): the amounts it couldn't
+            // read, then its other reasons.
+            let count = recipe.ingredientsToCheck.count
+            if count > 0 {
+                parts.append(count == 1 ? "The amount on one line couldn't be read." : "The amounts on \(count) lines couldn't be read.")
+            }
+            let others = recipe.scanReasons.filter { $0 != .unparsedIngredients }
+            if !others.isEmpty {
+                let text = others.map(\.label).joined(separator: ", ")
+                parts.append(text.prefix(1).uppercased() + text.dropFirst() + ".")
+            }
+            if parts.isEmpty { parts.append("Scanned with low confidence.") }
             parts.append("Compare it with the page.")
             return parts.joined(separator: " ")
         }
@@ -121,13 +156,16 @@ struct ReviewBanner: View {
 /// the page wrote it, and a mark on the lines to check.
 struct IngredientProvenanceRows: View {
     let ingredients: [Ingredient]
+    /// Which lines to mark: the recipe's rule (`Recipe.needsCheck(_:)`).
+    var needsCheck: (Ingredient) -> Bool = \.needsCheck
 
     var body: some View {
         ForEach(ingredients) { ingredient in
+            let flagged = needsCheck(ingredient)
             HStack(alignment: .firstTextBaseline, spacing: 10) {
-                Image(systemName: ingredient.needsCheck ? "exclamationmark.triangle.fill" : "checkmark.circle")
-                    .foregroundStyle(ingredient.needsCheck ? AnyShapeStyle(.yellow) : AnyShapeStyle(.tertiary))
-                    .accessibilityLabel(ingredient.needsCheck ? "Check this line" : "Read cleanly")
+                Image(systemName: flagged ? "exclamationmark.triangle.fill" : "checkmark.circle")
+                    .foregroundStyle(flagged ? AnyShapeStyle(.yellow) : AnyShapeStyle(.tertiary))
+                    .accessibilityLabel(flagged ? "Check this line" : "Read cleanly")
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
                         Text(amount(of: ingredient))

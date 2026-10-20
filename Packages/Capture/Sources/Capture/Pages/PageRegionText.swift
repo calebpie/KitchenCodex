@@ -20,6 +20,12 @@ public enum PageRegionText {
         PageText.join(lines)
     }
 
+    /// Whether a scanned ingredient line asks for a look: its amount went unread, or nothing read as
+    /// the item. A line with no amount ("Kosher salt") reads cleanly (ux-notes rows 58 and 67).
+    public static func isUnreadIngredient(_ line: String) -> Bool {
+        PageLines.isUnparsed(line, parsed: IngredientParser.parse(line))
+    }
+
     /// Ingredient lines, one per printed line, OCR's fraction slips mended; a line that opens in
     /// lowercase or carries no amount after a line ending in a comma wraps the one before.
     public static func ingredientLines(_ lines: [String]) -> [String] {

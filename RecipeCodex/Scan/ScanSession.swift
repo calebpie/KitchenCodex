@@ -252,7 +252,11 @@ final class ScanSession {
             }
             let reasons = ScanGate.reasons(for: reading, book: book)
             let model = ScanReviewModel(reading: reading, urls: urls)
-            for index in model.recipes.indices { model.recipes[index].reasons = reasons[index] }
+            let course = Self.lastCourse(of: book)
+            for index in model.recipes.indices {
+                model.recipes[index].reasons = reasons[index]
+                model.recipes[index].course = course
+            }
             // The first photo opening mid-recipe continues a page that wasn't scanned: shown, but
             // skipped unless the cook includes it.
             if position == 0, reading.isContinuation, model.recipes.count > 1 {
@@ -276,6 +280,12 @@ final class ScanSession {
         }
         review = nil
         phase = .finished
+    }
+
+    /// The course last chosen for a book: its latest recipe's that has one (ux-notes row 73). A
+    /// book is scanned chapter by chapter, so a recipe saved straight takes it too.
+    static func lastCourse(of book: Book?) -> String? {
+        (book?.recipes ?? []).filter { $0.course != nil }.max { $0.createdAt < $1.createdAt }?.course
     }
 
     /// Review's Save: every recipe on the page not skipped, as reviewed.

@@ -34,6 +34,7 @@ struct ScanReviewView: View {
     @State private var isConfirmingRescan = false
 
     private var isWide: Bool { width >= 700 }
+    private static let dividerHeight: CGFloat = 22
 
     var body: some View {
         Group {
@@ -49,9 +50,12 @@ struct ScanReviewView: View {
                 GeometryReader { geometry in
                     let share = min(0.8, max(0.2, topShare + dividerDrag / max(1, geometry.size.height)))
                     VStack(spacing: 0) {
+                        // The divider is a bar the recipe scrolls under, with the system's scroll
+                        // edge, so the pane reads as scrollable where it cuts off (ux-notes row 71).
                         structurePane
-                            .frame(height: geometry.size.height * share)
-                        divider(height: geometry.size.height)
+                            .safeAreaBar(edge: .bottom, spacing: 0) { divider(height: geometry.size.height) }
+                            .scrollEdgeEffectStyle(.soft, for: .bottom)
+                            .frame(height: geometry.size.height * share + Self.dividerHeight)
                         pagePane
                     }
                 }
@@ -109,31 +113,29 @@ struct ScanReviewView: View {
     // MARK: - The divider
 
     private func divider(height: CGFloat) -> some View {
-        ZStack {
-            Rectangle().fill(.background.secondary)
-            Capsule()
-                .fill(.tertiary)
-                .frame(width: 40, height: 5)
-        }
-        .frame(height: 22)
-        .contentShape(.rect)
-        .gesture(
-            DragGesture()
-                .updating($dividerDrag) { value, state, _ in state = value.translation.height }
-                .onEnded { value in
-                    topShare = min(0.8, max(0.2, topShare + value.translation.height / max(1, height)))
+        Capsule()
+            .fill(.tertiary)
+            .frame(width: 40, height: 5)
+            .frame(maxWidth: .infinity)
+            .frame(height: Self.dividerHeight)
+            .contentShape(.rect)
+            .gesture(
+                DragGesture()
+                    .updating($dividerDrag) { value, state, _ in state = value.translation.height }
+                    .onEnded { value in
+                        topShare = min(0.8, max(0.2, topShare + value.translation.height / max(1, height)))
+                    }
+            )
+            .accessibilityElement()
+            .accessibilityLabel("Divider")
+            .accessibilityValue("\(Int(topShare * 100)) percent recipe")
+            .accessibilityAdjustableAction { direction in
+                switch direction {
+                case .increment: topShare = min(0.8, topShare + 0.1)
+                case .decrement: topShare = max(0.2, topShare - 0.1)
+                @unknown default: break
                 }
-        )
-        .accessibilityElement()
-        .accessibilityLabel("Divider")
-        .accessibilityValue("\(Int(topShare * 100)) percent recipe")
-        .accessibilityAdjustableAction { direction in
-            switch direction {
-            case .increment: topShare = min(0.8, topShare + 0.1)
-            case .decrement: topShare = max(0.2, topShare - 0.1)
-            @unknown default: break
             }
-        }
     }
 
     // MARK: - The page
@@ -348,6 +350,7 @@ struct ScanReviewView: View {
                 } else {
                     emptyRow("No title read. Tap the title on the page and choose Title.")
                 }
+                coursePicker
             }
             if let yield = model.recipe.yield {
                 Section("Yield") { itemRow(yield) }
@@ -401,6 +404,24 @@ struct ScanReviewView: View {
         .animation(.default, value: model.recipe)
     }
 
+    /// The course it is saved with (ux-notes row 73): the last chosen for the book to begin with.
+    private var coursePicker: some View {
+        Picker("Course", selection: Binding { model.recipe.course } set: { course in
+            withAnimation { model.setCourse(course) }
+        }) {
+            Text("None").tag(String?.none)
+            ForEach(courseOptions, id: \.self) { course in
+                Text(course).tag(Optional(course))
+            }
+        }
+    }
+
+    private var courseOptions: [String] {
+        var options = RecipeCourse.standard
+        if let course = model.recipe.course, !options.contains(course) { options.append(course) }
+        return options
+    }
+
     private var photoSummary: String {
         var parts: [String] = []
         if model.recipe.cover != nil { parts.append("A cover") }
@@ -449,6 +470,14 @@ struct ScanReviewView: View {
                 .focused($editingFocus, equals: item.id)
                 .submitLabel(.done)
                 .onSubmit { editingFocus = nil }
+                // Return ends the edit (ux-notes row 70). A field that wraps takes Return as a line
+                // break, so a break typed (or pasted) comes out and the edit ends: an ingredient is
+                // one line, and a step stays one paragraph.
+                .onChange(of: editingText) { _, text in
+                    guard text.contains(where: \.isNewline) else { return }
+                    editingText = text.split(whereSeparator: \.isNewline).joined(separator: " ")
+                    editingFocus = nil
+                }
         } else {
             Button {
                 tap(item)

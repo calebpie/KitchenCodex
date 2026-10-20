@@ -294,7 +294,7 @@ struct RecipeEditorView: View {
     /// The stored lines as the import read them, with the page's original under each, and the page.
     private func reviewSection(_ recipe: Recipe) -> some View {
         Section {
-            IngredientProvenanceRows(ingredients: recipe.currentVersion?.sortedIngredients ?? [])
+            IngredientProvenanceRows(ingredients: recipe.currentVersion?.sortedIngredients ?? [], needsCheck: recipe.needsCheck)
             if let url = recipe.source?.url {
                 Link(destination: url) {
                     Label("View Page", systemImage: "safari")

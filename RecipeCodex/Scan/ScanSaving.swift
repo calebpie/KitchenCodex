@@ -169,6 +169,7 @@ enum ScanSaving {
         var imported = review.imported
         imported.author = book?.author.isEmpty == false ? book?.author : nil
         var draft = RecipeDraft(imported: imported)
+        draft.course = review.course
         draft.changeSummary = "Scanned from \(pagesText(book: book, pages: pageNumbers))" + (reviewed ? "" : " · Accepted automatically")
         if let cover = review.cover, let photo = await coverPhoto(region: cover, in: model, images: images) {
             draft.photo = photo
@@ -206,7 +207,7 @@ enum ScanSaving {
         let review = model.recipes[index]
         let original = RecipeDraft(recipe: recipe)
         var draft = RecipeDraft(imported: review.imported)
-        draft.course = recipe.course
+        draft.course = review.course
         draft.changeSummary = "Reviewed against the page"
         if let cover = review.cover, cover != model.storedCover, let photo = await coverPhoto(region: cover, in: model, images: images) {
             draft.photo = photo

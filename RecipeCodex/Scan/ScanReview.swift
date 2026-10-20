@@ -99,6 +99,9 @@ struct ReviewRecipe: Equatable {
     var cover: Int?
     /// Skip, offered for a page scanned on its own (ux-notes row 60).
     var isSkipped = false
+    /// The course it is saved with: the last one chosen for its book until the contents page's
+    /// chapter sets it (ux-notes row 73).
+    var course: String?
 
     var prepTime: Duration?
     var cookTime: Duration?
@@ -237,6 +240,10 @@ final class ScanReviewModel {
 
     private func apply(_ id: Int, role: RegionRole, step: ReviewItem.ID?) {
         guard let index = regions.firstIndex(where: { $0.id == id }) else { return }
+        if regions[index].role == .ingredientGroup, role != .ingredient, role != .ingredientGroup {
+            // A group heading made something else no longer heads its lines.
+            clearGroup(named: regions[index].text)
+        }
         removeEverywhere(id)
         let region = regions[index]
         regions[index].role = role == .ignore ? .ignore : role
@@ -244,9 +251,11 @@ final class ScanReviewModel {
         var recipe = recipes[current]
         switch role {
         case .title:
-            // A line next to the title in reading order joins it; anywhere else it replaces it.
-            if let title = recipe.title, !title.regions.isEmpty, adjoins(id, title.regions) {
-                let ids = (title.regions + [id]).sorted()
+            // A region on the title's printed line, or the line below it, joins the title in reading
+            // order; anywhere else it replaces it, the former title going back to unassigned (ux-notes
+            // row 72).
+            if let title = recipe.title, !title.regions.isEmpty, continuesTitle(id, title.regions) {
+                let ids = titleOrder(title.regions + [id])
                 recipe.title = ReviewItem(text: titleText(ids), regions: ids)
             } else {
                 if let old = recipe.title { unassign(old.regions) }
@@ -289,12 +298,58 @@ final class ScanReviewModel {
         items.insert(item, at: position)
     }
 
-    /// Whether `id` sits next to `ids` among the page's text regions.
-    private func adjoins(_ id: Int, _ ids: [Int]) -> Bool {
-        let text = regions.filter { !$0.isPhoto && $0.role != .furniture }.map(\.id).sorted()
-        guard let position = text.firstIndex(of: id) else { return false }
-        let neighbours = [position - 1, position + 1].filter(text.indices.contains).map { text[$0] }
-        return neighbours.contains { ids.contains($0) }
+    /// Whether `id` continues the title made of `ids` (ux-notes row 72): it is set on the same
+    /// printed line as a part of the title (the recognizer can split one line into two blocks), or
+    /// on the line just under the title, overlapping it across.
+    func continuesTitle(_ id: Int, _ ids: [Int]) -> Bool {
+        guard let candidate = region(id) else { return false }
+        let title = ids.compactMap(region).filter { $0.page == candidate.page && $0.id != id }
+        guard let first = title.first else { return false }
+        if title.contains(where: { Self.verticalOverlap(candidate.rect, $0.rect) >= 0.5 }) { return true }
+        let bounds = title.dropFirst().reduce(first.rect) { $0.union($1.rect) }
+        let lineHeight = title.map { $0.rect.height / CGFloat(max(1, $0.lines.count)) }.max() ?? 0
+        let gap = candidate.rect.minY - bounds.maxY
+        return gap >= -0.3 * lineHeight && gap <= 1.2 * lineHeight && Self.horizontalOverlap(candidate.rect, bounds) > 0
+    }
+
+    /// Title regions in reading order: left to right along a printed line, then down the page.
+    private func titleOrder(_ ids: [Int]) -> [Int] {
+        ids.sorted { a, b in
+            guard let first = region(a), let second = region(b) else { return a < b }
+            if first.page != second.page { return first.page < second.page }
+            if Self.verticalOverlap(first.rect, second.rect) >= 0.5 { return first.rect.minX < second.rect.minX }
+            return first.rect.minY < second.rect.minY
+        }
+    }
+
+    /// How much two rects overlap down, as a share of the shorter.
+    private static func verticalOverlap(_ a: CGRect, _ b: CGRect) -> CGFloat {
+        let shorter = min(a.height, b.height)
+        guard shorter > 0 else { return 0 }
+        return max(0, min(a.maxY, b.maxY) - max(a.minY, b.minY)) / shorter
+    }
+
+    /// How much two rects overlap across, as a share of the narrower.
+    private static func horizontalOverlap(_ a: CGRect, _ b: CGRect) -> CGFloat {
+        let narrower = min(a.width, b.width)
+        guard narrower > 0 else { return 0 }
+        return max(0, min(a.maxX, b.maxX) - max(a.minX, b.minX)) / narrower
+    }
+
+    /// Takes a group heading off the ingredient lines it headed.
+    private func clearGroup(named text: String) {
+        let key = Self.groupKey(text)
+        guard !key.isEmpty else { return }
+        for index in recipes.indices {
+            for line in recipes[index].ingredients.indices where recipes[index].ingredients[line].group.map(Self.groupKey) == key {
+                recipes[index].ingredients[line].group = nil
+            }
+        }
+    }
+
+    /// A heading's letters and digits, lowercased: "SAUCE:" and "Sauce" alike.
+    private static func groupKey(_ text: String) -> String {
+        String(text.lowercased().filter { $0.isLetter || $0.isNumber })
     }
 
     private func titleText(_ ids: [Int]) -> String {
@@ -314,7 +369,7 @@ final class ScanReviewModel {
         for index in recipes.indices {
             var recipe = recipes[index]
             if recipe.title?.regions.contains(id) == true {
-                let rest = recipe.title!.regions.filter { $0 != id }
+                let rest = titleOrder(recipe.title!.regions.filter { $0 != id })
                 recipe.title = rest.isEmpty ? nil : ReviewItem(text: titleText(rest), regions: rest)
             }
             if recipe.yield?.regions.contains(id) == true { recipe.yield = nil }
@@ -373,6 +428,13 @@ final class ScanReviewModel {
     func toggleSkip() {
         checkpoint()
         recipes[current].isSkipped.toggle()
+    }
+
+    /// The Course row (ux-notes row 73).
+    func setCourse(_ course: String?) {
+        guard recipes[current].course != course else { return }
+        checkpoint()
+        recipes[current].course = course
     }
 
     // MARK: - What the page pane shows
@@ -528,6 +590,7 @@ extension ScanReviewModel {
         review.layoutSignature = signature
         review.confidence = PageConfidence(ocr: 0, parser: 0, structure: 0)
         review.reasons = version.reviewReasons.compactMap(ReviewReason.init(rawValue:))
+        review.course = recipe.course
         self.init(pages: pages, regions: regions, recipes: [review])
         storedCover = review.cover
     }
