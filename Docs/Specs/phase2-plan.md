@@ -67,6 +67,7 @@ Each slice follows the Phase 1 pattern: a brief with groups and a verification l
 - **Scan Page** (03 §3.5): VisionKit's document camera as a full-screen cover with Close, the quality pill from slice 2's gate on the captured image (and live, if the custom AVFoundation camera is worth it; otherwise reject and re-shoot), Add next page, the thumbnail stack with count; the iPad split with the running text preview.
 - **Barcode scanner** (`DataScannerViewController`): the live way in for Add Cookbook and for Which book?'s new book on a device; slice 3's photo path stays for the simulator.
 - **Quality pill** advisory at Apple's threshold, escalating only after a run of hazy, poorly read captures (row 57); a sticky **Recipe · Photo** capture mode beside the shutter (row 62, decided). **Profile riders** (rows 55, 56): About shows the build from the `BuildInfo.plist` the project's Build Info phase writes; a sync-state row, and a flag on Recipes while a sync issue stands.
+- **Read Fixtures** (04 §5.1 "Device readings", row 63): a debug-only action that reads the fixture pages from an album on the phone and writes the reader's blocks and the structured result to a report shared back to the Mac; Caleb runs it once. **Review riders** (rows 70–72): Return ends an in-place edit, a scroll edge above the page pane, a second Title region on the same line joins the title.
 - **Photo cleanup**: deskew, crop, levels, sharpen with Core Image before OCR; the original kept.
 - Needs the camera usage description. Verified by Caleb on the device; the slice verifies the pipeline with the simulator's fixture path and the camera code by inspection and a device build.
 
@@ -94,7 +95,7 @@ Each slice follows the Phase 1 pattern: a brief with groups and a verification l
 
 ### Slice 8 — Accuracy, cover selection, PDF import, and the exit
 
-- **Accuracy pass**: the harness's report against the full fixture set; prompt and heuristic iteration until the review step averages under a minute per recipe (04 §2); the image-input second pass if the stall risk shows (04 §6).
+- **Accuracy pass**: the harness's report against the full fixture set; prompt and heuristic iteration until the review step averages under a minute per recipe (04 §2); the image-input second pass if the stall risk shows (04 §6). The pass replays the phone's blocks from the Read Fixtures report in the harness and measures on the phone (04 §5.1 "Device readings"), IMG_1051's split title and misfiled ingredient lines first; a bilingual title's dash when both names stay (row 69).
 - **Cover selection** (`CalculateImageAestheticScoresRequest` over a recipe's images) and **PDF and photo-library import** through the same pipeline.
 - **Exit**: the exit book captured end to end on the device by Caleb; the notes end with the Phase 2 exit checklist.
 
