@@ -1,0 +1,102 @@
+# Phase 2 — Capture: slice plan
+
+*Drafted Oct 20, 2026, after Phase 1 closed (slice 10, `f6b74fb`). This is the working plan for the slices; `Docs/Planning/04-Execution-Plan.md` §2 "Phase 2" is the scope, `02-Flows-and-Architecture.md` Flows B and C are the behaviour, and `03-UX-Proposals.md` §3.4–3.8 are the screens. Decisions still go through `ux-notes.md` and 04 §5.1; this file carries the order of work, what each slice is done by, and what Caleb has to supply.*
+
+## Goal and exit
+
+04 §2: "the cookbook shelf and the whole-book flow". Exit: **one real cookbook fully captured**, with the review step averaging under a minute per recipe on the fixture set. Caleb names the book (below).
+
+## What is already there
+
+- **Schema v1** (`Packages/RecipeModel`): `Book` (title, author, ISBN, year, cover, `reviewedLayouts`), `BookSection`, `BookEntry` (title, page, `listed | captured | reviewed`), `Recipe.book`, `Recipe.bookEntry`, `Recipe.pageNumber`, `RecipeImage.pageScan` with `pageNumber`, `RecipeLink` (component · variation · reference), `Source.book`. Missing from 02 §4.2: `Reference` and `ReferenceSection`, and anywhere to keep a page's regions for review.
+- **Capture**: the web importer with its deterministic readings, the ingredient parser, the step splitter, the library importer, the exporter. Nothing reads an image yet.
+- **Intelligence**: `RecipeStructuring` with `DeterministicRecipeStructurer` and `OnDeviceRecipeStructurer`, `ModelTier` routing, the availability guard. No image input, no punchlist extraction.
+- **App**: Cookbooks view (the empty shelf), the `LibraryRoute.book` stub, the Cookbook filter, Add's Scan Page / From Photo / Add Cookbook hidden until they ship, the review row and Needs a Look, Spotlight, the Pantry → Sources pane (empty).
+- **Frameworks** (01 §2.3): VisionKit `VNDocumentCameraViewController` (pages) and `DataScannerViewController` (ISBN), Vision `RecognizeDocumentsRequest` (paragraphs, lines, lists, tables), `DetectLensSmudgeRequest` plus a sharpness score for the quality gate, Core Image for cleanup, Open Library (keyless) with Google Books as fallback, `BGProcessingTask` for the OCR backlog, Foundation Models image input as the second opinion.
+
+## Two constraints that shape the order
+
+1. **The simulator has no camera.** The pipeline (image → quality gate → OCR → regions → structure → review → save) is built and tested on fixture images that enter through From Photo and Files, with a test harness over the private fixture set. The camera is a thin VisionKit layer added once the pipeline is right, and only Caleb can verify it, on a device.
+2. **One schema change per phase** (04 §6 "CloudKit surprises"). Everything Phase 2 adds to schema v1 lands in one slice (slice 2), edited in place as in Phase 1, with `followsCloudKitRules` and a store-open check: `Reference`, `ReferenceSection`, a regions attribute on `RecipeImage` (the review's blocks as JSON), an extraction confidence on `Recipe`, and whatever slice 2 finds the punchlist needs.
+
+## What Caleb supplies, and when
+
+| Needed | For | By |
+|---|---|---|
+| **Camera usage description.** The app's Info.plist is generated from build settings and has no `NSCameraUsageDescription`; VisionKit's document camera and the ISBN scanner refuse without one. Add `INFOPLIST_KEY_NSCameraUsageDescription` in Xcode (the app target's Info tab) or authorize the coordinator to edit the project; slices never touch the project. Suggested text: "Recipe Codex uses the camera to scan cookbook pages and ISBN barcodes." | Slice 1's ISBN scanner (typed ISBN and title search work without it), slice 4's camera | Before slice 4 |
+| **Page fixtures.** Photos of pages from two or three of his cookbooks, taken with the phone as he would in use, under `Docs/Fixtures/Private/Pages/<book-slug>/` (gitignored like the HTML pages): about 15–25 images covering a single-page recipe, a recipe across a spread (two images), a two-column layout, a page with a sidebar or notes, a recipe with a printed process photo, a contents page, an index page, a Sources or Resources page, plus two deliberately bad captures (blurred, glare) for the quality gate. The committed manifest (`Fixtures/private-pages.json`) holds the book slug, file names, page numbers and expected counts only, as `private-fixtures.json` does; no page text or images ever reach the repo. | Slice 2's harness, every slice after | Before slice 2 |
+| **The exit book.** Which cookbook is the one Phase 2 captures end to end. | Slice 5's session, slice 8's exit | Before slice 5 |
+| **Where References live** (04 §5.2): a third view in Recipes (Recipes · Cookbooks · References) or a section inside Cookbooks. Recommendation stands: the third view. | Slice 7 | Before slice 7 |
+| **Google Books API key** (optional). Open Library is keyless and first; the key only adds a fallback for books Open Library lacks. | Slice 1 | Any time |
+| **"Open in app" URL type** (Phase 1 leftover, ux-notes row 44's neighbour): authorize the Info.plist URL type or leave it. | Slice 6 or 7, whichever touches the extension | Before that slice |
+
+## Slices
+
+Each slice follows the Phase 1 pattern: a brief with groups and a verification list, work in this checkout on `main` with commits and no push, a section in `Docs/Specs/phase2-notes.md`, ux-notes rows moved to Done, findings as Proposed rows, independent verification by the coordinator, Caleb's review on the simulators before the next card.
+
+### Slice 1 — Shelf, book identity, and the Phase 1 carry-overs
+
+- **Cookbooks shelf** (03 §3.7): the grid of covers with the completeness bar (0 of 0 until a book has entries), empty state "No cookbooks yet" with Add Cookbook; sort by title or author; the Cookbook filter already exists.
+- **Add Cookbook** (Flow C steps 1–2): type an ISBN or search by title; look up Open Library (keyless; covers by ISBN), Google Books as fallback when a key exists; a card with cover, title, author, year to confirm; manual entry when nothing is found. The ISBN scanner (`DataScannerViewController`) is in the sheet behind the camera usage description and hidden until it exists; the simulator never shows it.
+- **Book detail** (03 §3.7): cover, title, author, year, ISBN, the completeness ring (empty until slice 5), Sections · Index · Missing segmented control over the (empty) punchlist, Edit book info, Export list; Continue scanning and Scan sources page hidden until their slices. The `LibraryRoute.book` push on iPad and iPhone.
+- **Carry-overs**: ux-notes **41** (the Filter as a two-level list with kind-and-selection tokens, the menu bar's View → Filter… opening it, the old menu retired), **43** (Escape cancels every sheet), **45** (choosing Search in the iPad sidebar focuses the field).
+- Done when: a book added by ISBN and by title search shows on the shelf and opens its detail on both devices; the filter list works on iPhone and iPad with tokens; Escape and the search focus verified with key events.
+
+### Slice 2 — The page pipeline and its harness (packages first)
+
+- **Schema** (the phase's one change): `Reference`, `ReferenceSection`, `RecipeImage.regions` (JSON: block kind, rect in page coordinates, text, confidence), `Recipe.extractionConfidence`; `followsCloudKitRules` extended; both simulator stores open without a migration.
+- **Capture**: `PageReader` over Vision `RecognizeDocumentsRequest`: paragraphs, lists and tables to blocks with rects; the **quality gate** (`DetectLensSmudgeRequest` plus Laplacian sharpness) with the three readings Sharp · Hold still · Clean the lens; `PageStructurer`, deterministic first: title from the largest heading, yield and times from their phrases, ingredients from list blocks or short lines with measures (the ingredient parser's confidence), steps from numbered or paragraph blocks in reading order, headnote from the prose above the ingredients, a printed process photo's region as a `stepPhoto` candidate for the adjacent step; a **layout signature** (column count, block order, type sizes) for `Book.reviewedLayouts`; multi-page stitching when a recipe spans a spread.
+- **Intelligence**: the on-device model as the second pass only when the deterministic reading lacks a title, ingredients or steps (slice 10's rule, applied to pages), with image input as the third when the model can take it; `@Generable` output; confidence combined from OCR, parser and model.
+- **Harness**: a test over `Docs/Fixtures/Private/Pages` that runs every image and writes a private review report (as `extraction-review-2026-10-17.md` did for the web) with the reading, the blocks and the confidence per page, and asserts the manifest's counts; skipped in checkouts without the folder.
+- Done when: every fixture page reads to a structured recipe or a stated reason; the report shows where review is forced; counts recorded in the manifest.
+
+### Slice 3 — Scan review and saving from a photo
+
+- **Entry**: Add → From Photo (PhotosPicker, several pages) and Files; Flow B's processing sheet "Reading text… Finding ingredients… Finding steps…" with real stages.
+- **Scan review** (03 §3.6): iPhone's two stacked panes with the draggable divider, the page image with coloured, labelled regions, tap a region to assign (Title · Yield · Ingredients · Step · Headnote · Step photo · Ignore), tap an item to flash its source; iPad side by side with Pencil lasso and hover preview; Undo; the one-time sentence explaining the forced first review.
+- **Gating**: review forced for a book's first recipe and for a layout not in `reviewedLayouts`; otherwise saved with "Accepted automatically" in provenance and surfaced only on low confidence (OCR under threshold, unparsed ingredient lines, a step count that disagrees, an unassigned region); Review stays in More; Needs a Look lists them; "Which book?" with recent books when the scan did not start from one.
+- **Saving**: the page image attached as `pageScan` with its regions and page number, viewable from detail (View Page, 03 §3.3's scanned state), the printed process photo attached to its step.
+- Done when: the fixture pages save through the review on both devices; a second page of the same layout saves without review; review time measured on five pages.
+
+### Slice 4 — The camera
+
+- **Scan Page** (03 §3.5): VisionKit's document camera as a full-screen cover with Close, the quality pill from slice 2's gate on the captured image (and live, if the custom AVFoundation camera is worth it; otherwise reject and re-shoot), Add next page, the thumbnail stack with count; the iPad split with the running text preview.
+- **ISBN scan** in Add Cookbook (slice 1's hidden control shows).
+- **Photo cleanup**: deskew, crop, levels, sharpen with Core Image before OCR; the original kept.
+- Needs the camera usage description. Verified by Caleb on the device; the slice verifies the pipeline with the simulator's fixture path and the camera code by inspection and a device build.
+
+### Slice 5 — The whole-book session
+
+- **Punchlist** (Flow C step 3): scan or photograph the contents and index pages; on-device extraction of `[title, page]` into `BookSection` and `BookEntry`; inline correction; the book detail's completeness ring and Missing list come alive; "Scan now" from an entry with its page number.
+- **Session** (03 §3.8): iPad's three regions (punchlist, camera or photo intake, last capture's structure with the Needs review toggle), iPhone's compact header and sheet; page numbers read off the scans keep the list in step; pause and resume.
+- **Background queue**: OCR and structuring off the capture path, `BGProcessingTask` for the backlog, the status strip "12 captured · 9 processed · 2 need review · battery"; the **review queue** to swipe through.
+- Done when: the exit book's punchlist is built from its contents pages and ten of its recipes run through the session on the simulator from photos, with the ring and the Missing list correct.
+
+### Slice 6 — Cross-references and component recipes
+
+- **Detection**: "see page 84", "Pasta Dough (page 84)", "recipe follows" in steps and headnotes; the review banner's card: Link to existing recipe · Add to this book's to-scan list · Ignore; `RecipeLink` with the component role; the punchlist gains the entry.
+- **Split into N recipes** for a web page whose ingredient and step groups line up (04 §2); user-confirmed in the import preview; linked component recipes; detail shows "Includes" with the components (cook-time inlining is Phase 3).
+- Done when: the fixture pages' cross-references are found and linked; a saved web page with matching groups splits on request.
+
+### Slice 7 — References and Sources
+
+- **Reference capture**: the web importer offers "Save as reference" when a page has Article markup and no recipe; a scanned technique chapter saves as a `Reference` with sections; its source kept; linked to its book and to recipes; where References live per Caleb's decision (04 §5.2); Search covers them.
+- **Sources page** (Flow C step 8): scan the book's Sources or Resources page once; each entry (name, phone, website, what they carry) becomes a `Source` linked to the book in Pantry → Sources; the pane shows them.
+- **Extension carry-over** (ux-notes row 44) and "Open in app" if authorized, since this slice touches the extension for the Article path.
+- Done when: one article and one chapter are References; the exit book's Sources page fills the pane.
+
+### Slice 8 — Accuracy, cover selection, PDF import, and the exit
+
+- **Accuracy pass**: the harness's report against the full fixture set; prompt and heuristic iteration until the review step averages under a minute per recipe (04 §2); the image-input second pass if the stall risk shows (04 §6).
+- **Cover selection** (`CalculateImageAestheticScoresRequest` over a recipe's images) and **PDF and photo-library import** through the same pipeline.
+- **Exit**: the exit book captured end to end on the device by Caleb; the notes end with the Phase 2 exit checklist.
+
+## Measures
+
+- Review time per recipe on the fixture set (target under a minute; the 04 §6 trigger is over two minutes after iteration).
+- Share of fixture pages that read without forced review once a layout is confirmed.
+- Ingredient lines parsed to quantity and item on scanned pages, against the web pages' rate.
+
+## Out of scope for Phase 2
+
+Cook mode and timers (Phase 3), Add to menu and the Pantry panes' content beyond Sources (Phase 4), natural-language search and "More like this" (Phase 6), the Mac app (Phase 7). The whole-book session's iPad Pencil lasso ships in slice 3 only if `Canvas` hit-testing over the page image is straightforward; otherwise tap assignment on iPad too, and lasso is a finding.
