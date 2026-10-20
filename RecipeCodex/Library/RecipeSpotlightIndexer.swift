@@ -116,6 +116,8 @@ final class RecipeSpotlightIndexer {
     /// Spotlight on iOS 27 matches a query only against what it shows, the display name (title when
     /// there is none). Keywords, alternate names and text content are indexed but never matched
     /// (Apple FB16995719, FB23635795; seen on the simulator: "ssamjang" and "mirin" found nothing).
+    /// Re-checked on the iOS 27.0 simulator on Oct 20, 2026 with the recipe items alone: "Lasagne"
+    /// found the lasagne and "pancetta", one of its keywords, found nothing.
     /// So each ingredient gets its own item, shown as "ssamjang" with "In Korean Barbecue Short Ribs"
     /// beneath and the recipe's cover, which opens the recipe. The recipe item still carries the
     /// ingredients as keywords, alternate names and text content for when Spotlight matches them.
