@@ -1,5 +1,6 @@
 import Capture
 import Intelligence
+import OSLog
 import RecipeModel
 import SwiftData
 import SwiftUI
@@ -8,6 +9,12 @@ import SwiftUI
 /// the recipe with the same importer as the Share Extension, and shows the import preview (03 §3.4)
 /// for a check before saving through the manual-entry path. A page whose fetched HTML holds no recipe
 /// is rendered in a hidden web view and read again (`RenderedPageLoader`).
+///
+/// A complete reading (title, ingredients, steps) shows at once. The on-device model is asked only
+/// when `WebRecipeImporter.wantsModel` says so: with nothing complete to show, the sheet waits on
+/// "Reading ingredients…" (Use Page Reading skips it); with a page-text reading that had no headings
+/// to go by, the preview shows it while the model reads, says so in a row, and takes the model's
+/// reading in place if the cook hasn't edited the preview by then.
 struct WebImportView: View {
     /// Called with the saved recipe just before the sheet dismisses, so Recipes can open it.
     var onSaved: (Recipe) -> Void
@@ -33,10 +40,16 @@ struct WebImportView: View {
     /// The deterministic reading while the model works, so the cook can skip the wait.
     @State private var pageReading: ImportedRecipe?
     @State private var modelWork: Task<ImportedRecipe?, Never>?
+    /// The preview shows a page reading while the model reads the page.
+    @State private var isRefining = false
     /// What a failed import still knows, for "Add Manually Instead".
     @State private var fallbackTitle = ""
     @State private var fallbackURL: URL?
     @FocusState private var addressFocused: Bool
+    /// When the current import started, for the timing in the log (02 Flow A: 2 to 6 seconds).
+    @State private var importStarted: ContinuousClock.Instant?
+
+    private static let logger = Logger(subsystem: "com.calebpietrafesa.RecipeCodex", category: "import")
 
     var body: some View {
         NavigationStack {
@@ -150,6 +163,17 @@ struct WebImportView: View {
                         .overlay {
                             if isLoadingCover { ProgressView() }
                         }
+                    if isRefining {
+                        // HIG Generative AI: say specifically what the model is doing.
+                        Label {
+                            Text("Reading ingredients…")
+                        } icon: {
+                            ProgressView()
+                        }
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel("Apple Intelligence is reading the ingredients. The page reading is shown until it finishes.")
+                    }
                 }
             }
 
@@ -242,6 +266,7 @@ struct WebImportView: View {
     }
 
     private func importRecipe(from url: URL) async {
+        importStarted = .now
         fallbackTitle = ""
         fallbackURL = url
         phase = .working("Reading the page…")
@@ -256,6 +281,13 @@ struct WebImportView: View {
             var result = extraction.recipe
 
             let importer = WebRecipeImporter(structurer: OnDeviceRecipeStructurer())
+            if let reading = result, WebRecipeImporter.isComplete(reading) {
+                // Shown at once; the model, when asked, refines it in place (Flow A).
+                try Task.checkCancellation()
+                show(reading)
+                if importer.canRefine(extraction) { await refine(reading, from: extraction, with: importer) }
+                return
+            }
             if importer.canRefine(extraction) {
                 // HIG Generative AI: say specifically what the model is doing.
                 phase = .working("Reading ingredients…")
@@ -277,6 +309,36 @@ struct WebImportView: View {
         } catch {
             phase = .failed((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
         }
+    }
+
+    /// The model reads the page while the preview shows `reading`. Its reading replaces the preview
+    /// only while the cook hasn't changed anything; Save before then keeps the page reading.
+    private func refine(_ reading: ImportedRecipe, from extraction: WebPageExtraction, with importer: WebRecipeImporter) async {
+        isRefining = true
+        let task = Task { await importer.refine(extraction) }
+        modelWork = task
+        let refined = await task.value
+        // Saved or dismissed while the model read.
+        guard modelWork != nil else { return }
+        modelWork = nil
+        isRefining = false
+        guard let refined else {
+            Self.logger.info("Import from Web: kept the page reading; the model's was missing or dropped lines")
+            return
+        }
+        guard imported == reading else { return }
+        var untouched = draft
+        untouched.photo = .unchanged
+        guard untouched == RecipeDraft(imported: reading) else {
+            Self.logger.info("Import from Web: kept the cook's edits over the model's reading")
+            return
+        }
+        logTiming("model reading shown", for: refined)
+        let photo = draft.photo
+        imported = refined
+        draft = RecipeDraft(imported: refined)
+        // The model keeps the page's cover; the one already downloaded stays.
+        draft.photo = photo
     }
 
     /// A JavaScript-built page (ChefSteps) arrives from the fetch as an empty shell. Render it in a web
@@ -311,6 +373,7 @@ struct WebImportView: View {
     }
 
     private func show(_ result: ImportedRecipe) {
+        logTiming("preview shown", for: result)
         imported = result
         draft = RecipeDraft(imported: result)
         coverPreview = nil
@@ -319,12 +382,20 @@ struct WebImportView: View {
         isLoadingCover = true
         Task {
             let cover = await RecipeDraft.coverPhoto(for: result)
-            if imported == result {
+            // By its link: the model's reading, taken in place meanwhile, keeps the same cover.
+            if imported?.imageURL == result.imageURL {
                 draft.photo = cover.change
                 coverPreview = cover.preview
             }
             isLoadingCover = false
         }
+    }
+
+    /// "Import from Web: preview shown after 0.42 s (jsonLD, 8 ingredients, 5 steps)".
+    private func logTiming(_ event: String, for recipe: ImportedRecipe) {
+        guard let importStarted else { return }
+        let seconds = (ContinuousClock.now - importStarted).formatted(.units(allowed: [.seconds], fractionalPart: .show(length: 2)))
+        Self.logger.info("Import from Web: \(event, privacy: .public) after \(seconds, privacy: .public) (\(recipe.method?.rawValue ?? "manual", privacy: .public), \(recipe.ingredients.count) ingredients, \(recipe.steps.count) steps)")
     }
 
     private func skipModel() {
@@ -345,6 +416,9 @@ struct WebImportView: View {
 
     private func save() {
         guard let imported else { return }
+        // Saving keeps what the preview shows; a model still reading is no longer needed.
+        modelWork?.cancel()
+        modelWork = nil
         let recipe = draft.saveImport(imported, in: modelContext)
         onSaved(recipe)
         dismiss()

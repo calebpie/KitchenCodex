@@ -45,16 +45,23 @@ public struct WebPageExtraction: Sendable {
     /// list under an "Ingredients" heading. Without them the model has nothing to copy and invents
     /// a recipe, so it is not asked (`wantsModel`).
     public var hasIngredientLines: Bool
+    /// Whether the page-text reading found the page's own headings: its ingredients under an
+    /// "Ingredients" heading and its steps under a heading or numbered. False when the reading had
+    /// to guess either, or when there was no page-text reading.
+    public var readingFoundHeadings = false
 }
 
 /// Imports a recipe from a web page's HTML (Flow A).
 ///
 /// Deterministic first, model second (04 §1): schema.org JSON-LD, then schema.org microdata, then a
 /// reading of the visible text (`PageTextReader`). Each result records its `method` and a
-/// `confidence`; JSON-LD is 0.95, microdata 0.85, the page-text reading at most 0.5. When the result
-/// is missing or below `ImportedRecipe.reviewThreshold`, the page text shows ingredient lines, and a
-/// structurer is available, the page text goes to the model (`refine`), whose result is labelled
-/// `.model` and still flagged for review.
+/// `confidence`; JSON-LD is 0.95, microdata 0.85, the page-text reading at most 0.5, below
+/// `ImportedRecipe.reviewThreshold`, so it is flagged for review. The model is asked (`refine`) only
+/// when that reading lacks a title, ingredients or steps, or is a page-text reading that had to
+/// guess where the ingredients or steps are (no headings), and only when the page text shows
+/// ingredient lines and a structurer is available (`wantsModel`). Its result is labelled `.model`
+/// and still flagged for review. The on-device model takes 10 to 16 seconds a page, so a complete
+/// reading is never held back for it (02 Flow A: 2 to 6 seconds).
 public struct WebRecipeImporter: Sendable {
     public var structurer: (any RecipeStructuring)?
 
@@ -122,6 +129,7 @@ public struct WebRecipeImporter: Sendable {
 
         // 3. The page's visible text.
         if let reading {
+            extraction.readingFoundHeadings = reading.foundIngredientHeading && reading.foundStepsStructure
             let ingredients = ImportText.ingredientList(reading.ingredients)
             var recipe = partial ?? ImportedRecipe(title: metadata.title)
             if recipe.ingredients.count < ingredients.lines.count {
@@ -159,15 +167,24 @@ public struct WebRecipeImporter: Sendable {
 
     // MARK: - With the model
 
-    /// Whether the model should take a pass at this page: the deterministic result is missing or
-    /// weak, and the page text shows ingredient lines for the model to copy. A shell or home page
-    /// with none yields "no recipe found" rather than a recipe the model made up.
-    public static func wantsModel(_ extraction: WebPageExtraction) -> Bool {
-        guard !extraction.recipeText.isEmpty, extraction.hasIngredientLines else { return false }
-        return extraction.recipe?.needsReview ?? true
+    /// Whether a reading can be shown as it is: it has a title, at least two ingredients and a step.
+    public static func isComplete(_ recipe: ImportedRecipe) -> Bool {
+        !recipe.title.isEmpty && recipe.ingredients.count >= 2 && !recipe.steps.isEmpty
     }
 
-    /// Whether `refine` would run: the deterministic result is weak and the structurer is available.
+    /// Whether the model should take a pass at this page: the deterministic reading is missing or
+    /// incomplete, or it is a page-text reading that found no headings to go by, and the page text
+    /// shows ingredient lines for the model to copy. A complete reading from structured data, or
+    /// from a page whose ingredients and steps sit under their headings, stands on its own, flagged
+    /// for review when it came from the page text. A shell or home page with no ingredient lines
+    /// yields "no recipe found" rather than a recipe the model made up.
+    public static func wantsModel(_ extraction: WebPageExtraction) -> Bool {
+        guard !extraction.recipeText.isEmpty, extraction.hasIngredientLines else { return false }
+        guard let recipe = extraction.recipe, isComplete(recipe) else { return true }
+        return recipe.method == .pageText && !extraction.readingFoundHeadings
+    }
+
+    /// Whether `refine` would run: `wantsModel`, and the structurer is available.
     public func canRefine(_ extraction: WebPageExtraction) -> Bool {
         guard let structurer, Self.wantsModel(extraction) else { return false }
         return structurer.isAvailable

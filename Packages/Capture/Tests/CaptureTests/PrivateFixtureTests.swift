@@ -10,8 +10,12 @@ struct PrivateFixtureTests {
     @Test("Imports as recorded", arguments: Fixtures.expectations)
     func importsAsRecorded(_ expected: Fixtures.Expectation) throws {
         let html = try Fixtures.privatePage(expected.file)
-        let recipe = WebRecipeImporter.extract(html: html, url: nil).recipe
+        let extraction = WebRecipeImporter.extract(html: html, url: nil)
+        let recipe = extraction.recipe
         let hint: Comment = "If this change is an improvement, update Fixtures/private-fixtures.json."
+        // Every saved page reads from structured data or under its own headings, so none waits for
+        // the on-device model (02 Flow A: 2 to 6 seconds).
+        #expect(!WebRecipeImporter.wantsModel(extraction))
 
         guard let method = expected.method else {
             #expect(recipe == nil, hint)

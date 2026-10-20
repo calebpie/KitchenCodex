@@ -253,7 +253,7 @@ struct ModelFallbackTests {
     }
 
     @Test func unavailableOrFailingModelKeepsTheDeterministicReading() async throws {
-        let html = try Fixtures.synthetic("page-text-headings.html")
+        let html = try Fixtures.synthetic("page-text-no-headings.html")
         let unavailable = try await WebRecipeImporter(structurer: StubStructurer(isAvailable: false)).importRecipe(html: html, url: url)
         #expect(unavailable.method == .pageText)
         let failing = try await WebRecipeImporter(structurer: FailingStructurer()).importRecipe(html: html, url: url)
@@ -264,7 +264,7 @@ struct ModelFallbackTests {
     }
 
     @Test func modelThatDropsMostOfTheListIsIgnored() async throws {
-        let html = try Fixtures.synthetic("page-text-headings.html")
+        let html = try Fixtures.synthetic("page-text-no-headings.html")
         var stub = StubStructurer()
         stub.draft.ingredients = ["1 cup soy sauce", "2 limes"]
         let recipe = try await WebRecipeImporter(structurer: stub).importRecipe(html: html, url: url)
@@ -273,7 +273,7 @@ struct ModelFallbackTests {
     }
 
     @Test func modelReplacesAWeakReadingButKeepsPageMetadata() async throws {
-        let html = try Fixtures.synthetic("page-text-headings.html")
+        let html = try Fixtures.synthetic("page-text-no-headings.html")
         var stub = StubStructurer()
         stub.draft.ingredients = ["½ cup|120 ml soy sauce", "1/4 cup lime juice", "3 garlic cloves", "2 lb flank steak", "warm tortillas", "lime wedges"]
         stub.draft.steps = ["Marinate the steak with 1/4 cup|60 ml water.", "Grill it."]
@@ -286,5 +286,58 @@ struct ModelFallbackTests {
         // The page reading's groups follow their lines into the model's list.
         #expect(recipe.ingredientGroups == [0: "for the marinade", 4: "to serve"])
         #expect(recipe.confidence <= 0.6)
+    }
+
+    /// Flow A's 2 to 6 seconds: a page-text reading that found the page's own headings is shown as
+    /// it is, flagged for review, without waiting 10 to 16 seconds for the model.
+    @Test func aReadingUnderItsHeadingsNeverAsksTheModel() async throws {
+        let html = try Fixtures.synthetic("page-text-headings.html")
+        let extraction = WebRecipeImporter.extract(html: html, url: url)
+        #expect(extraction.readingFoundHeadings)
+        #expect(!WebRecipeImporter.wantsModel(extraction))
+        let importer = WebRecipeImporter(structurer: StubStructurer())
+        #expect(!importer.canRefine(extraction))
+        let recipe = try await importer.importRecipe(html: html, url: url)
+        #expect(recipe.method == .pageText)
+        #expect(recipe.needsReview)
+    }
+
+    @Test func aReadingWithoutHeadingsAsksTheModel() throws {
+        // The same recipe with no "Ingredients" or "Directions" heading: the run and the
+        // paragraphs after it are guesses, so the model takes a pass.
+        let extraction = WebRecipeImporter.extract(html: try Fixtures.synthetic("page-text-no-headings.html"), url: url)
+        let recipe = try #require(extraction.recipe)
+        #expect(recipe.method == .pageText)
+        #expect(WebRecipeImporter.isComplete(recipe))
+        #expect(!extraction.readingFoundHeadings)
+        #expect(WebRecipeImporter.wantsModel(extraction))
+        #expect(WebRecipeImporter(structurer: StubStructurer()).canRefine(extraction))
+    }
+
+    @Test func aReadingWithoutStepsAsksTheModel() throws {
+        let html = """
+        <html><head><title>Lemon Rice</title></head><body><h1>Lemon Rice</h1>
+        <h2>Ingredients</h2><ul><li>1 cup rice</li><li>2 cups water</li><li>1 lemon, zested</li></ul>
+        <p>We love this with fish.</p></body></html>
+        """
+        let extraction = WebRecipeImporter.extract(html: html, url: url)
+        let recipe = try #require(extraction.recipe)
+        #expect(recipe.steps.isEmpty)
+        #expect(!WebRecipeImporter.isComplete(recipe))
+        #expect(WebRecipeImporter.wantsModel(extraction))
+    }
+
+    @Test func aCompleteReadingNeedsATitleTwoIngredientsAndAStep() {
+        let complete = ImportedRecipe(title: "Rice", ingredients: ["1 cup rice", "2 cups water"], steps: ["Simmer."])
+        #expect(WebRecipeImporter.isComplete(complete))
+        var untitled = complete
+        untitled.title = ""
+        #expect(!WebRecipeImporter.isComplete(untitled))
+        var oneLine = complete
+        oneLine.ingredients = ["1 cup rice"]
+        #expect(!WebRecipeImporter.isComplete(oneLine))
+        var noSteps = complete
+        noSteps.steps = []
+        #expect(!WebRecipeImporter.isComplete(noSteps))
     }
 }
