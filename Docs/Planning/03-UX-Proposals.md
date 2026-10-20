@@ -65,7 +65,7 @@ Each entry gives purpose, layout on both devices, key interactions, states, and 
 
 **States.** Imported with low confidence: a yellow "Check 2 ingredients" row at the top that scrolls to the suspect items. Scanned: a "View page" button opens the original image.
 
-**HIG notes.** One prominent action (Cook). Large title collapses on scroll; the top edge uses the hard scroll-edge style so step text does not ghost under the title bar (04 §5.1 "Floating headers"). Highlighted times and temperatures are buttons, not just color: tap shows the original wording (04 §5.1 "Step pills").
+**HIG notes.** One prominent action (Cook). Large title collapses on scroll; the top edge uses the hard scroll-edge style so step text does not ghost under the title bar (04 §5.1 "Floating headers"). Highlighted times and temperatures are buttons, not just color: tap shows the original wording (04 §5.1 "Step pills"). A time pill covers the number and unit only; qualifying words such as "up to" or "at least" stay as text beside it (decided Oct 19, 2026, ux-notes row 29).
 
 ### 3.4 Add menu and import preview
 
@@ -268,5 +268,7 @@ Resolved Oct 17, 2026, from your review:
 35. **Equivalent re-read.** A one-time pass takes the fresh item where only a leading approximate equivalent differs (3.3). Added Oct 18, 2026 from `Docs/Specs/ux-notes.md` row 26.
 36. **iPad Profile at the sidebar's foot.** A bottom-bar button on the Pantry sidebar; the top bar holds only the system's toggle (3.17). Added Oct 18, 2026 from `Docs/Specs/ux-notes.md` row 27.
 37. **iPad Recipes in two columns.** Sidebar and one wide content column; a recipe pushes over the grid; the search tab stays in the tab bar as the system draws it; similar recipes are a detail section, never a column (3.2, 3.3, 3.18, §4). Added Oct 18, 2026 from `Docs/Specs/ux-notes.md` row 28.
+38. **Time pills hold the value only.** Qualifying words stay as text beside the pill ("Salt up to [2 days] ahead"); Units reads "1 hr. 15 min." as one time (3.3). Added Oct 19, 2026 from `Docs/Specs/ux-notes.md` rows 29 and 30.
+39. **Preparation re-read.** A one-time pass takes the fresh item and preparation where a preparation written before the comma was stored as the item (3.3). Added Oct 19, 2026 from `Docs/Specs/ux-notes.md` row 31.
 
 Still open: nothing from this document. UX notes gathered between Phase 1 slices live in `Docs/Specs/ux-notes.md`.
