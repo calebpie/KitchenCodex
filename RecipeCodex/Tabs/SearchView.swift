@@ -18,13 +18,14 @@ enum SearchScope: String, CaseIterable, Identifiable {
         }
     }
 
-    /// The scope for a search started from `tab`. Cook searches recipes.
+    /// The scope for a search started from `tab`: a Recipes section tab counts as Recipes, a Pantry
+    /// pane or Profile as Pantry. Cook searches recipes.
     init(origin tab: AppTab) {
-        switch tab {
+        switch tab.topLevel {
         case .recipes, .cook: self = .recipes
         case .pantry: self = .pantry
         case .plan: self = .plan
-        case .search: self = .all
+        default: self = .all
         }
     }
 
@@ -85,7 +86,7 @@ struct SearchView: View {
                     RecipeDetailView(recipe: recipe)
                 case let .recipes(scope):
                     RecipeResults(recipes: recipes.filter(scope.contains), layout: layout)
-                        .navigationTitle(LibrarySidebar.title(for: scope, books: books, collections: collections))
+                        .navigationTitle(scope.title(books: books, collections: collections))
                         .navigationBarTitleDisplayMode(.inline)
                 }
             }

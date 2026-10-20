@@ -2,8 +2,8 @@ import RecipeModel
 import SwiftData
 import SwiftUI
 
-/// What the Recipes stack pushes: a recipe by its identifier, and on iPhone Needs a Look or the
-/// Collections list. iPad's content column pushes the same routes over the grid or the shelf.
+/// What the Recipes stack pushes: a recipe by its identifier, the Collections list, and on iPhone
+/// Needs a Look. On iPad each sidebar tab's page pushes the same routes over its grid or the shelf.
 enum LibraryRoute: Hashable {
     case recipe(PersistentIdentifier)
     case needsReview
@@ -14,11 +14,13 @@ enum LibraryRoute: Hashable {
 }
 
 /// The library, with a view switch between the recipe collection and the cookbook shelf (03 §3.2, §3.7).
-/// iPhone (compact width) is a stack with the Recipes · Books switch; iPad (regular width) is two
-/// columns, the sidebar (All, Collections, Books) and one wide content column with the grid or list
-/// under the content toolbar, where a recipe pushes over the grid (04 §5.1 iPad columns).
-/// Only the navigation bar floats: the switch, the review prompt and the filter tokens are the first
-/// items of the scrolling content (04 §5.1 Floating headers).
+/// iPhone (compact width) is the Recipes tab's stack with the Recipes · Books switch. On iPad each
+/// Recipes tab in the system sidebar (04 §5.1 iPad tabs) is one of these in its own `scope`: the
+/// Recipes tab itself the whole library, then All Cookbooks, the smart collections and each
+/// collection, each one wide column with the grid or list under the content toolbar, where a recipe
+/// pushes over the grid (04 §5.1 iPad columns). Only the navigation bar floats: the switch, the
+/// review prompt and the filter tokens are the first items of the scrolling content (04 §5.1
+/// Floating headers).
 struct RecipesView: View {
     enum LibraryView: String, CaseIterable, Identifiable {
         case recipes = "Recipes"
@@ -26,10 +28,14 @@ struct RecipesView: View {
         var id: Self { self }
     }
 
+    /// The sidebar tab's scope; the whole library for the Recipes tab, and on iPhone.
+    let scope: LibraryScope
+
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(AppRouter.self) private var router
     @Environment(\.modelContext) private var modelContext
 
+    /// iPhone: the title switch's view.
     @State private var libraryView: LibraryView = .recipes
     @AppStorage("recipes.layout") private var layout: RecipeLayout = .grid
     @AppStorage("recipes.sort") private var sort: RecipeSort = .title
@@ -38,11 +44,9 @@ struct RecipesView: View {
     @State private var isAddingRecipe = false
     @State private var isImportingFromWeb = false
     @State private var isImportingLibrary = false
-    /// What is pushed: on the iPhone stack, or over the grid in iPad's content column. One path, so
-    /// an open recipe stays open when an iPad window changes width.
+    /// What is pushed over the grid. One path for both widths, so an open recipe stays open when
+    /// an iPad window changes width.
     @State private var path: [LibraryRoute] = []
-    /// iPad: the sidebar's scope.
-    @State private var scope: LibraryScope? = .all
     /// Set by the import sheet; opened once the sheet has gone.
     @State private var importedRecipe: Recipe?
     @State private var isCreatingCollection = false
@@ -61,18 +65,25 @@ struct RecipesView: View {
     @Query(sort: CollectionActions.sortDescriptors) private var collections: [RecipeCollection]
     @Query(sort: [SortDescriptor(\Tag.name, comparator: .localizedStandard)]) private var tags: [Tag]
 
-    private var isSplit: Bool { sizeClass == .regular }
+    /// iPad, regular width: one wide column under a sidebar tab.
+    private var isWide: Bool { sizeClass == .regular }
 
-    /// Which view the Add and More menus follow: the switch on iPhone, the sidebar on iPad.
-    private var activeView: LibraryView {
-        if isSplit { return scope == .shelf ? .books : .recipes }
-        return libraryView
+    /// iPhone, and the Recipes tab in a compact window: the title is the Recipes · Books switch.
+    private var usesTitleSwitch: Bool { !isWide && scope == .all }
+
+    /// The scope on screen: the tab's own, or the title switch's.
+    private var shownScope: LibraryScope {
+        guard usesTitleSwitch else { return scope }
+        return libraryView == .books ? .shelf : .all
     }
 
-    /// The collection on screen: the sidebar's on iPad, the Filter menu's on iPhone.
+    /// Which view the Add and More menus follow.
+    private var activeView: LibraryView { shownScope == .shelf ? .books : .recipes }
+
+    /// The collection on screen: the tab's on iPad, the Filter menu's on iPhone.
     private var currentCollection: RecipeCollection? {
         let id: PersistentIdentifier?
-        if isSplit, case let .collection(scopeID)? = scope {
+        if case let .collection(scopeID) = scope {
             id = scopeID
         } else {
             id = filter.collection
@@ -82,10 +93,9 @@ struct RecipesView: View {
 
     private var reviewCount: Int { allRecipes.count(where: \.needsReview) }
 
-    /// The recipes on screen: the sidebar's scope (iPad) and the filter.
+    /// The recipes on screen: the scope and the filter.
     private var visibleRecipes: [Recipe] {
-        let scope = isSplit ? (scope ?? .all) : .all
-        return allRecipes.filter { scope.contains($0) && filter.matches($0) }
+        allRecipes.filter { shownScope.contains($0) && filter.matches($0) }
     }
 
     /// The selected recipes still on screen, which the selection bar acts on.
@@ -99,8 +109,36 @@ struct RecipesView: View {
     }
 
     var body: some View {
-        Group {
-            if isSplit { splitLayout } else { stackLayout }
+        NavigationStack(path: $path) {
+            Group {
+                if shownScope == .shelf || allRecipes.isEmpty {
+                    if usesTitleSwitch {
+                        // The switch stays at the top, above the empty shelf or library.
+                        ScrollView {
+                            VStack(spacing: 32) {
+                                libraryHeader(showsSwitch: true)
+                                emptyLibrary(scope: shownScope)
+                            }
+                        }
+                    } else {
+                        emptyLibrary(scope: shownScope)
+                    }
+                } else {
+                    LibraryRecipes(sort: sort, layout: layout, grouping: grouping, scope: shownScope, filter: $filter, collections: collections, isWide: isWide, multiSelection: isSelecting ? $selectedIDs : nil) {
+                        libraryHeader(showsSwitch: usesTitleSwitch && !isSelecting)
+                    }
+                }
+            }
+            // iPhone: the title is the switch in the content (04 §5.1 Title switch), so the bar shows
+            // no title and nothing collapses into it on scroll, but the title stays set for the Back
+            // button. iPad: the bar's large title, the sidebar tab's name. Select mode titles the bar
+            // with the count, and on iPhone trades the tab bar for its own.
+            .navigationTitle(isSelecting ? selectionTitle : pageTitle)
+            .navigationBarTitleDisplayMode(usesTitleSwitch ? .inline : .automatic)
+            .toolbar(removing: usesTitleSwitch && !isSelecting ? .title : nil)
+            .toolbarVisibility(isSelecting && !isWide ? .hidden : .automatic, for: .tabBar)
+            .navigationDestination(for: LibraryRoute.self) { destination($0) }
+            .toolbar { libraryToolbar }
         }
         .sheet(isPresented: $isAddingRecipe) {
             RecipeEditorView(recipe: nil)
@@ -136,79 +174,21 @@ struct RecipesView: View {
             Text("The recipes stay in your library.")
         }
         .onChange(of: router.requestedRecipeID, initial: true) { _, id in
-            guard let id else { return }
+            // Spotlight and other tabs open recipes in the Recipes tab, the whole library.
+            guard scope == .all, let id else { return }
             router.requestedRecipeID = nil
             if let recipe = allRecipes.first(where: { $0.id == id }) { open(recipe) }
         }
-        // Another scope or view ends Select mode, and so does leaving the tab, which would otherwise
-        // keep the tab bar hidden.
-        .onChange(of: scope) { endSelection() }
+        // The other view ends Select mode, and so does leaving the tab, which would otherwise keep
+        // the tab bar hidden.
         .onChange(of: libraryView) { endSelection() }
         .onDisappear { endSelection() }
     }
 
-    // MARK: - iPhone
-
-    private var stackLayout: some View {
-        NavigationStack(path: $path) {
-            Group {
-                if libraryView == .books || allRecipes.isEmpty {
-                    ScrollView {
-                        VStack(spacing: 32) {
-                            libraryHeader(showsSwitch: true)
-                            emptyLibrary(scope: libraryView == .books ? .shelf : .all)
-                        }
-                    }
-                } else {
-                    LibraryRecipes(sort: sort, layout: layout, grouping: grouping, scope: .all, filter: $filter, collections: collections, isInSplitView: false, multiSelection: isSelecting ? $selectedIDs : nil) {
-                        libraryHeader(showsSwitch: !isSelecting)
-                    }
-                }
-            }
-            // The title is the switch in the content (04 §5.1 Title switch): the bar shows no title,
-            // so nothing collapses into it on scroll, but the title stays set for the Back button.
-            // Select mode titles the bar with the count and trades the tab bar for its own.
-            .navigationTitle(isSelecting ? selectionTitle : "Recipes")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar(removing: isSelecting ? nil : .title)
-            .toolbarVisibility(isSelecting ? .hidden : .automatic, for: .tabBar)
-            .navigationDestination(for: LibraryRoute.self) { destination($0) }
-            .toolbar { libraryToolbar }
-        }
-    }
-
-    // MARK: - iPad
-
-    /// Two columns (04 §5.1 iPad columns): the sidebar, and the grid or list in one wide column
-    /// whose toolbar sits at the display's top trailing corner. A recipe pushes over the grid and
-    /// Back returns to it.
-    private var splitLayout: some View {
-        NavigationSplitView {
-            // Picking another row shows its recipes, so whatever was pushed goes. The list also
-            // writes back a scope set in code (Spotlight widening it to All Recipes), which must
-            // keep the recipe just pushed, so only a change pops.
-            LibrarySidebar(selection: Binding { scope } set: { newScope in
-                if newScope != scope { path = [] }
-                scope = newScope
-            })
-                .navigationTitle("Recipes")
-        } detail: {
-            NavigationStack(path: $path) {
-                let scope = scope ?? .all
-                Group {
-                    if scope == .shelf || allRecipes.isEmpty {
-                        emptyLibrary(scope: scope)
-                    } else {
-                        LibraryRecipes(sort: sort, layout: layout, grouping: grouping, scope: scope, filter: $filter, collections: collections, isInSplitView: true, multiSelection: isSelecting ? $selectedIDs : nil) {
-                            libraryHeader(showsSwitch: false)
-                        }
-                    }
-                }
-                .navigationTitle(isSelecting ? selectionTitle : LibrarySidebar.title(for: scope, books: books, collections: collections))
-                .toolbar { libraryToolbar }
-                .navigationDestination(for: LibraryRoute.self) { destination($0) }
-            }
-        }
+    /// The page's title: on iPhone the switch's view, which Back reads; on iPad the sidebar tab's name.
+    private var pageTitle: String {
+        if usesTitleSwitch { return libraryView.rawValue }
+        return scope.title(books: books, collections: collections)
     }
 
     // MARK: - Shared
@@ -225,11 +205,17 @@ struct RecipesView: View {
         case .needsReview:
             NeedsALookView()
         case .collections:
+            // Rename, reorder and delete, on iPad too: the system sidebar is not reordered by hand.
             CollectionsList { collection in
-                filter.collection = collection.persistentModelID
                 path.removeLast()
+                if isWide {
+                    router.show(.collection(collection.persistentModelID))
+                } else {
+                    filter.collection = collection.persistentModelID
+                }
             } onDelete: { collection in
                 if filter.collection == collection.persistentModelID { filter.collection = nil }
+                if router.selectedTab == .library(.collection(collection.persistentModelID)) { router.selectedTab = .recipes }
             }
         case .book:
             // Book detail (03 §3.7) arrives with books in Phase 2 and pushes here, over the shelf.
@@ -251,8 +237,8 @@ struct RecipesView: View {
                 }
                 if showsPrompt {
                     NeedsALookRow(count: reviewCount) {
-                        if isSplit {
-                            scope = .needsReview
+                        if isWide {
+                            router.show(.needsReview)
                         } else {
                             path.append(.needsReview)
                         }
@@ -323,7 +309,7 @@ struct RecipesView: View {
     }
 
     /// Filter (04 §5.1 Recipes filters): checkable sections; the menu closes after each choice, as
-    /// menus do. Collections are picked in the sidebar on iPad, so the section is iPhone only.
+    /// menus do. Collections are sidebar tabs on iPad, so the section is iPhone only.
     private var filterMenu: some View {
         Menu {
             let courses = filterCourses
@@ -347,7 +333,7 @@ struct RecipesView: View {
                 Toggle("Favorites", systemImage: "heart", isOn: $filter.favorites)
                 Toggle("Needs a Look", systemImage: "exclamationmark.bubble", isOn: $filter.needsReview)
             }
-            if !isSplit, !collections.isEmpty {
+            if !isWide, !collections.isEmpty {
                 filterSubmenu("Collection", systemImage: "rectangle.stack", items: collections.map { ($0.persistentModelID, $0.name) }, selection: $filter.collection)
             }
             if !books.isEmpty {
@@ -463,8 +449,8 @@ struct RecipesView: View {
                     Button("New Collection…", systemImage: "rectangle.stack.badge.plus") {
                         isCreatingCollection = true
                     }
-                    // iPhone: rename, reorder and delete in a list; iPad has the sidebar.
-                    if !isSplit, !collections.isEmpty {
+                    // Rename, reorder and delete in a list.
+                    if !collections.isEmpty {
                         Button("Collections", systemImage: "rectangle.stack") {
                             path.append(.collections)
                         }
@@ -484,25 +470,21 @@ struct RecipesView: View {
         }
     }
 
-    /// Shows `recipe`, pushed on iPhone and over the grid on iPad (widening the sidebar's scope if
-    /// it hides the recipe).
+    /// Shows `recipe` pushed over the grid: here when this page's scope holds it, otherwise in the
+    /// Recipes tab, which holds every recipe (a web import from Favorites).
     private func open(_ recipe: Recipe) {
-        let route = LibraryRoute.recipe(recipe.persistentModelID)
-        guard isSplit, !(scope ?? .all).contains(recipe) else {
-            libraryView = .recipes
-            path = [route]
+        guard scope == .all || scope.contains(recipe) else {
+            router.openRecipe(id: recipe.id)
             return
         }
-        // A new sidebar selection pops the content column, which would drop a push made in the
-        // same update (Spotlight from Favorites), so the recipe is pushed once the scope has moved.
-        scope = .all
-        Task { path = [route] }
+        libraryView = .recipes
+        path = [.recipe(recipe.persistentModelID)]
     }
 
-    /// A new collection: selected in the sidebar on iPad, set as the Collection filter on iPhone.
+    /// A new collection: its sidebar tab on iPad, the Collection filter on iPhone.
     private func show(_ collection: RecipeCollection) {
-        if isSplit {
-            scope = .collection(collection.persistentModelID)
+        if isWide {
+            router.show(.collection(collection.persistentModelID))
         } else {
             libraryView = .recipes
             filter.collection = collection.persistentModelID
@@ -511,7 +493,7 @@ struct RecipesView: View {
 
     private func deleteCollection(_ collection: RecipeCollection) {
         let id = collection.persistentModelID
-        if scope == .collection(id) { scope = .all }
+        if router.selectedTab == .library(.collection(id)) { router.selectedTab = .recipes }
         if filter.collection == id { filter.collection = nil }
         CollectionActions.delete(collection, in: modelContext)
     }
@@ -545,8 +527,8 @@ struct RecipesView: View {
 }
 
 /// The filtered, sorted, grouped recipes as a grid or a list, under `header`. A tap pushes the
-/// recipe. In iPad's content column (`isInSplitView`) a recipe can also be dragged onto a sidebar
-/// collection, and the cards are wider so the full column holds about four across. With a
+/// recipe. On iPad (`isWide`) a recipe can also be dragged onto a collection's sidebar tab, and the
+/// cards are wider so the page's one column holds about four across. With a
 /// `multiSelection` (Select mode) every recipe shows a selection circle and a tap toggles it; the
 /// list's own selection extends with ⌘-click and shift-click on iPad.
 private struct LibraryRecipes<Header: View>: View {
@@ -556,7 +538,7 @@ private struct LibraryRecipes<Header: View>: View {
     let scope: LibraryScope
     @Binding var filter: RecipeFilter
     let collections: [RecipeCollection]
-    let isInSplitView: Bool
+    let isWide: Bool
     let multiSelection: Binding<Set<PersistentIdentifier>>?
     @ViewBuilder let header: Header
 
@@ -565,14 +547,14 @@ private struct LibraryRecipes<Header: View>: View {
     /// Long-press → Add to Collection → New Collection…: the recipe to put in it once named.
     @State private var collectingRecipe: Recipe?
 
-    init(sort: RecipeSort, layout: RecipeLayout, grouping: RecipeGrouping, scope: LibraryScope, filter: Binding<RecipeFilter>, collections: [RecipeCollection], isInSplitView: Bool, multiSelection: Binding<Set<PersistentIdentifier>>? = nil, @ViewBuilder header: () -> Header) {
+    init(sort: RecipeSort, layout: RecipeLayout, grouping: RecipeGrouping, scope: LibraryScope, filter: Binding<RecipeFilter>, collections: [RecipeCollection], isWide: Bool, multiSelection: Binding<Set<PersistentIdentifier>>? = nil, @ViewBuilder header: () -> Header) {
         _recipes = Query(sort: sort.descriptors, animation: .default)
         self.layout = layout
         self.grouping = grouping
         self.scope = scope
         _filter = filter
         self.collections = collections
-        self.isInSplitView = isInSplitView
+        self.isWide = isWide
         self.multiSelection = multiSelection
         self.header = header()
     }
@@ -620,7 +602,7 @@ private struct LibraryRecipes<Header: View>: View {
             ContentUnavailableView {
                 Label("Nothing in “\(collection.name)” yet", systemImage: "rectangle.stack")
             } description: {
-                Text(isInSplitView
+                Text(isWide
                     ? "Drag recipes onto the collection in the sidebar, or use Add to Collection in their long-press menu."
                     : "Add a recipe from its long-press menu: Add to Collection.")
             }
@@ -661,8 +643,8 @@ private struct LibraryRecipes<Header: View>: View {
                         .padding(.top, 40)
                 } else {
                     // 160 pt gives two cards across an iPhone; 200 gives about four across iPad's
-                    // full content column and three beside the sidebar in portrait.
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: isInSplitView ? 200 : 160), spacing: 12)], spacing: 12) {
+                    // page beside the sidebar.
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: isWide ? 200 : 160), spacing: 12)], spacing: 12) {
                         ForEach(sections) { section in
                             Section {
                                 ForEach(section.recipes) { recipe in
@@ -716,7 +698,7 @@ private struct LibraryRecipes<Header: View>: View {
         }
         .buttonStyle(.plain)
         .contextMenu { actions(for: recipe) }
-        .modifier(RecipeDragSource(recipe: recipe, isEnabled: isInSplitView))
+        .modifier(RecipeDragSource(recipe: recipe, isEnabled: isWide))
     }
 
     @ViewBuilder
@@ -737,7 +719,7 @@ private struct LibraryRecipes<Header: View>: View {
                     NavigationLink(value: LibraryRoute.recipe(recipe.persistentModelID)) {
                         RecipeRow(recipe: recipe)
                     }
-                    .modifier(RecipeRowDragSource(recipe: recipe, isEnabled: isInSplitView))
+                    .modifier(RecipeRowDragSource(recipe: recipe, isEnabled: isWide))
                 }
             }
             .listStyle(.plain)
@@ -808,7 +790,7 @@ private struct LibraryRecipes<Header: View>: View {
     }
 }
 
-/// iPad: a card can be dragged onto a collection in the sidebar.
+/// iPad: a card can be dragged onto a collection's tab in the sidebar.
 private struct RecipeDragSource: ViewModifier {
     let recipe: Recipe
     let isEnabled: Bool
@@ -824,7 +806,7 @@ private struct RecipeDragSource: ViewModifier {
     }
 }
 
-/// iPad: a list row can be dragged onto a collection in the sidebar too.
+/// iPad: a list row can be dragged onto a collection's tab in the sidebar too.
 private struct RecipeRowDragSource: ViewModifier {
     let recipe: Recipe
     let isEnabled: Bool
@@ -932,7 +914,7 @@ private struct LibraryTitleSwitch: View {
 }
 
 #Preview {
-    RecipesView()
+    RecipesView(scope: .all)
         .environment(AppRouter())
         .modelContainer(try! RecipeStore.makeContainer(inMemory: true))
 }

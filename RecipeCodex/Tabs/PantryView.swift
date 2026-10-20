@@ -4,9 +4,10 @@ import SwiftUI
 
 /// Everything you have to cook with (03 §3.17), as a hub (04 §5.1 Pantry hub): one row per pane,
 /// Staples · Tools · Cellar & Bar · Sources, each with the pane's purpose until it has content and
-/// a live summary after, and Profile as the hub's toolbar button. On iPad the same rows are the
-/// sidebar, with Profile at its foot. There is no
-/// Kitchens pane: one implicit Home kitchen sits behind the panes and is never shown (04 §5.1
+/// a live summary after. On iPhone a row pushes its pane and Profile is the hub's toolbar button.
+/// On iPad the panes are the system sidebar's Pantry section and Profile its bottom-bar button
+/// (RootTabView), and this tab's page stays the hub, whose rows select those sidebar tabs. There is
+/// no Kitchens pane: one implicit Home kitchen sits behind the panes and is never shown (04 §5.1
 /// Kitchens). Phase 1 fills Profile; Phase 4 fills the panes.
 struct PantryView: View {
     enum Pane: String, CaseIterable, Identifiable {
@@ -27,7 +28,7 @@ struct PantryView: View {
         }
 
         /// What the pane is for, naming the benefit: the hub row's second line while the pane is
-        /// empty, and the pane's own placeholder. Short enough for two lines in the iPad sidebar.
+        /// empty, and the pane's own placeholder. Short enough for two lines in a narrow column.
         var emptyDescription: String {
             switch self {
             case .staples: "Ingredients on hand, so the shopping list skips them."
@@ -38,39 +39,27 @@ struct PantryView: View {
         }
     }
 
-    /// What the hub pushes, or the iPad sidebar shows in the detail column.
+    /// What the iPhone hub pushes.
     enum Destination: Hashable {
         case pane(Pane)
         case profile
     }
 
     @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(AppRouter.self) private var router
     /// iPhone: the pushed pane or Profile.
     @State private var path: [Destination] = []
-    /// iPad: the sidebar's selection.
-    @State private var selection: Destination? = .pane(.staples)
 
     var body: some View {
         if sizeClass == .regular {
-            NavigationSplitView {
-                List(selection: $selection) {
-                    PantryHubRows()
+            // iPad: the hub's rows select the sidebar's pane tabs; Profile is in the sidebar's
+            // bottom bar, so the hub has no toolbar button.
+            NavigationStack {
+                List {
+                    PantryHubRows { pane in router.selectedTab = .pantryPane(pane) }
                 }
+                .listStyle(.insetGrouped)
                 .navigationTitle("Pantry")
-                // Profile sits at the sidebar's foot, where Notes and Reminders put the sidebar's
-                // own control, so the top bar holds only the system's sidebar toggle. A trailing
-                // item there also made the column reserve the tab bar's height as a white band.
-                .toolbar {
-                    profileButton(placement: .bottomBar, isShown: selection == .profile) { selection = .profile }
-                }
-            } detail: {
-                NavigationStack {
-                    if let selection {
-                        destination(selection)
-                    } else {
-                        destination(.pane(.staples))
-                    }
-                }
             }
         } else {
             NavigationStack(path: $path) {
@@ -80,18 +69,14 @@ struct PantryView: View {
                 .listStyle(.insetGrouped)
                 .navigationTitle("Pantry")
                 .navigationDestination(for: Destination.self) { destination($0) }
-                .toolbar { profileButton(placement: .primaryAction) { path.append(.profile) } }
+                .toolbar {
+                    // The only profile button on iPhone (04 §5.1 Pantry hub): the standard account
+                    // glyph at the hub's trailing edge.
+                    ToolbarItem(placement: .primaryAction) {
+                        Button("Profile", systemImage: "person.crop.circle") { path.append(.profile) }
+                    }
+                }
             }
-        }
-    }
-
-    /// The only profile button in the app (04 §5.1 Pantry hub): the standard account glyph at the
-    /// hub's trailing edge, or at the foot of the iPad sidebar, filled while Profile is shown there
-    /// since no sidebar row is selected then.
-    private func profileButton(placement: ToolbarItemPlacement, isShown: Bool = false, action: @escaping () -> Void) -> some ToolbarContent {
-        ToolbarItem(placement: placement) {
-            Button("Profile", systemImage: isShown ? "person.crop.circle.fill" : "person.crop.circle", action: action)
-                .accessibilityAddTraits(isShown ? .isSelected : [])
         }
     }
 
@@ -102,21 +87,33 @@ struct PantryView: View {
             ProfilePane()
                 .navigationTitle("Profile")
         case let .pane(pane):
-            // Add (+) and More (⋯) arrive on each pane with its content (Phase 4).
-            ContentUnavailableView {
-                Label(pane.rawValue, systemImage: pane.symbol)
-            } description: {
-                Text(pane.emptyDescription)
-            }
-            .navigationTitle(pane.rawValue)
+            PantryPaneView(pane: pane)
         }
+    }
+}
+
+/// One pane: pushed from the iPhone hub, or an iPad sidebar tab of its own.
+struct PantryPaneView: View {
+    let pane: PantryView.Pane
+
+    var body: some View {
+        // Add (+) and More (⋯) arrive on each pane with its content (Phase 4).
+        ContentUnavailableView {
+            Label(pane.rawValue, systemImage: pane.symbol)
+        } description: {
+            Text(pane.emptyDescription)
+        }
+        .navigationTitle(pane.rawValue)
     }
 }
 
 /// One row per pane with its symbol, name and a second line (04 §5.1 Pantry hub): what the pane is
 /// for while it is empty, then a summary of what is in it ("3 staples · 1 out", "12 bottles").
-/// Rows push their pane on iPhone and select it on iPad, where they are the sidebar.
+/// Rows push their pane on iPhone; on iPad, given `onSelect`, they select the pane's sidebar tab.
 private struct PantryHubRows: View {
+    /// iPad: shows the pane in its sidebar tab instead of pushing it.
+    var onSelect: ((PantryView.Pane) -> Void)?
+
     @Query private var staples: [PantryItem]
     @Query private var tools: [Tool]
     @Query private var bottles: [BeverageItem]
@@ -125,21 +122,41 @@ private struct PantryHubRows: View {
     var body: some View {
         Section {
             ForEach(PantryView.Pane.allCases) { pane in
-                NavigationLink(value: PantryView.Destination.pane(pane)) {
-                    Label {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(pane.rawValue)
-                            Text(summary(for: pane) ?? pane.emptyDescription)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(2)
+                if let onSelect {
+                    Button {
+                        onSelect(pane)
+                    } label: {
+                        HStack {
+                            label(for: pane)
+                            Spacer(minLength: 8)
+                            Image(systemName: "chevron.forward")
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(.tertiary)
+                                .accessibilityHidden(true)
                         }
-                    } icon: {
-                        Image(systemName: pane.symbol)
+                        .contentShape(.rect)
+                    }
+                    .tint(.primary)
+                } else {
+                    NavigationLink(value: PantryView.Destination.pane(pane)) {
+                        label(for: pane)
                     }
                 }
-                .tag(PantryView.Destination.pane(pane))
             }
+        }
+    }
+
+    private func label(for pane: PantryView.Pane) -> some View {
+        Label {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(pane.rawValue)
+                Text(summary(for: pane) ?? pane.emptyDescription)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+        } icon: {
+            Image(systemName: pane.symbol)
         }
     }
 
@@ -172,5 +189,6 @@ private struct PantryHubRows: View {
 
 #Preview {
     PantryView()
+        .environment(AppRouter())
         .modelContainer(try! RecipeStore.makeContainer(inMemory: true))
 }
