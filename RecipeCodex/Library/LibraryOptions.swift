@@ -54,7 +54,7 @@ enum RecipeGrouping: String, CaseIterable, Identifiable {
         switch self {
         case .none: "None"
         case .course: "Course"
-        case .book: "Book"
+        case .book: "Cookbook"
         case .collection: "Collection"
         }
     }
@@ -88,11 +88,11 @@ enum RecipeGrouping: String, CaseIterable, Identifiable {
             var sections = books.values
                 .sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
                 .map { book in
-                    Section(id: "book:\(book.id)", title: book.title.isEmpty ? "Untitled Book" : book.title,
+                    Section(id: "book:\(book.id)", title: book.title.isEmpty ? "Untitled Cookbook" : book.title,
                             recipes: recipes.filter { $0.book?.persistentModelID == book.persistentModelID })
                 }
             let none = recipes.filter { $0.book == nil }
-            if !none.isEmpty { sections.append(Section(id: "book:none", title: "No Book", recipes: none)) }
+            if !none.isEmpty { sections.append(Section(id: "book:none", title: "No Cookbook", recipes: none)) }
             return sections
         case .collection:
             var sections = collections.compactMap { collection in

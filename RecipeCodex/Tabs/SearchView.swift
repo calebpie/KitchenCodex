@@ -31,7 +31,7 @@ enum SearchScope: String, CaseIterable, Identifiable {
 
     var prompt: String {
         switch self {
-        case .all: "Recipes, books, events…"
+        case .all: "Recipes, cookbooks, events…"
         case .recipes: "Recipes and ingredients"
         case .pantry: "Staples, tools, bottles, sources"
         case .plan: "Events"
@@ -115,7 +115,7 @@ struct SearchView: View {
                     ContentUnavailableView {
                         Label("Search Recipe Codex", systemImage: "magnifyingglass")
                     } description: {
-                        Text("Recipes, books, events, ingredients and what is in your pantry.")
+                        Text("Recipes, cookbooks, events, ingredients and what is in your pantry.")
                     }
                 }
             } else {
@@ -145,9 +145,9 @@ struct SearchView: View {
                         }
                     }
                     if !books.isEmpty {
-                        Section("Books") {
+                        Section("Cookbooks") {
                             ForEach(books) { book in
-                                suggestionRow(book.title.isEmpty ? "Untitled Book" : book.title, systemImage: "book", count: book.recipes?.count ?? 0, route: .recipes(.book(book.persistentModelID)))
+                                suggestionRow(book.title.isEmpty ? "Untitled Cookbook" : book.title, systemImage: "book", count: book.recipes?.count ?? 0, route: .recipes(.book(book.persistentModelID)))
                             }
                         }
                     }
@@ -284,9 +284,9 @@ struct SearchView: View {
                         }
                     }
                     if !matchingBooks.isEmpty {
-                        Section("Books") {
+                        Section("Cookbooks") {
                             ForEach(matchingBooks) { book in
-                                suggestionRow(book.title.isEmpty ? "Untitled Book" : book.title, systemImage: "book", count: book.recipes?.count ?? 0, route: .recipes(.book(book.persistentModelID)))
+                                suggestionRow(book.title.isEmpty ? "Untitled Cookbook" : book.title, systemImage: "book", count: book.recipes?.count ?? 0, route: .recipes(.book(book.persistentModelID)))
                             }
                         }
                     }

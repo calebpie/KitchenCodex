@@ -36,8 +36,8 @@ enum LibraryScope: Hashable {
         case .neverCooked: "Never Cooked"
         case .needsReview: "Needs a Look"
         case let .collection(id): collections.first { $0.persistentModelID == id }?.name ?? "Collection"
-        case .shelf: "Shelf"
-        case let .book(id): books.first { $0.persistentModelID == id }?.title ?? "Book"
+        case .shelf: "All Cookbooks"
+        case let .book(id): books.first { $0.persistentModelID == id }?.title ?? "Cookbook"
         }
     }
 }

@@ -14,7 +14,7 @@ enum LibraryRoute: Hashable {
 }
 
 /// The library, with a view switch between the recipe collection and the cookbook shelf (03 §3.2, §3.7).
-/// iPhone (compact width) is the Recipes tab's stack with the Recipes · Books switch. On iPad each
+/// iPhone (compact width) is the Recipes tab's stack with the Recipes · Cookbooks switch. On iPad each
 /// Recipes tab in the system sidebar (04 §5.1 iPad tabs) is one of these in its own `scope`: the
 /// Recipes tab itself the whole library, then All Cookbooks, the smart collections and each
 /// collection, each one wide column with the grid or list under the content toolbar, where a recipe
@@ -24,7 +24,7 @@ enum LibraryRoute: Hashable {
 struct RecipesView: View {
     enum LibraryView: String, CaseIterable, Identifiable {
         case recipes = "Recipes"
-        case books = "Books"
+        case books = "Cookbooks"
         var id: Self { self }
     }
 
@@ -68,7 +68,7 @@ struct RecipesView: View {
     /// iPad, regular width: one wide column under a sidebar tab.
     private var isWide: Bool { sizeClass == .regular }
 
-    /// iPhone, and the Recipes tab in a compact window: the title is the Recipes · Books switch.
+    /// iPhone, and the Recipes tab in a compact window: the title is the Recipes · Cookbooks switch.
     private var usesTitleSwitch: Bool { !isWide && scope == .all }
 
     /// The scope on screen: the tab's own, or the title switch's.
@@ -219,7 +219,7 @@ struct RecipesView: View {
             }
         case .book:
             // Book detail (03 §3.7) arrives with books in Phase 2 and pushes here, over the shelf.
-            ContentUnavailableView("Book", systemImage: "book", description: Text("Book details arrive with the shelf."))
+            ContentUnavailableView("Cookbook", systemImage: "book", description: Text("Cookbook details arrive with the shelf."))
         }
     }
 
@@ -257,7 +257,7 @@ struct RecipesView: View {
     private func emptyLibrary(scope: LibraryScope) -> some View {
         if scope == .shelf {
             ContentUnavailableView {
-                Label("Your shelf is empty", systemImage: "books.vertical")
+                Label("No cookbooks yet", systemImage: "books.vertical")
             } description: {
                 Text("Cookbooks you add will be listed here with their recipes.")
             }
@@ -298,7 +298,7 @@ struct RecipesView: View {
             tokens.append(.init(id: "collection", title: name) { filter.collection = nil })
         }
         if let id = filter.book {
-            let title = books.first { $0.persistentModelID == id }?.title ?? "Book"
+            let title = books.first { $0.persistentModelID == id }?.title ?? "Cookbook"
             tokens.append(.init(id: "book", title: title) { filter.book = nil })
         }
         if let id = filter.tag {
@@ -337,7 +337,7 @@ struct RecipesView: View {
                 filterSubmenu("Collection", systemImage: "rectangle.stack", items: collections.map { ($0.persistentModelID, $0.name) }, selection: $filter.collection)
             }
             if !books.isEmpty {
-                filterSubmenu("Book", systemImage: "book", items: books.map { ($0.persistentModelID, $0.title.isEmpty ? "Untitled Book" : $0.title) }, selection: $filter.book)
+                filterSubmenu("Cookbook", systemImage: "book", items: books.map { ($0.persistentModelID, $0.title.isEmpty ? "Untitled Cookbook" : $0.title) }, selection: $filter.book)
             }
             if !tags.isEmpty {
                 filterSubmenu("Tag", systemImage: "tag", items: tags.map { ($0.persistentModelID, $0.name) }, selection: $filter.tag)
@@ -354,7 +354,7 @@ struct RecipesView: View {
         .accessibilityValue(filter.isActive ? "\(filterTokens.count) active" : "None")
     }
 
-    /// A submenu with one checkable item per collection, book or tag; checking another replaces it.
+    /// A submenu with one checkable item per collection, cookbook or tag; checking another replaces it.
     private func filterSubmenu(_ title: String, systemImage: String, items: [(PersistentIdentifier, String)], selection: Binding<PersistentIdentifier?>) -> some View {
         Menu {
             ForEach(items, id: \.0) { id, name in
@@ -629,7 +629,7 @@ private struct LibraryRecipes<Header: View>: View {
         case .neverCooked: "Every recipe here has been cooked."
         case .needsReview: "No imported recipe is waiting for a check."
         case .collection: "Add recipes from their long-press menu."
-        case .book: "No recipes from this book are in the library yet."
+        case .book: "No recipes from this cookbook are in the library yet."
         case .all, .shelf: "No recipes yet."
         }
     }
@@ -872,19 +872,39 @@ private struct FilterTokens: View {
     }
 }
 
-/// The large title as the view switch (04 §5.1 Title switch): "Recipes" and "Books" side by side in
+/// The large title as the view switch (04 §5.1 Title switch): "Recipes" and "Cookbooks" side by side in
 /// large-title type a fixed gap apart, the shown view in the primary color and the other in
 /// secondary. Each word is a button with the selected trait; VoiceOver reads the pair as a segmented
-/// control. At accessibility sizes the words stack.
+/// control. At accessibility sizes the words stack, and so they do at any size where the pair is
+/// wider than the screen (the larger standard sizes on a narrow iPhone).
 private struct LibraryTitleSwitch: View {
     @Binding var selection: RecipesView.LibraryView
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        let layout = dynamicTypeSize.isAccessibilitySize
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
-            : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 20))
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                words(in: VStackLayout(alignment: .leading, spacing: 4))
+            } else {
+                ViewThatFits(in: .horizontal) {
+                    words(in: HStackLayout(alignment: .firstTextBaseline, spacing: 20))
+                    words(in: VStackLayout(alignment: .leading, spacing: 4))
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityRepresentation {
+            Picker("Library", selection: $selection) {
+                ForEach(RecipesView.LibraryView.allCases) { view in
+                    Text(view.rawValue).tag(view)
+                }
+            }
+            .pickerStyle(.segmented)
+        }
+    }
+
+    private func words(in layout: some Layout) -> some View {
         layout {
             ForEach(RecipesView.LibraryView.allCases) { view in
                 let isSelected = selection == view
@@ -900,15 +920,6 @@ private struct LibraryTitleSwitch: View {
                 .buttonStyle(.plain)
                 .accessibilityAddTraits(isSelected ? .isSelected : [])
             }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityRepresentation {
-            Picker("Library", selection: $selection) {
-                ForEach(RecipesView.LibraryView.allCases) { view in
-                    Text(view.rawValue).tag(view)
-                }
-            }
-            .pickerStyle(.segmented)
         }
     }
 }
