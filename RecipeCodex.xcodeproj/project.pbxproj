@@ -198,6 +198,7 @@
 				A00000000000000000000026 /* Frameworks */,
 				A0000000000000000000002F /* Resources */,
 				A0000000000000000000001E /* Embed Foundation Extensions */,
+				A00000000000000000000050 /* Build Info */,
 			);
 			buildRules = (
 			);
@@ -347,6 +348,31 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		A00000000000000000000050 /* Build Info */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/.git/HEAD",
+				"$(SRCROOT)/.git/logs/HEAD",
+			);
+			name = "Build Info";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/BuildInfo.plist",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -u\n# The current commit from the reflog's last line (its second field), which the sandbox lets this phase read.\ncommit=$(tail -n 1 \"${SRCROOT}/.git/logs/HEAD\" 2>/dev/null | cut -d' ' -f2 | cut -c1-7)\n[ -n \"${commit}\" ] || commit=$(git -C \"${SRCROOT}\" rev-parse --short=7 HEAD 2>/dev/null || true)\n[ -n \"${commit}\" ] || commit=unknown\nstamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)\nout=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/BuildInfo.plist\"\nmkdir -p \"$(dirname \"${out}\")\"\ncat > \"${out}\" <<PLIST\n<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\"><dict>\n<key>commit</key><string>${commit}</string>\n<key>date</key><string>${stamp}</string>\n</dict></plist>\nPLIST\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		A0000000000000000000002E /* Sources */ = {
