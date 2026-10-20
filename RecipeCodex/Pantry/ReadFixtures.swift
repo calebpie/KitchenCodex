@@ -22,10 +22,20 @@ struct DeveloperSection: View {
 
     var body: some View {
         Section {
+            // The presenters sit on their rows: a Section's modifiers apply to every row.
             Button("Read Fixtures from Photos…", systemImage: "photo.stack") { isPickingPhotos = true }
                 .disabled(run.isRunning)
+                .photosPicker(isPresented: $isPickingPhotos, selection: $items, maxSelectionCount: nil, selectionBehavior: .ordered, matching: .images, preferredItemEncoding: .current, photoLibrary: .shared())
+                .onChange(of: items) { _, picked in
+                    guard !picked.isEmpty else { return }
+                    run.start(items: picked)
+                    items = []
+                }
             Button("Read Fixtures from a Folder…", systemImage: "folder") { isPickingFolder = true }
                 .disabled(run.isRunning)
+                .fileImporter(isPresented: $isPickingFolder, allowedContentTypes: [.folder]) { result in
+                    if case let .success(folder) = result { run.start(folder: folder) }
+                }
             if run.isRunning {
                 HStack(spacing: 12) {
                     ProgressView()
@@ -52,15 +62,6 @@ struct DeveloperSection: View {
             Text("Developer")
         } footer: {
             Text("Reads the photos you pick with the page pipeline, as Scan Page reads them on this device, and writes the reader's blocks and the structured result for each to a report in the app's Documents. In Photos, open the album “\(ReadFixturesRun.albumName)” and select every photo.")
-        }
-        .photosPicker(isPresented: $isPickingPhotos, selection: $items, maxSelectionCount: nil, selectionBehavior: .ordered, matching: .images, preferredItemEncoding: .current, photoLibrary: .shared())
-        .fileImporter(isPresented: $isPickingFolder, allowedContentTypes: [.folder]) { result in
-            if case let .success(folder) = result { run.start(folder: folder) }
-        }
-        .onChange(of: items) { _, picked in
-            guard !picked.isEmpty else { return }
-            run.start(items: picked)
-            items = []
         }
     }
 }
