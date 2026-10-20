@@ -74,7 +74,7 @@ Legend for *Source*: **P** = in your proposal, **M** = market parity (competitor
 | "Never cooked" state, cook count, last cooked, where cooked | P | 3 | Location via CoreLocation at cook time (city-level). |
 | Learned actual times refine stated times | P | 3 | |
 | Task annotation: active vs passive time, hold windows, dependencies | N | 5 | The data the scheduler needs. Steps stay as written; each yields one or more tasks (preheat as a lead task, "meanwhile" as a parallel hint, "stirring constantly" as locked attention, component membership, per-kg formula durations). Phrase rules first, model-assisted for the rest, confirmed by you once per recipe (C). |
-| Technique glossary and inline explanations | N | 7 | "What does *monter au beurre* mean?" without leaving cook mode. |
+| Technique glossary and inline explanations | N | 7 | "What does *monter au beurre* mean?" without leaving cook mode. Reaffirmed Oct 20, 2026 (ux-notes row 74): a tap on a term, or on a book's glossary pointer, shows the entry in place as a tooltip, from the book's parsed glossary page or the app's own glossary, without leaving the recipe. |
 
 ### 4.3 Browse and search
 

@@ -82,13 +82,13 @@ Each slice follows the Phase 1 pattern: a brief with groups and a verification l
 
 ### Slice 6 — Cross-references and component recipes
 
-- **Detection**: "see page 84", "Pasta Dough (page 84)", "recipe follows" in steps and headnotes; the review banner's card: Link to existing recipe · Add to this book's to-scan list · Ignore; `RecipeLink` with the component role; the punchlist gains the entry.
+- **Detection**: "see page 84", "Pasta Dough (page 84)", "recipe follows" in steps and headnotes; the review banner's card: Link to existing recipe · Add to this book's to-scan list · Ignore; `RecipeLink` with the component role; the punchlist gains the entry. The card tells a recipe page from reference material (listed as a recipe on the contents page, or reading as one) and puts the latter on the to-scan list as a reference; page pointers in ingredient notes and steps become pills that open what the book holds from that page, by book and page number, or offer "Scan page N" (04 §5.1 "Page pointers", ux-notes row 74).
 - **Split into N recipes** for a web page whose ingredient and step groups line up (04 §2); user-confirmed in the import preview; linked component recipes; detail shows "Includes" with the components (cook-time inlining is Phase 3).
 - Done when: the fixture pages' cross-references are found and linked; a saved web page with matching groups splits on request.
 
 ### Slice 7 — References and Sources
 
-- **Reference capture**: the web importer offers "Save as reference" when a page has Article markup and no recipe; a scanned technique chapter saves as a `Reference` with sections; its source kept; linked to its book and to recipes; where References live per Caleb's decision (04 §5.2); Search covers them.
+- **Reference capture**: the web importer offers "Save as reference" when a page has Article markup and no recipe; a scanned technique chapter saves as a `Reference` with sections; its source kept; linked to its book and to recipes; where References live per Caleb's decision (04 §5.2); Search covers them. A glossary page scans as a `Reference` whose sections are its entries, linked to the recipes whose pointers name it, so a pointer pill opens the entry (row 74).
 - **Sources page** (Flow C step 8): scan the book's Sources or Resources page once; each entry (name, phone, website, what they carry) becomes a `Source` linked to the book in Pantry → Sources; the pane shows them.
 - **Extension carry-over** (ux-notes row 44) and "Open in app" if authorized, since this slice touches the extension for the Article path.
 - Done when: one article and one chapter are References; the exit book's Sources page fills the pane.
