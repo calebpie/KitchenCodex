@@ -53,6 +53,7 @@ public struct PageStructurer: Sendable {
         page.markDropCaps()
 
         var reading = PageReading(files: [file], blocks: [], kind: .recipe, pageNumbers: [pageNumber], quality: [quality], ocrConfidence: page.ocrConfidence, durations: [scan.duration])
+        reading.quarterTurns = [scan.quarterTurns]
         if let (kind, reason) = page.nonRecipeKind() {
             reading.kind = kind
             reading.reason = reason
@@ -63,15 +64,21 @@ public struct PageStructurer: Sendable {
 
         let titles = page.findTitles()
         var recipes: [PageRecipe] = []
+        var recipeBlocks: [[Int]] = []
         for segment in page.segments(titles: titles) {
             guard let recipe = page.structure(segment) else { continue }
             // Before the first title, a scrap (a sticky note read as a step) is no recipe.
             if recipe.title.isEmpty, recipe.ingredients.isEmpty, recipe.steps.reduce(0, { $0 + $1.text.count }) < 80 {
                 continue
             }
+            guard !(recipe.ingredients.isEmpty && recipe.steps.isEmpty) else { continue }
             recipes.append(recipe)
+            recipeBlocks.append((segment.title?.blocks ?? []) + segment.blocks)
         }
-        recipes.removeAll { $0.ingredients.isEmpty && $0.steps.isEmpty }
+        // Each block knows its recipe, so review can show one recipe's regions on a shared page.
+        for (recipe, ids) in recipeBlocks.enumerated() {
+            for id in ids { page.blocks[id].recipe = recipe }
+        }
         reading.blocks = page.blocks
         if recipes.isEmpty {
             let characters = page.contentCharacters
@@ -472,9 +479,11 @@ extension Page {
                 titles.append(Title(blocks: [index], text: "", isWide: wide))
             }
         }
+        // A second-language name leaves the title and stays in the regions (ux-notes row 59).
+        let language = PageLines.readerLanguage
         for index in titles.indices {
-            let parts = titles[index].blocks.map { blocks[$0].text.trimmingCharacters(in: .whitespaces) }
-            titles[index].text = PageLines.titleText(PageText.join(parts))
+            let parts = titles[index].blocks.flatMap { blocks[$0].lines.map { $0.text.trimmingCharacters(in: .whitespaces) } }
+            titles[index].text = PageLines.titleText(PageLines.titleWithoutAlternate(parts, pageLanguage: language))
             for block in titles[index].blocks { blocks[block].role = .title }
         }
         return titles

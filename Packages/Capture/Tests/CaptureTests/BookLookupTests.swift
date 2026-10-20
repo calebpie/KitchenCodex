@@ -165,9 +165,6 @@ struct BookLookupTests {
         await #expect(throws: BookLookupError.offline) {
             try await service.lookup().lookup(isbn: "9780000000019")
         }
-        await #expect(throws: BookLookupError.offline) {
-            try await service.lookup().search(title: "Example")
-        }
     }
 
     @Test func googleBooksAnswersOnlyWithAKeyAndOnlyAfterOpenLibrary() async throws {
@@ -193,55 +190,17 @@ struct BookLookupTests {
         }
     }
 
-    // MARK: - By title
-
-    @Test func aSearchWithSeveralResults() async throws {
-        let service = RecordedService(["/search.json": "openlibrary-search.json"])
-        let books = try await service.lookup().search(title: "  Example Kitchen ")
-        #expect(books.map(\.title) == ["The Example Kitchen", "The Example Kitchen", "Example Kitchen Postcards"])
-        #expect(books.map(\.subtitle) == ["Everyday Cooking for Company", "A Collection of Prints", nil])
-        #expect(books.map(\.authors) == [["Pat Example"], ["Pat Example", "Sam Sample"], []])
-        #expect(books.map(\.publicationYear) == [2015, 2019, 2020])
-        // The edition's printed ISBN-13 wins; an ISBN-10 alone is converted; none stays none.
-        #expect(books.map(\.isbn13) == ["9780000000019", "9781558608320", nil])
-        #expect(books.map(\.coverURL?.absoluteString) == ["https://covers.openlibrary.org/b/id/10000001-L.jpg", "https://covers.openlibrary.org/b/id/10000003-L.jpg", nil])
-        #expect(Set(books.map(\.id)).count == 3)
-
-        let request = try #require(service.requests.first)
-        let items = URLComponents(url: request, resolvingAgainstBaseURL: false)?.queryItems ?? []
-        #expect(items.first { $0.name == "title" }?.value == "Example Kitchen")
-    }
-
-    @Test func aSearchWithNoResultsIsNotFound() async {
-        let service = RecordedService(["/search.json": "openlibrary-search-empty.json"])
-        await #expect(throws: BookLookupError.notFound) {
-            try await service.lookup().search(title: "Nothing Like This")
-        }
-        await #expect(throws: BookLookupError.notFound) {
-            try await service.lookup().search(title: "   ")
-        }
-    }
-
-    @Test func aMalformedSearchIsABadResponse() async {
-        let service = RecordedService(["/search.json": "openlibrary-edition-malformed.json"])
-        await #expect(throws: BookLookupError.badResponse) {
-            try await service.lookup().search(title: "Example")
-        }
-    }
-
-    @Test func aSearchFallsBackToGoogleBooksWithAKey() async throws {
-        let service = RecordedService(["/search.json": "openlibrary-search-empty.json", "google": "googlebooks-volumes.json"])
-        let books = try await service.lookup(googleBooksKey: "test-key").search(title: "Small-Press")
-        #expect(books.map(\.source) == [.googleBooks])
-        #expect(service.requests.last?.query()?.contains("q=intitle:Small-Press") == true)
-    }
-
     // MARK: - Covers
 
     @Test func aMissingOrPlaceholderCoverIsNone() async throws {
-        let service = RecordedService(["/b/id/1-L.jpg": "openlibrary-search.json", "/b/id/2-L.jpg": "openlibrary-search-empty.json"])
-        let lookup = service.lookup()
-        // Any body of a kilobyte or more stands in for an image here.
+        // A kilobyte or more stands in for an image; Open Library's placeholder is smaller.
+        let lookup = BookLookup { url throws(BookLookupError) -> Data? in
+            switch url.lastPathComponent {
+            case "1-L.jpg": Data(count: 2_000)
+            case "2-L.jpg": Data(count: 100)
+            default: nil
+            }
+        }
         #expect(try await lookup.coverImage(at: URL(string: "https://covers.openlibrary.org/b/id/1-L.jpg")!) != nil)
         #expect(try await lookup.coverImage(at: URL(string: "https://covers.openlibrary.org/b/id/2-L.jpg")!) == nil)
         #expect(try await lookup.coverImage(at: URL(string: "https://covers.openlibrary.org/b/id/3-L.jpg")!) == nil)

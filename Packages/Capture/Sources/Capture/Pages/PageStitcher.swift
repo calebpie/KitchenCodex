@@ -42,10 +42,13 @@ public enum PageStitcher {
         reading.pageNumbers += next.pageNumbers
         reading.quality += next.quality
         reading.durations += next.durations
+        reading.quarterTurns += next.quarterTurns
         reading.blocks += next.blocks.map { block in
             var copy = block
             copy.id += blockOffset
             copy.file += fileOffset
+            // The later page's first recipe is the one it continues; the rest follow it.
+            copy.recipe = copy.recipe.map { $0 == 0 ? previous.recipes.count - 1 : previous.recipes.count + $0 - 1 }
             return copy
         }
         let lineCount = Double(previous.blocks.flatMap(\.lines).count + next.blocks.flatMap(\.lines).count)

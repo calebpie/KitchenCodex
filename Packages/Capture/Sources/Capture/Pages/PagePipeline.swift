@@ -24,15 +24,41 @@ public struct PagePipeline: Sendable {
         self.usesImageInput = usesImageInput
     }
 
+    /// What the pipeline is doing, for Flow B's processing sheet (02 Flow B step 4: "Reading text…
+    /// Finding ingredients… Finding steps…", each stage real). Pages count from 0.
+    public enum Stage: Sendable, Equatable {
+        /// The quality gate is measuring the photo.
+        case checking(page: Int, of: Int)
+        /// The gate has read the photo (never blocking); the recognizer is reading its text.
+        case reading(page: Int, of: Int, quality: PageQualityReading)
+        /// The text is read; the structurer is finding the ingredients and steps.
+        case structuring(page: Int, of: Int, lines: Int)
+        /// The page is read.
+        case read(page: Int, of: Int, kind: PageKind, recipes: Int, ingredients: Int, steps: Int)
+        /// The on-device model is reading a recipe whose deterministic reading falls short
+        /// (`wantsModel`).
+        case refining(title: String)
+    }
+
+    /// Reports a stage; called on the pipeline's own executor, so it should only hand the stage on.
+    public typealias Progress = @Sendable (Stage) -> Void
+
     /// One photo: gate, read, structure. The model pass, when there is a model, runs on recipes that
     /// need it (`wantsModel`); a page that continues a recipe is left for stitching.
     public func read(contentsOf url: URL) async throws -> PageReading {
+        try await read(contentsOf: url, page: 0, of: 1, progress: nil)
+    }
+
+    func read(contentsOf url: URL, page: Int, of count: Int, progress: Progress?) async throws -> PageReading {
         let clock = ContinuousClock()
         let start = clock.now
+        progress?(.checking(page: page, of: count))
         let image = try PageImage.load(contentsOf: url, maxPixelSize: reader.maxPixelSize)
         let quality = await gate.assess(image)
+        progress?(.reading(page: page, of: count, quality: quality))
         var scan = try await reader.read(image)
         scan.duration = clock.now - start
+        progress?(.structuring(page: page, of: count, lines: scan.blocks.reduce(0) { $0 + $1.lines.count }))
         var reading = structurer.read(scan, file: url.lastPathComponent, quality: quality)
         if reading.pageNumber == nil, reading.kind == .recipe {
             // The folio's small type, read again from the page's foot and head.
@@ -40,27 +66,30 @@ public struct PagePipeline: Sendable {
             if let number = PageStructurer.folioNumber(in: margins) { reading.pageNumbers = [number] }
         }
         reading.durations = [clock.now - start]
+        progress?(.read(page: page, of: count, kind: reading.kind, recipes: reading.recipes.count,
+                        ingredients: reading.recipes.reduce(0) { $0 + $1.ingredients.count },
+                        steps: reading.recipes.reduce(0) { $0 + $1.steps.count }))
         if model != nil, !reading.isContinuation {
-            reading = await refine(reading, image: image)
+            reading = await refine(reading, image: image, progress: progress)
         }
         return reading
     }
 
     /// Consecutive photos in capture order, read and stitched: a page that opens without a title
     /// continues the recipe before it. The model pass runs on the stitched readings.
-    public func read(contentsOf urls: [URL]) async throws -> [PageReading] {
+    public func read(contentsOf urls: [URL], progress: Progress? = nil) async throws -> [PageReading] {
         var readings: [PageReading] = []
-        for url in urls {
+        for (page, url) in urls.enumerated() {
             var single = self
             single.model = nil
-            readings.append(try await single.read(contentsOf: url))
+            readings.append(try await single.read(contentsOf: url, page: page, of: urls.count, progress: progress))
         }
         var stitched = PageStitcher.stitch(readings)
         if model != nil {
             for index in stitched.indices {
                 let image = stitched[index].files.first.flatMap { file in urls.first { $0.lastPathComponent == file } }
                     .flatMap { try? PageImage.load(contentsOf: $0, maxPixelSize: 1600) }
-                stitched[index] = await refine(stitched[index], image: image)
+                stitched[index] = await refine(stitched[index], image: image, progress: progress)
             }
         }
         return stitched
@@ -76,12 +105,13 @@ public struct PagePipeline: Sendable {
     /// Asks the model about each recipe that wants it and keeps what it reads only where it does
     /// better than the deterministic reading. Readings without a model, or with nothing to refine,
     /// come back unchanged.
-    public func refine(_ reading: PageReading, image: CGImage?) async -> PageReading {
+    public func refine(_ reading: PageReading, image: CGImage?, progress: Progress? = nil) async -> PageReading {
         guard let model, model.isAvailable, reading.kind == .recipe else { return reading }
         var refined = reading
         for index in refined.recipes.indices where Self.wantsModel(refined.recipes[index]) {
             let text = Self.text(of: refined.recipes[index], in: refined)
             guard !text.isEmpty else { continue }
+            progress?(.refining(title: refined.recipes[index].title))
             var recipe = refined.recipes[index]
             if let draft = try? await model.structure(pageText: text) {
                 recipe = Self.merge(draft, into: recipe)

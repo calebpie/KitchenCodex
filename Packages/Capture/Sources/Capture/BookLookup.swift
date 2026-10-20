@@ -126,29 +126,6 @@ public struct BookLookup: Sendable {
         }
     }
 
-    /// Books whose title matches, best match first; one card per work.
-    public func search(title: String) async throws(BookLookupError) -> [BookCandidate] {
-        let query = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { throw .notFound }
-        var components = URLComponents(string: "https://openlibrary.org/search.json")!
-        components.queryItems = [
-            URLQueryItem(name: "title", value: query),
-            // The best-matching edition rides along under `editions`, for an ISBN that belongs to it.
-            URLQueryItem(name: "fields", value: "key,title,subtitle,author_name,first_publish_year,cover_i,editions,editions.key,editions.isbn"),
-            URLQueryItem(name: "limit", value: "20"),
-        ]
-        guard let data = try await load(components.url!) else { throw .notFound }
-        let results = try Self.decode(OpenLibrary.SearchResults.self, from: data)
-        let candidates = results.docs.compactMap(Self.candidate(from:))
-        if candidates.isEmpty {
-            guard let googleBooksKey else { throw .notFound }
-            let volumes = try await googleBooks(query: "intitle:\(query)", key: googleBooksKey)
-            guard !volumes.isEmpty else { throw .notFound }
-            return volumes
-        }
-        return candidates
-    }
-
     /// The cover's image bytes, or nil when there is none (Open Library answers 404 for a missing
     /// cover when asked with `default=false`, and a tiny placeholder otherwise).
     public func coverImage(at url: URL) async throws(BookLookupError) -> Data? {
@@ -205,23 +182,6 @@ public struct BookLookup: Sendable {
         return keys.indices.compactMap { fetched[$0] }.filter { seen.insert($0).inserted }
     }
 
-    private static func candidate(from doc: OpenLibrary.SearchDoc) -> BookCandidate? {
-        guard let fullTitle = doc.title?.trimmed, !fullTitle.isEmpty, let key = doc.key else { return nil }
-        let (title, titleSubtitle) = splitSubtitle(fullTitle)
-        let isbns = doc.editions?.docs.flatMap { $0.isbn ?? [] } ?? []
-        return BookCandidate(
-            title: title,
-            subtitle: doc.subtitle?.trimmed.nonEmpty ?? titleSubtitle,
-            authors: doc.author_name ?? [],
-            publicationYear: doc.first_publish_year,
-            // ISBN-13s first, so a printed 978 number wins over a converted ISBN-10.
-            isbn13: (isbns.filter { $0.count == 13 } + isbns).lazy.compactMap(ISBN.normalized).first,
-            coverURL: doc.cover_i.flatMap { $0 > 0 ? coverURL(id: $0) : nil },
-            source: .openLibrary,
-            sourceKey: key
-        )
-    }
-
     private static func openLibraryURL(_ key: String) -> URL {
         URL(string: "https://openlibrary.org\(key).json")!
     }
@@ -232,7 +192,7 @@ public struct BookLookup: Sendable {
 
     // MARK: - Google Books
 
-    /// Google Books volumes for a `q` query ("isbn:…", "intitle:…"). Only called with a key.
+    /// Google Books volumes for a `q` query ("isbn:…"). Only called with a key.
     private func googleBooks(query: String, key: String) async throws(BookLookupError) -> [BookCandidate] {
         var components = URLComponents(string: "https://www.googleapis.com/books/v1/volumes")!
         components.queryItems = [
@@ -361,25 +321,6 @@ private enum OpenLibrary {
     struct Author: Decodable {
         var name: String?
         var personal_name: String?
-    }
-
-    struct SearchResults: Decodable {
-        var docs: [SearchDoc]
-    }
-
-    struct SearchDoc: Decodable {
-        struct Editions: Decodable {
-            struct Edition: Decodable { var isbn: [String]? }
-            var docs: [Edition]
-        }
-
-        var key: String?
-        var title: String?
-        var subtitle: String?
-        var author_name: [String]?
-        var first_publish_year: Int?
-        var cover_i: Int?
-        var editions: Editions?
     }
 }
 

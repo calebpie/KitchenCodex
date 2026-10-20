@@ -2,7 +2,9 @@ import CoreGraphics
 import CoreImage
 import CoreText
 import Foundation
+import ImageIO
 import Intelligence
+import Synchronization
 import Testing
 @testable import Capture
 
@@ -143,6 +145,49 @@ struct PagePipelineTests {
         #expect(reading.recipes.map(\.title) == ["Quick Pickled Onions", "Herb Oil"])
         #expect(reading.recipes.map(\.ingredients.count) == [3, 2])
         #expect(reading.recipes.map(\.steps.count) == [1, 1])
+        // Each block knows its recipe, title included.
+        #expect(reading.blocks.filter { $0.recipe == 0 }.count == 5)
+        #expect(reading.blocks.filter { $0.recipe == 1 }.count == 4)
+        #expect(reading.blocks.first { $0.text == "Herb Oil" }?.recipe == 1)
+    }
+
+    /// ux-notes row 59: a second-language name leaves the title. Made-up titles.
+    @Test func leavesASecondLanguageNameOutOfTheTitle() {
+        func title(_ parts: [String]) -> String {
+            PageLines.titleText(PageLines.titleWithoutAlternate(parts, pageLanguage: .english))
+        }
+        #expect(title(["PEAR TART—TARTE AUX POIRES"]) == "Pear Tart")
+        // OCR reads the dash as a hyphen.
+        #expect(title(["Roast Chicken-Poulet Rôti"]) == "Roast Chicken")
+        #expect(title(["BRAISED LEEKS", "POIREAUX BRAISÉS"]) == "Braised Leeks")
+        // A second line in English stays, its own alternate after the dash does not.
+        #expect(title(["GRILLED TROUT", "WITH HERB BUTTER—AU BEURRE D'HERBES"]) == "Grilled Trout with Herb Butter")
+        // Compounds and English names after a dash stay.
+        #expect(title(["Lemon-Basil Granita"]) == "Lemon-Basil Granita")
+        #expect(title(["TWICE-BAKED POTATOES"]) == "Twice-Baked Potatoes")
+        #expect(title(["Mint-Walnut Pesto"]) == "Mint-Walnut Pesto")
+        #expect(title(["SPICED CARROTS", "WITH YOGURT AND DILL"]) == "Spiced Carrots with Yogurt and Dill")
+    }
+
+    @Test func aTitleKeepsItsAlternateInTheRegions() {
+        let blocks: [PageBlock] = [
+            Self.block([Self.line("PEAR TART—TARTE AUX POIRES", x: 0.10, y: 0.08, size: 0.022, spacing: 0.55)]),
+            Self.block([Self.line("3 ripe pears, peeled and sliced", x: 0.10, y: 0.13)]),
+            Self.block([Self.line("1 sheet puff pastry", x: 0.10, y: 0.146)]),
+            Self.block([Self.line("2 tablespoons sugar", x: 0.10, y: 0.162)]),
+            Self.paragraph(["Lay the pears over the pastry, sprinkle with the sugar and", "bake until the pastry is puffed and brown."], x: 0.10, y: 0.19),
+        ]
+        let reading = PageStructurer().read(Self.scan(blocks))
+        #expect(reading.recipes.first?.title == "Pear Tart")
+        #expect(reading.blocks.first { $0.role == .title }?.text == "PEAR TART—TARTE AUX POIRES")
+    }
+
+    @Test func regionTextReadsAsTheStructurerReadsIt() {
+        #expect(PageRegionText.title(["SLOW-COOKED", "BEANS"]) == "Slow-Cooked Beans")
+        #expect(PageRegionText.yield(["MAKES 2 CUPS"]) == "Makes 2 cups")
+        #expect(PageRegionText.paragraph(["Stir in the re-", "maining stock."]) == "Stir in the remaining stock.")
+        #expect(PageRegionText.ingredientLines(["13/4 cups stock", "2 onions, peeled and", "thinly sliced", "Kosher salt"])
+            == ["1 3/4 cups stock", "2 onions, peeled and thinly sliced", "Kosher salt"])
     }
 
     @Test func readsNumberedStepsAndNotes() throws {
@@ -209,6 +254,8 @@ struct PagePipelineTests {
         #expect(recipe.steps.count == 3)
         #expect(recipe.steps[1].text.hasSuffix("then fold in the edges and bake until puffed and golden, 25 minutes."))
         #expect(recipe.ingredients.count == 2)
+        // The later page's blocks belong to the recipe they continue.
+        #expect(reading.blocks.filter { $0.file == 1 }.allSatisfy { $0.recipe == 0 })
         // A titled page after a finished recipe stands alone.
         let separate = PageStitcher.stitch([structurer.read(Self.leekPage(), file: "c"), structurer.read(Self.leekPage(), file: "d")])
         #expect(separate.count == 2)
@@ -367,6 +414,30 @@ struct PagePipelineTests {
         let soft = await gate.assess(blurred)
         #expect(soft.quality == .holdStill, "sharpness \(soft.sharpness)")
         #expect(soft.sharpness < sharp.sharpness)
+    }
+
+    /// Flow B step 4: the processing sheet's stages, in order, from the pipeline itself.
+    @Test(.timeLimit(.minutes(3)))
+    func reportsItsStages() async throws {
+        let folder = FileManager.default.temporaryDirectory.appending(path: "stages-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let url = folder.appending(path: "soup.png")
+        let destination = try #require(CGImageDestinationCreateWithURL(url as CFURL, "public.png" as CFString, 1, nil))
+        CGImageDestinationAddImage(destination, try Self.renderedPage(), nil)
+        #expect(CGImageDestinationFinalize(destination))
+
+        let stages = Mutex<[PagePipeline.Stage]>([])
+        let readings = try await PagePipeline().read(contentsOf: [url]) { stage in stages.withLock { $0.append(stage) } }
+        let recorded = stages.withLock { $0 }
+        #expect(recorded.count == 4)
+        #expect(recorded.first == .checking(page: 0, of: 1))
+        if case let .reading(page, count, quality) = recorded[1] {
+            #expect(page == 0 && count == 1 && quality.quality == .sharp)
+        } else { Issue.record("\(recorded[1])") }
+        if case let .structuring(_, _, lines) = recorded[2] { #expect(lines > 5) } else { Issue.record("\(recorded[2])") }
+        #expect(recorded.last == .read(page: 0, of: 1, kind: .recipe, recipes: 1, ingredients: 5, steps: 2))
+        #expect(readings.first?.quarterTurns == [0])
     }
 
     @Test(.timeLimit(.minutes(3)))

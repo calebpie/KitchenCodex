@@ -1,4 +1,5 @@
 import Foundation
+import NaturalLanguage
 import Units
 
 /// Line-level readings shared by the page structurer: what a printed line looks like it is.
@@ -55,6 +56,60 @@ enum PageLines {
         _ = wordStart
         flush()
         return result
+    }
+
+    // MARK: - Alternate titles
+
+    /// The language a title's main name is in: the reader's own (the device's first preferred
+    /// language), since the books on a cook's shelf are in it. A page's text is no guide: Vision's
+    /// reading of an English page thick with French dish names reads as French.
+    static var readerLanguage: NLLanguage {
+        NLLanguage(rawValue: Locale.preferredLanguages.first.map { String($0.prefix(2)) } ?? "en")
+    }
+
+    /// A title without its second-language name (ux-notes row 59): the part after the title's last
+    /// dash ("Roast Duck—Canard Rôti", where OCR often reads the dash as a hyphen), or a later line
+    /// of the title ("TAPENADE" over "OLIVES NIÇOISES EN TAPENADE"), when it reads as another
+    /// language than the page and carries that language's marks: an accented letter or one of its
+    /// small words. "Mint-Pistachio Pesto" stays whole. The page scan's regions keep the full text.
+    static func titleWithoutAlternate(_ parts: [String], pageLanguage: NLLanguage) -> String {
+        var kept: [String] = []
+        for (index, part) in parts.enumerated() {
+            // Within a line, the name after its last dash ("Roast Duck—Canard Rôti").
+            if let dash = part.lastIndex(where: { "—–-".contains($0) }) {
+                let before = part[..<dash].trimmingCharacters(in: .whitespaces)
+                let after = part[part.index(after: dash)...].trimmingCharacters(in: .whitespaces)
+                if before.contains(where: \.isLetter), isAlternateTitle(after, pageLanguage: pageLanguage) {
+                    if index == 0 || !isAlternateTitle(before, pageLanguage: pageLanguage) { kept.append(before) }
+                    break
+                }
+            }
+            // A later line that is the name in another language.
+            if index > 0, isAlternateTitle(part, pageLanguage: pageLanguage) { break }
+            kept.append(part)
+        }
+        return PageText.join(kept.isEmpty ? parts : kept)
+    }
+
+    /// Small words that mark a title as French, Italian or Spanish.
+    private static let alternateTitleWords: Set<String> = [
+        "de", "du", "des", "d'", "au", "aux", "à", "la", "le", "les", "l'", "et", "en", "sur", "façon",
+        "di", "del", "della", "alla", "alle", "al", "con", "y", "e",
+    ]
+
+    static func isAlternateTitle(_ text: String, pageLanguage: NLLanguage) -> Bool {
+        let words = text.lowercased().split(whereSeparator: { $0.isWhitespace || $0 == "-" }).map(String.init)
+        guard !words.isEmpty, text.filter(\.isLetter).count >= 4 else { return false }
+        let accented = text.contains { $0.isLetter && !$0.isASCII }
+        let marked = accented || words.contains { word in
+            alternateTitleWords.contains(word) || ["d'", "d’", "l'", "l’"].contains { word.hasPrefix($0) }
+        }
+        guard marked else { return false }
+        let recognizer = NLLanguageRecognizer()
+        recognizer.languageConstraints = [.english, .french, .italian, .spanish, .german, .portuguese]
+        recognizer.processString(text.lowercased())
+        guard let language = recognizer.dominantLanguage, language != pageLanguage else { return false }
+        return (recognizer.languageHypotheses(withMaximum: 1)[language] ?? 0) >= 0.5
     }
 
     // MARK: - Kinds of lines

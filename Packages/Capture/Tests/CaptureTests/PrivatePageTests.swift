@@ -132,13 +132,9 @@ struct PrivatePageTests {
 
     // MARK: - Barcodes
 
-    /// The ISBN-13 on the barcode photo, read with Vision's barcode detector.
+    /// The ISBN-13 on the barcode photo, as Add Cookbook reads it.
     static func isbn(in url: URL) async throws -> String? {
-        var request = DetectBarcodesRequest()
-        request.symbologies = [.ean13]
-        let image = try PageImage.load(contentsOf: url, maxPixelSize: 3000)
-        let barcodes = try await request.perform(on: image)
-        return barcodes.compactMap(\.payloadString).first { $0.hasPrefix("978") || $0.hasPrefix("979") }
+        try await ISBNBarcode.read(contentsOf: url)
     }
 
     // MARK: - Bad captures
