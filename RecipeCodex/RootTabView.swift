@@ -164,6 +164,7 @@ struct RootTabView: View {
             if selected == .search, previous != .search {
                 router.searchScope = SearchScope(origin: previous)
             }
+            router.selectionDidChange()
         }
         .onChange(of: sizeClass, initial: true) { _, sizeClass in
             // A compact window has the iPhone's tab bar, which lists no section tab.
@@ -188,8 +189,7 @@ struct RootTabView: View {
             presenting: deletingCollection
         ) { collection in
             Button("Delete Collection", role: .destructive) {
-                if router.selectedTab == .library(.collection(collection.persistentModelID)) { router.selectedTab = .recipes }
-                CollectionActions.delete(collection, in: modelContext)
+                router.delete(collection, in: modelContext)
             }
         } message: { _ in
             Text("The recipes stay in your library.")

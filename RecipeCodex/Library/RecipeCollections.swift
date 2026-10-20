@@ -4,8 +4,8 @@ import SwiftData
 import SwiftUI
 
 /// Collections the cook makes (03 §3.2): New Collection in Recipes' More menu, Add to Collection in
-/// the long-press menu, on detail and in Select mode, the iPad sidebar, and on iPhone the Collection
-/// filter and the Collections list.
+/// the long-press menu, on detail and in Select mode, the Collections list, the iPad sidebar's
+/// Collections section, and on iPhone the Collection filter.
 enum CollectionActions {
     /// Collections in their sidebar order.
     static let sortDescriptors = [SortDescriptor(\RecipeCollection.sortOrder), SortDescriptor(\RecipeCollection.createdAt)]
@@ -35,7 +35,7 @@ enum CollectionActions {
         try? context.save()
     }
 
-    /// Moves collections in the cook's order (Edit in the iPad sidebar, the iPhone Collections list)
+    /// Moves collections in the cook's order (Edit in the Collections list)
     /// and renumbers every `sortOrder` from 0.
     static func move(_ collections: [RecipeCollection], from source: IndexSet, to destination: Int, in context: ModelContext) {
         var ordered = collections
@@ -82,9 +82,10 @@ struct AddToCollectionMenu: View {
     }
 }
 
-/// iPhone: Recipes → More → Collections. The cook's collections in their order, each with its count;
-/// tap one to show it, Edit to reorder or delete, and Rename… or Delete from a row's menu or swipe.
-/// New Collection stays in More; on iPad the sidebar does all of this.
+/// Recipes → More → Collections, on iPhone and iPad (whose system sidebar is not reordered by
+/// hand). The cook's collections in their order, each with its count; tap one to show it, Edit to
+/// reorder or delete, and Rename… or Delete from a row's menu or swipe. New Collection stays in
+/// More and, on iPad, in the sidebar's Collections section.
 struct CollectionsList: View {
     /// Shows the collection's recipes.
     let onShow: (RecipeCollection) -> Void
@@ -92,6 +93,7 @@ struct CollectionsList: View {
     let onDelete: (RecipeCollection) -> Void
 
     @Environment(\.modelContext) private var modelContext
+    @Environment(AppRouter.self) private var router
     @Query(sort: CollectionActions.sortDescriptors) private var collections: [RecipeCollection]
     @State private var renamingCollection: RecipeCollection?
     @State private var deletingCollection: RecipeCollection?
@@ -155,7 +157,7 @@ struct CollectionsList: View {
         ) { collection in
             Button("Delete Collection", role: .destructive) {
                 onDelete(collection)
-                CollectionActions.delete(collection, in: modelContext)
+                router.delete(collection, in: modelContext)
             }
         } message: { _ in
             Text("The recipes stay in your library.")

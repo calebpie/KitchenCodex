@@ -163,16 +163,6 @@ struct RecipesView: View {
             currentCollection?.name = name
             try? modelContext.save()
         }
-        .confirmationDialog(
-            "Delete “\(currentCollection?.name ?? "")”?",
-            isPresented: $isConfirmingCollectionDeletion,
-            titleVisibility: .visible,
-            presenting: currentCollection
-        ) { collection in
-            Button("Delete Collection", role: .destructive) { deleteCollection(collection) }
-        } message: { _ in
-            Text("The recipes stay in your library.")
-        }
         .onChange(of: router.requestedRecipeID, initial: true) { _, id in
             // Spotlight and other tabs open recipes in the Recipes tab, the whole library.
             guard scope == .all, let id else { return }
@@ -215,7 +205,6 @@ struct RecipesView: View {
                 }
             } onDelete: { collection in
                 if filter.collection == collection.persistentModelID { filter.collection = nil }
-                if router.selectedTab == .library(.collection(collection.persistentModelID)) { router.selectedTab = .recipes }
             }
         case .book:
             // Book detail (03 §3.7) arrives with books in Phase 2 and pushes here, over the shelf.
@@ -466,6 +455,17 @@ struct RecipesView: View {
                 } label: {
                     Label("More", systemImage: "ellipsis")
                 }
+                // On the menu, so on iPad the confirmation points at More.
+                .confirmationDialog(
+                    "Delete “\(currentCollection?.name ?? "")”?",
+                    isPresented: $isConfirmingCollectionDeletion,
+                    titleVisibility: .visible,
+                    presenting: currentCollection
+                ) { collection in
+                    Button("Delete Collection", role: .destructive) { deleteCollection(collection) }
+                } message: { _ in
+                    Text("The recipes stay in your library.")
+                }
             }
         }
     }
@@ -492,10 +492,8 @@ struct RecipesView: View {
     }
 
     private func deleteCollection(_ collection: RecipeCollection) {
-        let id = collection.persistentModelID
-        if router.selectedTab == .library(.collection(id)) { router.selectedTab = .recipes }
-        if filter.collection == id { filter.collection = nil }
-        CollectionActions.delete(collection, in: modelContext)
+        if filter.collection == collection.persistentModelID { filter.collection = nil }
+        router.delete(collection, in: modelContext)
     }
 
     private func openImportedRecipe() {
