@@ -192,9 +192,11 @@ struct RecipeDetailView: View {
                     }
                     if let version {
                         if isSideBySide {
+                            // The ingredients hug their longest line and the steps take the rest up
+                            // to a readable measure; spare width goes to the trailing margin
+                            // (04 §5.1 iPad columns).
                             HStack(alignment: .top, spacing: 40) {
                                 ingredientsSection(for: version)
-                                    .frame(width: (min(contentWidth, 1_100) - 104) * 0.4, alignment: .leading)
                                     .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { ingredientsHeight = $0 }
                                     .offset(y: ingredientsPin)
                                 VStack(alignment: .leading, spacing: 28) {
@@ -203,7 +205,7 @@ struct RecipeDetailView: View {
                                         notesSection(version.notes)
                                     }
                                 }
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .frame(maxWidth: Self.stepsMeasure + Self.stepNumberWidth, alignment: .leading)
                             }
                             .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { columnsFrame = $0 }
                         } else {
@@ -397,9 +399,20 @@ struct RecipeDetailView: View {
 
     // MARK: - Content
 
+    /// The longest step line in the wide layout, about 660 pt, and the step number before it.
+    static let stepsMeasure: CGFloat = 660
+    static let stepNumberWidth: CGFloat = 36
+
+    /// Beside the steps the ingredients are a column as wide as their longest line, at least 280 pt
+    /// and at most a third of the two columns' width; stacked, the full width.
+    private var ingredientsLayout: AnyLayout {
+        guard isSideBySide else { return AnyLayout(VStackLayout(alignment: .leading, spacing: 12)) }
+        return AnyLayout(HuggingColumn(minWidth: 280, maxWidth: (min(contentWidth, 1_100) - 104) / 3, spacing: 12))
+    }
+
     private func ingredientsSection(for version: RecipeVersion) -> some View {
         let factor = scaleFactor(for: version)
-        return VStack(alignment: .leading, spacing: 12) {
+        return ingredientsLayout {
             // "Ingredients · 4 servings ⌄"; stacked when the two don't fit on a line.
             ViewThatFits(in: .horizontal) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -415,6 +428,8 @@ struct RecipeDetailView: View {
                     scaleButton(for: version)
                 }
             }
+            // Scaling lengthens the header; it stacks rather than widen the column.
+            .layoutValue(key: SetsColumnWidth.self, value: false)
             if version.sortedIngredients.isEmpty {
                 Text("No ingredients yet.").foregroundStyle(.secondary)
             }
@@ -556,6 +571,41 @@ struct RecipeDetailView: View {
                 .font(.headline)
         }
     }
+}
+
+/// The wide detail's ingredients column (04 §5.1 iPad columns): a leading stack, `spacing` apart,
+/// as wide as its longest subview at its ideal width, held between `minWidth` and `maxWidth`, so a
+/// short-lined recipe closes the gap to the steps and a long-lined one wraps at the cap. Subviews
+/// whose `SetsColumnWidth` is false fit themselves into that width instead of setting it.
+private struct HuggingColumn: Layout {
+    var minWidth: CGFloat
+    var maxWidth: CGFloat
+    var spacing: CGFloat
+
+    private func width(of subviews: Subviews) -> CGFloat {
+        let longest = subviews.filter { $0[SetsColumnWidth.self] }.map { $0.sizeThatFits(.unspecified).width }.max() ?? 0
+        return min(max(longest, minWidth), max(minWidth, maxWidth))
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = width(of: subviews)
+        let heights = subviews.map { $0.sizeThatFits(ProposedViewSize(width: width, height: nil)).height }
+        return CGSize(width: width, height: heights.reduce(0, +) + spacing * CGFloat(max(0, subviews.count - 1)))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let proposal = ProposedViewSize(width: bounds.width, height: nil)
+        var y = bounds.minY
+        for subview in subviews {
+            subview.place(at: CGPoint(x: bounds.minX, y: y), proposal: proposal)
+            y += subview.sizeThatFits(proposal).height + spacing
+        }
+    }
+}
+
+/// Whether a subview's ideal width counts toward `HuggingColumn`'s width.
+nonisolated private struct SetsColumnWidth: LayoutValueKey {
+    static let defaultValue = true
 }
 
 private struct SectionTitle: View {
