@@ -30,9 +30,10 @@ enum ScanGate {
     }
 }
 
-/// Recipes → Add → Scan Page (02 Flow B, without the camera until slice 4): photos chosen from
-/// Photos or Files, read in order with the page pipeline, a book chosen, then each reading reviewed
-/// when it must be and saved straight when it need not.
+/// Recipes → Add → Scan Page (02 Flow B): pages from the camera, read one by one as they are taken,
+/// or photos chosen from Photos or Files, read in order with the page pipeline; a book named by a
+/// barcode among them or chosen; then each reading reviewed when it must be and saved straight when
+/// it need not.
 @MainActor
 @Observable
 final class ScanSession {
@@ -62,6 +63,25 @@ final class ScanSession {
         var recipes = 0
         var ingredients = 0
         var steps = 0
+        /// A camera capture in Photo mode: a picture for a recipe, never a recipe itself.
+        var isPhoto = false
+        /// The photo turned out to be the book's barcode (ux-notes row 65).
+        var isbn: String?
+    }
+
+    /// What a camera capture is (04 §5.1 "Printed photos", ux-notes row 62): a recipe page to read,
+    /// or a photo (a plate, the finished dish) for a recipe read in the session.
+    enum CaptureMode: String {
+        case recipe, photo
+    }
+
+    /// One page from the camera: the cleaned page on disk, the gate's reading of the photo before
+    /// cleanup, and its own reading once the queue gets to it.
+    struct CameraCapture {
+        let url: URL
+        let mode: CaptureMode
+        let quality: PageQualityReading?
+        var reading: PageReading?
     }
 
     /// What one saved recipe was, for the summary.
@@ -84,7 +104,25 @@ final class ScanSession {
     private(set) var saved: [SavedRecipe] = []
     private(set) var keptPages = 0
     private(set) var discardedPages = 0
+    /// The book a barcode among the photos, or one scanned at the camera's start, named.
+    private(set) var barcodeBook: Book?
+    /// A barcode for a book not on the shelf: Add Cookbook's card for it (ux-notes row 65).
+    var newBookISBN: String?
     var isSaving = false
+
+    // The camera's run.
+    private(set) var captures: [CameraCapture] = []
+    /// The last recipe capture's text in reading order, for the iPad's running preview (03 §3.5).
+    private(set) var lastCaptureText: String?
+    /// Whether the queue is still reading a capture.
+    private(set) var isReadingCaptures = false
+    /// Three captures in a row hazy and poorly read: the camera asks to clean the lens (ux-notes
+    /// row 57). Reset once asked.
+    var asksToCleanLens = false
+    private var hazyRun = 0
+    private var captureQueue: Task<Void, Never>?
+    /// Photo-mode captures by the recipe they go with: (reading, recipe on it).
+    private var coverCandidates: [[Int]: [URL]] = [:]
     /// Set by the sheet, which owns the environment's context.
     var modelContext: ModelContext!
 
@@ -120,6 +158,7 @@ final class ScanSession {
 
     func cancel() {
         work?.cancel()
+        captureQueue?.cancel()
         if let folder { try? FileManager.default.removeItem(at: folder) }
     }
 
@@ -194,7 +233,181 @@ final class ScanSession {
         let seconds = (clock.now - started).formatted(.units(allowed: [.seconds], fractionalPart: .show(length: 1)))
         Self.logger.info("Scan Page: \(urls.count) photos read in \(seconds, privacy: .public) (\(self.readings.count) readings, \(self.readings.reduce(0) { $0 + $1.recipes.count }) recipes)")
         guard !Task.isCancelled else { return }
+        await nameBook(isbn: await takeBarcodes())
+    }
+
+    /// After reading: the book a barcode named, else Which book? when the scan didn't start from one.
+    private func nameBook(isbn: String?) async {
+        if let isbn, startingBook == nil {
+            if let shelved = shelfBook(isbn: isbn) {
+                book = shelved
+                barcodeBook = shelved
+            } else {
+                // Add Cookbook's card, over Which book?, which stays if the cook cancels it.
+                newBookISBN = isbn
+                phase = .whichBook
+                return
+            }
+        }
         if book == nil { phase = .whichBook } else { await advance() }
+    }
+
+    /// The book Add Cookbook added for the barcode: the scan goes on with it.
+    func addedBook(_ added: Book) {
+        newBookISBN = nil
+        barcodeBook = added
+        choose(added)
+    }
+
+    // MARK: - A barcode among the pages
+
+    /// Photos that read as an ISBN barcode name the book and leave the scan (ux-notes row 65): only
+    /// photos that aren't recipes are tried, so pages cost nothing. The first ISBN found.
+    private func takeBarcodes() async -> String? {
+        var found: String?
+        for reading in readings where reading.kind != .recipe && reading.files.count == 1 {
+            guard let url = urls.first(where: { $0.lastPathComponent == reading.files[0] }),
+                  let isbn = await Self.isbn(at: url) else { continue }
+            found = found ?? isbn
+            readings.removeAll { $0.files == reading.files }
+            if let index = urls.firstIndex(of: url) { update(index) { $0.isbn = isbn } }
+        }
+        return found
+    }
+
+    @concurrent
+    nonisolated private static func isbn(at url: URL) async -> String? {
+        try? await ISBNBarcode.read(contentsOf: url)
+    }
+
+    /// The shelf's book with this ISBN.
+    func shelfBook(isbn: String) -> Book? {
+        let descriptor = FetchDescriptor<Book>(predicate: #Predicate { $0.isbn == isbn })
+        return try? modelContext.fetch(descriptor).first
+    }
+
+    // MARK: - The camera
+
+    /// The folder the camera writes its cleaned pages to.
+    func captureFolder() -> URL {
+        if let folder { return folder }
+        let folder = FileManager.default.temporaryDirectory.appending(path: "scan-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        self.folder = folder
+        return folder
+    }
+
+    /// A page from the camera, read at once in capture order behind the ones before it, so the
+    /// processing sheet has little left when the cook taps Done. A Photo capture is read only for
+    /// its page number.
+    func addCapture(at url: URL, mode: CaptureMode, quality: PageQualityReading?) {
+        let index = captures.count
+        captures.append(CameraCapture(url: url, mode: mode, quality: quality))
+        var page = PageProgress(id: index)
+        page.isPhoto = mode == .photo
+        progress.append(page)
+        isReadingCaptures = true
+        let previous = captureQueue
+        let pipeline = pipeline
+        captureQueue = Task {
+            await previous?.value
+            guard !Task.isCancelled else { return }
+            let (stream, continuation) = AsyncStream.makeStream(of: PagePipeline.Stage.self)
+            let reader = Task { try await Self.readPage(url, index: index, quality: quality, with: pipeline, reporting: continuation) }
+            for await stage in stream { apply(stage) }
+            let reading = try? await reader.value
+            captures[index].reading = reading
+            if let reading, mode == .recipe { noteCapture(reading, quality: quality) }
+            if index == captures.count - 1 { isReadingCaptures = false }
+        }
+    }
+
+    @concurrent
+    nonisolated static func readPage(_ url: URL, index: Int, quality: PageQualityReading?, with pipeline: PagePipeline, reporting continuation: AsyncStream<PagePipeline.Stage>.Continuation) async throws -> PageReading {
+        defer { continuation.finish() }
+        return try await pipeline.readPage(contentsOf: url, page: index, of: index + 1, quality: quality) { continuation.yield($0) }
+    }
+
+    /// The iPad's preview, and the run of hazy captures: Clean the lens stays advisory until three
+    /// captures in a row both score Apple's smudge threshold and read poorly (ux-notes row 57).
+    private func noteCapture(_ reading: PageReading, quality: PageQualityReading?) {
+        lastCaptureText = reading.blocks.filter { $0.kind != .photo && $0.role != .ignore && $0.role != .furniture }.map(\.text).joined(separator: "\n\n")
+        let hazy = (quality?.smudge ?? 0) >= PageQualityGate().smudgeThreshold && reading.ocrConfidence < PageStructurer.lowOCR
+        hazyRun = hazy ? hazyRun + 1 : 0
+        if hazyRun >= 3 {
+            hazyRun = 0
+            asksToCleanLens = true
+        }
+    }
+
+    /// The barcode scanned live at the camera's start.
+    var scannedISBN: String?
+
+    /// The camera's Close: its pages let go.
+    func discardCaptures() {
+        captureQueue?.cancel()
+        captureQueue = nil
+        for capture in captures { try? FileManager.default.removeItem(at: capture.url) }
+        captures = []
+        progress = []
+        lastCaptureText = nil
+        isReadingCaptures = false
+        scannedISBN = nil
+        hazyRun = 0
+    }
+
+    /// The camera's Done: the rest of the queue read, the recipe pages stitched and refined, the
+    /// Photo captures matched to their recipes, then the book and the queue as for chosen photos.
+    func finishCapturing() async {
+        guard !captures.isEmpty else { return }
+        phase = .processing
+        await captureQueue?.value
+        urls = captures.map(\.url)
+        let pages = captures.filter { $0.mode == .recipe }.compactMap(\.reading)
+        let pipeline = pipeline
+        let urls = urls
+        let (stream, continuation) = AsyncStream.makeStream(of: PagePipeline.Stage.self)
+        let finisher = Task { await Self.finish(pages, urls: urls, with: pipeline, reporting: continuation) }
+        for await stage in stream { apply(stage) }
+        readings = await finisher.value
+        refining = nil
+        matchPhotoCaptures()
+        Self.logger.info("Scan Page: \(self.captures.count) captures (\(self.captures.count { $0.mode == .photo }) photos), \(self.readings.count) readings")
+        guard !Task.isCancelled else { return }
+        let barcode = await takeBarcodes()
+        await nameBook(isbn: scannedISBN ?? barcode)
+    }
+
+    @concurrent
+    nonisolated static func finish(_ pages: [PageReading], urls: [URL], with pipeline: PagePipeline, reporting continuation: AsyncStream<PagePipeline.Stage>.Continuation) async -> [PageReading] {
+        defer { continuation.finish() }
+        return await pipeline.finish(pages, urls: urls) { continuation.yield($0) }
+    }
+
+    /// Each Photo capture goes with the recipe that points to its page ("photograph on page 12",
+    /// read earlier in the session), or else the recipe read before it, or the first after it when
+    /// it came first (04 §5.1 "Printed photos").
+    private func matchPhotoCaptures() {
+        coverCandidates = [:]
+        let order = Dictionary(captures.enumerated().map { ($0.element.url.lastPathComponent, $0.offset) }, uniquingKeysWith: { first, _ in first })
+        // Each recipe with the capture it was read from.
+        let recipes = readings.enumerated().flatMap { index, reading in
+            reading.recipes.indices.map { (key: [index, $0], capture: order[reading.files.first ?? ""] ?? 0, recipe: reading.recipes[$0]) }
+        }
+        for (position, capture) in captures.enumerated() where capture.mode == .photo {
+            let page = capture.reading?.pageNumber
+            let earlier = recipes.filter { $0.capture < position }
+            let pointed = page.flatMap { page in
+                earlier.last { $0.recipe.crossReferences.contains { $0.kind == .photograph && $0.pages.contains(page) } }
+            }
+            guard let target = pointed ?? earlier.last ?? recipes.first(where: { $0.capture > position }) else { continue }
+            coverCandidates[target.key, default: []].append(capture.url)
+        }
+    }
+
+    /// The Photo captures for recipe `index` of the reading under way.
+    private func candidates(forRecipe index: Int) -> [URL] {
+        coverCandidates[[position, index]] ?? []
     }
 
     /// The pipeline off the main actor (Vision and the structurer take a second or two a page),
@@ -273,6 +486,7 @@ final class ScanSession {
             isSaving = true
             for index in model.recipes.indices {
                 let recipe = await ScanSaving.saveNew(model, recipe: index, book: book, reviewed: false, images: images, in: modelContext)
+                await ScanSaving.attachCoverCandidates(candidates(forRecipe: index), to: recipe, in: modelContext)
                 saved.append(SavedRecipe(recipe: recipe, reviewed: false))
             }
             isSaving = false
@@ -294,6 +508,7 @@ final class ScanSession {
         isSaving = true
         for index in review.recipes.indices where !review.recipes[index].isSkipped {
             let recipe = await ScanSaving.saveNew(review, recipe: index, book: book, reviewed: true, images: images, in: modelContext)
+            await ScanSaving.attachCoverCandidates(candidates(forRecipe: index), to: recipe, in: modelContext)
             saved.append(SavedRecipe(recipe: recipe, reviewed: true))
         }
         isSaving = false

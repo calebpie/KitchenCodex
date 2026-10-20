@@ -5,10 +5,11 @@ import SwiftData
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Recipes → Add → Scan Page (02 Flow B, 03 §3.5–3.6): From Photo (several pages at once, in order)
-/// or Files, the processing sheet with the pipeline's real stages, Which book? when the scan did not
-/// start from one, then review where it is forced and saving straight where it is not. The camera is
-/// slice 4's; until then the pages come from Photos and Files.
+/// Recipes → Add → Scan Page (02 Flow B, 03 §3.5–3.6): the camera on a device (it opens at once, its
+/// captures read as they are taken), From Photo (several pages at once, in order) or Files; the
+/// processing sheet with the pipeline's real stages; the book a barcode among the pages names, or
+/// Which book? when the scan did not start from one; then review where it is forced and saving
+/// straight where it is not. The Simulator has no camera, so there it offers From Photo and Files.
 struct ScanPageView: View {
     /// Called with the recipes saved when the sheet closes; Recipes opens one when there is one.
     var onFinish: ([Recipe]) -> Void
@@ -20,6 +21,9 @@ struct ScanPageView: View {
     @State private var isChoosingPhotos = false
     @State private var isChoosingFiles = false
     @State private var isConfirmingCancel = false
+    @State private var isShowingCamera = false
+    @State private var hasOpenedCamera = false
+    @State private var isCameraDenied = CameraAccess.isDenied
 
     init(book: Book? = nil, onFinish: @escaping ([Recipe]) -> Void) {
         self.onFinish = onFinish
@@ -48,7 +52,32 @@ struct ScanPageView: View {
             finish(session.saved.map(\.recipe))
         }
         .onAppear { session.modelContext = modelContext }
-        .onDisappear { session.cancel() }
+        // The camera's cover hides the sheet without closing it: its pages are being written.
+        .onDisappear { if !isShowingCamera { session.cancel() } }
+        // The camera opens with Scan Page on a device (02 Flow B step 2); Close comes back here.
+        .task {
+            guard !hasOpenedCamera, CameraAccess.isAvailable, !CameraAccess.isDenied else { return }
+            hasOpenedCamera = true
+            await openCamera()
+        }
+        .fullScreenCover(isPresented: $isShowingCamera) {
+            PageCameraView(session: session) {
+                isShowingCamera = false
+                Task { await session.finishCapturing() }
+            } onClose: {
+                isShowingCamera = false
+                session.discardCaptures()
+            }
+        }
+    }
+
+    /// Camera access on first use; turned off, Settings is the way back.
+    private func openCamera() async {
+        if await CameraAccess.request() {
+            isShowingCamera = true
+        } else {
+            isCameraDenied = true
+        }
     }
 
     private var title: String {
@@ -97,6 +126,23 @@ struct ScanPageView: View {
 
     private var choosing: some View {
         Form {
+            if CameraAccess.isAvailable {
+                Section {
+                    Button {
+                        Task { await openCamera() }
+                    } label: {
+                        choiceLabel("Camera", detail: "Photograph the pages; each is read as you go", systemImage: "camera")
+                    }
+                    .disabled(isCameraDenied)
+                } footer: {
+                    if isCameraDenied {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Camera access is off for Recipe Codex. Turn it on in Settings to scan with the camera.")
+                            Button("Open Settings") { CameraAccess.openSettings() }
+                        }
+                    }
+                }
+            }
             Section {
                 Button {
                     isChoosingPhotos = true
@@ -109,7 +155,7 @@ struct ScanPageView: View {
                     choiceLabel("Files", detail: "Photos of pages saved as image files", systemImage: "folder")
                 }
             } footer: {
-                Text("A cookbook page or a recipe card. A recipe that runs over a page turn: choose both pages, in order.")
+                Text("A cookbook page or a recipe card. A recipe that runs over a page turn: choose both pages, in order. A photo of the book's barcode among them names the book.")
             }
         }
     }
@@ -187,14 +233,21 @@ private struct ScanProcessingView: View {
         List {
             ForEach(session.progress) { page in
                 Section(session.progress.count > 1 ? "Photo \(page.id + 1) of \(session.progress.count)" : "") {
-                    stage("Checking the photo…", done: page.step > .checking, started: page.step >= .checking, result: page.quality.map(qualityLine))
-                    stage("Reading text…", done: page.step > .reading, started: page.step >= .reading, result: page.lines.map { $0 == 1 ? "1 line" : "\($0) lines" })
-                    if page.kind == nil || page.kind == .recipe {
-                        stage("Finding ingredients…", done: page.step == .done, started: page.step >= .structuring, result: page.step == .done ? count(page.ingredients, "ingredient") : nil)
-                        stage("Finding steps…", done: page.step == .done, started: page.step >= .structuring, result: page.step == .done ? count(page.steps, "step") + (page.recipes > 1 ? " · \(page.recipes) recipes" : "") : nil)
-                    } else if let kind = page.kind {
-                        Label("Not a recipe: \(kind.title.lowercased())", systemImage: "doc.text.magnifyingglass")
+                    if let isbn = page.isbn {
+                        Label("The book's barcode: ISBN \(isbn)", systemImage: "barcode")
                             .foregroundStyle(.secondary)
+                    } else if page.isPhoto {
+                        stage("A photo for a recipe…", done: page.step == .done, started: page.step >= .checking, result: page.step == .done ? "With its recipe" : nil)
+                    } else {
+                        stage("Checking the photo…", done: page.step > .checking, started: page.step >= .checking, result: page.quality.map(qualityLine))
+                        stage("Reading text…", done: page.step > .reading, started: page.step >= .reading, result: page.lines.map { $0 == 1 ? "1 line" : "\($0) lines" })
+                        if page.kind == nil || page.kind == .recipe {
+                            stage("Finding ingredients…", done: page.step == .done, started: page.step >= .structuring, result: page.step == .done ? count(page.ingredients, "ingredient") : nil)
+                            stage("Finding steps…", done: page.step == .done, started: page.step >= .structuring, result: page.step == .done ? count(page.steps, "step") + (page.recipes > 1 ? " · \(page.recipes) recipes" : "") : nil)
+                        } else if let kind = page.kind {
+                            Label("Not a recipe: \(kind.title.lowercased())", systemImage: "doc.text.magnifyingglass")
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
             }
@@ -329,7 +382,7 @@ private struct WhichBookView: View {
             Section {
                 Button("New Cookbook from Barcode", systemImage: "barcode.viewfinder") { isAddingBook = true }
             } footer: {
-                Text("A photo of the barcode on the back cover adds the book to your shelf.")
+                Text(ISBNScanner.isSupported ? "Scan the barcode on the back cover, or choose a photo of it, to add the book to your shelf." : "A photo of the barcode on the back cover adds the book to your shelf.")
             }
             Section {
                 Button("No Book", systemImage: "rectangle.portrait.on.rectangle.portrait.slash") { session.choose(nil) }
@@ -342,6 +395,17 @@ private struct WhichBookView: View {
         }) {
             AddCookbookView { book in addedBook = book }
         }
+        // A barcode among the pages for a book not on the shelf: its card (ux-notes row 65). Cancel
+        // leaves Which book? to answer.
+        .sheet(item: Binding { session.newBookISBN.map(PendingISBN.init) } set: { if $0 == nil { session.newBookISBN = nil } }, onDismiss: {
+            if let addedBook { session.addedBook(addedBook) }
+        }) { pending in
+            AddCookbookView(isbn: pending.id) { book in addedBook = book }
+        }
+    }
+
+    private struct PendingISBN: Identifiable {
+        let id: String
     }
 
     /// What was read, so the cook knows which book to pick: "“Roast Chicken” and 1 more · p. 12".
@@ -422,6 +486,11 @@ private struct ScanSummaryView: View {
 
     var body: some View {
         List {
+            if let book = session.barcodeBook {
+                Section {
+                    Label("\(book.displayTitle), named by its barcode", systemImage: "barcode")
+                }
+            }
             if !session.saved.isEmpty {
                 Section(session.saved.count == 1 ? "1 Recipe Saved" : "\(session.saved.count) Recipes Saved") {
                     ForEach(session.saved) { saved in

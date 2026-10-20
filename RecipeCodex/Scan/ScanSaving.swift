@@ -266,6 +266,26 @@ enum ScanSaving {
         }
     }
 
+    /// Photo-mode captures (04 §5.1 "Printed photos", ux-notes row 62): each kept on the recipe as a
+    /// cover candidate, and the first made the cover when the recipe has none. No question asked.
+    static func attachCoverCandidates(_ urls: [URL], to recipe: Recipe, in context: ModelContext) async {
+        guard !urls.isEmpty else { return }
+        for url in urls {
+            guard let file = try? Data(contentsOf: url),
+                  let photo = await ImageProcessing.jpeg(from: file, maxPixelSize: 2_400, quality: 0.85) else { continue }
+            let image = RecipeImage(role: .photo, imageData: photo)
+            context.insert(image)
+            image.recipe = recipe
+            if recipe.coverImageData == nil, let cover = await ImageProcessing.jpeg(from: photo, maxPixelSize: 900, quality: 0.8) {
+                image.caption = "Cover"
+                recipe.coverImageData = cover
+            } else {
+                image.caption = RecipeDraft.coverCandidateCaption
+            }
+        }
+        try? context.save()
+    }
+
     /// Printed photos the cook made step photos, cropped from the page and attached to their steps.
     private static func attachStepPhotos(_ model: ScanReviewModel, recipe index: Int, to recipe: Recipe, images: PageImages, in context: ModelContext) async {
         let review = model.recipes[index]

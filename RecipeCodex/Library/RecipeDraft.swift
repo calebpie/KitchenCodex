@@ -183,10 +183,15 @@ struct RecipeDraft: Equatable {
         }
     }
 
-    /// Only one cover is kept; scans and cook photos are untouched.
+    /// The caption of a camera Photo capture kept with a recipe for the cover choice (Phase 2 slice
+    /// 4's Photo mode); the cover itself is captioned "Cover".
+    static let coverCandidateCaption = "Cover candidate"
+
+    /// Only one cover is kept; scans, cook photos and the camera's cover candidates are untouched.
     private func removeCoverPhotos(of recipe: Recipe, in context: ModelContext) {
-        let photos = (recipe.images ?? []).filter { $0.role == .photo }
-        recipe.images = (recipe.images ?? []).filter { $0.role != .photo }
+        let isCover = { (image: RecipeImage) in image.role == .photo && image.caption != Self.coverCandidateCaption }
+        let photos = (recipe.images ?? []).filter(isCover)
+        recipe.images = (recipe.images ?? []).filter { !isCover($0) }
         for image in photos { context.delete(image) }
     }
 }

@@ -7,12 +7,14 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 /// Cookbooks → Add → Add Cookbook (Flow C steps 1–2, 03 §3.7), barcode first (04 §5.1 "Add
-/// Cookbook", ux-notes rows 47 and 48): a photo of the barcode on the back cover, from Photos or
-/// Files, is read for its ISBN, looked up, and the book confirmed on its card goes on the shelf
-/// with its cover. The live scanner sits first once the device can scan (slice 4); there is no
-/// typed ISBN and no title search. When nothing is found, or the card is wrong, the details can be
-/// entered by hand. Which book? opens it for a new book too.
+/// Cookbook", ux-notes rows 47 and 48): the barcode on the back cover, scanned live on a device or
+/// read from a photo or file, is looked up, and the book confirmed on its card goes on the shelf
+/// with its cover. There is no typed ISBN and no title search. When nothing is found, or the card is
+/// wrong, the details can be entered by hand. Which book? opens it for a new book too, and a scan
+/// whose photos include a new book's barcode opens it on that ISBN (ux-notes row 65).
 struct AddCookbookView: View {
+    /// An ISBN already read (a barcode among a scan's pages): looked up as the sheet opens.
+    var isbn: String? = nil
     /// The new book, or the one already on the shelf with that ISBN; the shelf opens it once the
     /// sheet has gone.
     var onAdd: (Book) -> Void
@@ -39,6 +41,8 @@ struct AddCookbookView: View {
     @State private var manualStart: BookDraft?
     @State private var isConfirmingDiscard = false
     @State private var isScanning = false
+    @State private var isCameraDenied = false
+    @State private var hasOfferedScanner = false
     @State private var isChoosingPhoto = false
     @State private var isChoosingFile = false
     @State private var photoItem: PhotosPickerItem?
@@ -109,6 +113,24 @@ struct AddCookbookView: View {
             read { try? await item.loadTransferable(type: Data.self) }
         }
         .onDisappear { work?.cancel() }
+        .task {
+            if let isbn, phase == .idle {
+                lookUp(isbn)
+            } else if isbn == nil, !hasOfferedScanner, ISBNScanner.isSupported, !CameraAccess.isDenied {
+                // The live scanner is the first way in on a device; Cancel leaves the photo choices.
+                hasOfferedScanner = true
+                await scan()
+            }
+        }
+    }
+
+    /// The live scanner, camera access asked the first time.
+    private func scan() async {
+        if await CameraAccess.request(), ISBNScanner.isAvailable {
+            isScanning = true
+        } else {
+            isCameraDenied = true
+        }
     }
 
     // MARK: - The barcode
@@ -116,16 +138,25 @@ struct AddCookbookView: View {
     private var barcodeForm: some View {
         Form {
             Section {
-                // The live scanner, once the device can scan (slice 4); never on the simulator.
-                if ISBNScanner.isAvailable {
-                    Button("Scan Barcode", systemImage: "barcode.viewfinder") { isScanning = true }
+                // The live scanner first on a device; never in the Simulator.
+                if ISBNScanner.isSupported {
+                    Button("Scan Barcode", systemImage: "barcode.viewfinder") { Task { await scan() } }
+                        .disabled(isCameraDenied)
                 }
                 Button("Choose Photo", systemImage: "photo") { isChoosingPhoto = true }
                 Button("Choose File", systemImage: "folder") { isChoosingFile = true }
             } header: {
                 Text("Barcode")
             } footer: {
-                Text("A photo of the barcode on the back cover. Recipe Codex reads the ISBN under it and finds the book.")
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(ISBNScanner.isSupported
+                         ? "Scan the barcode on the back cover, or choose a photo of it. Recipe Codex reads the ISBN under it and finds the book."
+                         : "A photo of the barcode on the back cover. Recipe Codex reads the ISBN under it and finds the book.")
+                    if isCameraDenied {
+                        Text("Camera access is off for Recipe Codex. Turn it on in Settings to scan, or choose a photo.")
+                        Button("Open Settings") { CameraAccess.openSettings() }
+                    }
+                }
             }
             .disabled(phase == .reading || isAdding)
 

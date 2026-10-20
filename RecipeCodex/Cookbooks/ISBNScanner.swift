@@ -4,19 +4,27 @@ import UIKit
 import Vision
 import VisionKit
 
-/// Add Cookbook's barcode scanner (Flow C step 1, 01 §2.3): VisionKit's `DataScannerViewController`
-/// reading EAN-13, the barcode an ISBN is printed as. The app has no camera usage description yet,
-/// and the camera refuses without one, so the scanner stays hidden until the Info dictionary
-/// carries `NSCameraUsageDescription` (phase2-plan "What Caleb supplies"); the simulator never
-/// shows it either, having no camera.
+/// Add Cookbook's live barcode scanner (Flow C step 1, 01 §2.3, 04 §5.1 "Add Cookbook"):
+/// VisionKit's `DataScannerViewController` reading EAN-13, the barcode an ISBN is printed as. It is
+/// the first way in on a device, for Add Cookbook and Which book?'s New Cookbook; the Simulator,
+/// which has no camera, never shows it and keeps Choose Photo and Choose File.
 enum ISBNScanner {
     /// Whether to offer the scanner: a camera usage description, then a device that can scan.
+    /// Access is asked when the cook first taps it (`CameraAccess.request()`).
     @MainActor
-    static var isAvailable: Bool {
+    static var isSupported: Bool {
+        #if targetEnvironment(simulator)
+        return false
+        #else
         // The description first, so the scanner is never touched without one.
         guard Bundle.main.object(forInfoDictionaryKey: "NSCameraUsageDescription") != nil else { return false }
-        return DataScannerViewController.isSupported && DataScannerViewController.isAvailable
+        return DataScannerViewController.isSupported
+        #endif
     }
+
+    /// Whether it can scan now: access granted and nothing restricting the camera.
+    @MainActor
+    static var isAvailable: Bool { isSupported && DataScannerViewController.isAvailable }
 }
 
 /// The scanner full screen with Cancel; the first barcode that reads as an ISBN ends it.
