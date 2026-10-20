@@ -61,11 +61,19 @@ public struct ParsedDuration: Hashable, Sendable, Codable {
 /// A duration found inside a longer sentence, with where it sits so the app can put a pill in
 /// its place.
 public struct DurationMention: Hashable, Sendable {
+    /// The whole mention, qualifying words included: "up to 2 days", "about 5 minutes more".
     public var range: Range<String.Index>
+    /// The number-and-unit run inside ``range``, which the pill covers while the qualifying words
+    /// around it stay as text: "2 days" in "up to 2 days", "5 minutes" in "about 5 minutes more".
+    /// A range's value is the whole range ("10–30 minutes", "between 8 and 10 minutes") and a
+    /// compound's the whole compound ("1 hr 15 min"); a mention with no qualifier is all value.
+    public var valueRange: Range<String.Index>
     public var duration: ParsedDuration
 
-    public init(range: Range<String.Index>, duration: ParsedDuration) {
+    /// A mention whose value is `valueRange`, or the whole of `range` when that is nil.
+    public init(range: Range<String.Index>, valueRange: Range<String.Index>? = nil, duration: ParsedDuration) {
         self.range = range
+        self.valueRange = valueRange ?? range
         self.duration = duration
     }
 
@@ -77,17 +85,20 @@ public struct DurationMention: Hashable, Sendable {
 ///
 /// Single values: "12 minutes", "12 min", "12 mins", "12m", "1 hour", "1 hr", "1 h", "90 seconds",
 /// "45 sec", "2 days"; fractions and decimals: "1½ hours", "1 1/2 hours", "1.5 hours", "½ hour";
-/// compounds: "1 hr 30 min", "1 hour and 30 minutes", "1h30", "1h30m", "1m30s", and "1:30 hours"
+/// compounds: "1 hr 30 min", "1 hour and 30 minutes", "1h30", "1h30m", "1m30s", "1 hr. 30 min."
+/// (a period after an abbreviated unit, when digits in a smaller unit follow), and "1:30 hours"
 /// or "2:30 minutes" when a time word follows the colon; words: "five minutes", "twenty-five
 /// minutes", "two and a half hours", "an hour", "a minute", "half an hour", "an hour and a half",
 /// "another minute"; adjectives: "a 20-minute rest", "a 20 minute rest"; and "overnight".
 /// Ranges keep both ends: "8–10 minutes", "8-10 min", "8 to 10 minutes", "5 or 6 minutes",
 /// "between 8 and 10 minutes", "1 to 1½ hours", "45 minutes to 1 hour", "a minute or two".
 ///
-/// Words that qualify the amount are part of the mention, so a pill replaces the whole run:
+/// Words that qualify the amount are part of the mention, so the app can quote them as written:
 /// "about 20 minutes", "at least an hour", "up to 2 days", "another 5 minutes", "5 more minutes",
-/// "10 minutes longer", "20 minutes or so". Prepositions are not: in "simmer for 20 minutes" the
-/// mention is "20 minutes".
+/// "10 minutes longer", "20 minutes or so". ``DurationMention/valueRange`` marks the number and
+/// unit inside ("2 days" in "up to 2 days"); a word between the two stays in it, as in "5 more
+/// minutes". Prepositions are not part of the mention: in "simmer for 20 minutes" it is
+/// "20 minutes".
 ///
 /// Like ``UnitParser`` and ``TemperatureParser`` it never guesses. A bare number is not a
 /// duration, nor is "a few minutes", "a couple of minutes" or "several hours". "2 C" is two cups.
@@ -131,7 +142,7 @@ public struct DurationParser: Hashable, Sendable, Codable {
         return ranges(of: compounded, in: text).map { atom in
             let parsed = ParsedDuration(lower: atom.lower, upper: atom.upper, originalText: String(text[atom.range]),
                                         lowerSpelling: atom.lowerSpelling, upperSpelling: atom.upperSpelling)
-            return DurationMention(range: atom.range, duration: parsed)
+            return DurationMention(range: atom.range, valueRange: atom.valueRange, duration: parsed)
         }
     }
 
@@ -140,6 +151,8 @@ public struct DurationParser: Hashable, Sendable, Codable {
     /// One duration term in the text, before compounds and two-sided ranges are joined.
     struct Atom {
         var range: Range<String.Index>
+        /// The number-and-unit run inside `range`, without the qualifying words around it.
+        var valueRange: Range<String.Index>
         var lower: CookingDuration
         var upper: CookingDuration?
         var lowerSpelling: ParsedDuration.Spelling
@@ -187,7 +200,7 @@ public struct DurationParser: Hashable, Sendable, Codable {
     static let rangeLead = #"(?:(?<leadWord>between|from)\s+)?(?<low>\#(number))(?<connector>\s*(?:[–—]|-(?!\d+/))\s*|\s+(?:to|or|and)\s+(?!a\s+(?:half|quarter)\b))"#
 
     /// A duration term: qualifiers, an optional low end, the number, the unit and trailing words.
-    static let termPattern = #"(?<prefix>(?:\#(qualifier)\s+){0,2})(?:\#(rangeLead))?(?<main>\#(number))(?<mid>\s+\#(midWord))?(?<unit>\#(unit))(?<trail>(?:\s+and\s+a\s+(?:half|quarter)(?![a-z]))?(?:\s+(?:more|longer|or\s+so)(?![a-z]))?)(?<orTwo>\s+or\s+two(?![\s-]*[a-z]))?"#
+    static let termPattern = #"(?<prefix>(?:\#(qualifier)\s+){0,2})(?:\#(rangeLead))?(?<main>\#(number))(?<mid>\s+\#(midWord))?(?<unit>\#(unit))(?<trail>(?<fraction>\s+and\s+a\s+(?:half|quarter)(?![a-z]))?(?:\s+(?:more|longer|or\s+so)(?![a-z]))?)(?<orTwo>\s+or\s+two(?![\s-]*[a-z]))?"#
 
     // `Regex` is not `Sendable`, but these are immutable once built and matching does not
     // mutate them, so sharing them across threads is safe.
@@ -245,14 +258,14 @@ public struct DurationParser: Hashable, Sendable, Codable {
                   let minutes = match.capture("minutes").flatMap(TemperatureParser.rational(fromDecimal:)) else { continue }
             let seconds = match.capture("seconds").flatMap(TemperatureParser.rational(fromDecimal:)) ?? .zero
             let total = CookingDuration(hours, .hours) + CookingDuration(minutes, .minutes) + CookingDuration(seconds, .seconds)
-            atoms.append(Atom(range: match.range, lower: total, lowerSpelling: .compound(.hours),
+            atoms.append(Atom(range: match.range, valueRange: match.range, lower: total, lowerSpelling: .compound(.hours),
                               largestUnit: .hours, smallestUnit: match.capture("seconds") == nil ? .minutes : .seconds))
         }
         for match in text.matches(of: compactMinutes) {
             guard let minutes = match.capture("minutes").flatMap(TemperatureParser.rational(fromDecimal:)),
                   let seconds = match.capture("seconds").flatMap(TemperatureParser.rational(fromDecimal:)) else { continue }
             let total = CookingDuration(minutes, .minutes) + CookingDuration(seconds, .seconds)
-            atoms.append(Atom(range: match.range, lower: total, lowerSpelling: .compound(.minutes),
+            atoms.append(Atom(range: match.range, valueRange: match.range, lower: total, lowerSpelling: .compound(.minutes),
                               largestUnit: .minutes, smallestUnit: .seconds))
         }
         for match in text.matches(of: clock) {
@@ -262,11 +275,11 @@ public struct DurationParser: Hashable, Sendable, Codable {
             let smaller: DurationUnit = unit == .hours ? .minutes : .seconds
             let total = CookingDuration(first, unit) + CookingDuration(second, smaller)
             guard total.seconds > .zero else { continue }
-            atoms.append(Atom(range: match.range, lower: total, lowerSpelling: .compound(unit),
+            atoms.append(Atom(range: match.range, valueRange: match.range, lower: total, lowerSpelling: .compound(unit),
                               largestUnit: unit, smallestUnit: smaller))
         }
         for match in text.matches(of: overnight) where isDuration(overnightAt: match.range, in: text) {
-            atoms.append(Atom(range: match.range, lower: .overnight, lowerSpelling: .overnight))
+            atoms.append(Atom(range: match.range, valueRange: match.range, lower: .overnight, lowerSpelling: .overnight))
         }
         // Earliest first; of two starting together the longer wins, and overlaps are dropped.
         atoms.sort {
@@ -294,15 +307,21 @@ public struct DurationParser: Hashable, Sendable, Codable {
         }
         var start = match.range.lowerBound
         var end = match.range.upperBound
+        // The value runs from the number through the unit and any "and a half"; the qualifiers
+        // before it and "more", "longer" or "or so" after it stay outside.
+        var valueStart = mainText.startIndex
+        var valueEnd = match.capture("fraction")?.endIndex ?? unitText.endIndex
         var lower = CookingDuration(value, unit)
         var upper: CookingDuration?
         if let low = match.capture("low") {
             let connector = match.capture("connector")?.trimmingCharacters(in: .whitespaces).lowercased() ?? ""
-            let leadWord = match.capture("leadWord")?.lowercased()
-            let allowed = connector != "and" || leadWord == "between"
+            let leadWord = match.capture("leadWord")
+            let allowed = connector != "and" || leadWord?.lowercased() == "between"
             if allowed, let lowValue = number(from: low), lowValue > .zero, lowValue < value {
                 lower = CookingDuration(lowValue, unit)
                 upper = CookingDuration(value, unit)
+                // A range's value is the whole range, "between" or "from" included.
+                valueStart = leadWord?.startIndex ?? low.startIndex
             } else {
                 // "8 and 10 minutes" without "between", or a low end that is not lower: the
                 // leading number is something else, and so are the qualifiers before it.
@@ -312,11 +331,12 @@ public struct DurationParser: Hashable, Sendable, Codable {
         if let orTwo = match.capture("orTwo") {
             if upper == nil, value == 1 {
                 upper = CookingDuration(2, unit)
+                valueEnd = orTwo.endIndex
             } else {
                 end = orTwo.startIndex
             }
         }
-        return Atom(range: start..<end, lower: lower, upper: upper,
+        return Atom(range: start..<end, valueRange: valueStart..<valueEnd, lower: lower, upper: upper,
                     lowerSpelling: .single(unit), upperSpelling: upper == nil ? nil : .single(unit),
                     largestUnit: unit, smallestUnit: unit)
     }
@@ -339,6 +359,7 @@ public struct DurationParser: Hashable, Sendable, Codable {
         for atom in atoms {
             if var previous = result.last, canCompound(previous, with: atom, in: text) {
                 previous.range = previous.range.lowerBound..<atom.range.upperBound
+                previous.valueRange = previous.valueRange.lowerBound..<atom.valueRange.upperBound
                 previous.lower = previous.lower + atom.lower
                 previous.lowerSpelling = .compound(previous.largestUnit ?? .hours)
                 previous.smallestUnit = atom.smallestUnit
@@ -354,13 +375,31 @@ public struct DurationParser: Hashable, Sendable, Codable {
         guard previous.upper == nil, next.upper == nil,
               let smallest = previous.smallestUnit, let largest = next.largestUnit, largest < smallest,
               case .single = next.lowerSpelling else { return false }
-        let glue = text[previous.range.upperBound..<next.range.lowerBound]
+        var glue = text[previous.range.upperBound..<next.range.lowerBound]
+        // "1 hr. 15 min.": the period is the abbreviation's, so it joins as a space would, but
+        // only before digits with no qualifier in front; "Cook 1 hr. About 15 min…" and "1 hr.
+        // A minute later…" start a new sentence.
+        if glue.first == ".", endsInAbbreviatedUnit(previous, in: text) {
+            guard next.valueRange.lowerBound == next.range.lowerBound,
+                  text[next.range].first?.isNumber == true else { return false }
+            glue = glue.dropFirst()
+        }
         guard glue.isEmpty || glue.wholeMatch(of: compoundGlue) != nil else { return false }
         // "between 1 hour and 30 minutes" is a range, however odd, not an hour and a half.
         if glue.lowercased().contains("and"), text[..<previous.range.lowerBound].firstMatch(of: rangeLeadWord) != nil {
             return false
         }
         return true
+    }
+
+    /// Unit words that a period may follow as an abbreviation's: "hr.", "min.", "secs.".
+    static let abbreviatedUnits: Set<String> = ["h", "hr", "hrs", "m", "min", "mins", "sec", "secs"]
+
+    /// Whether `atom` ends in an abbreviated unit word, as "1 hr" and "12m" do and "1 hour" and
+    /// "10 minutes more" do not.
+    static func endsInAbbreviatedUnit(_ atom: Atom, in text: String) -> Bool {
+        let word = text[atom.range].reversed().prefix(while: \.isLetter).reversed()
+        return abbreviatedUnits.contains(String(word).lowercased())
     }
 
     /// Two single values joined by a range connector become one range: "45 minutes to 1 hour",
@@ -388,7 +427,11 @@ public struct DurationParser: Hashable, Sendable, Codable {
         let isAnd = glue.lowercased().split(whereSeparator: \.isWhitespace).first == "and"
         if isAnd, leadWord?.capture("word")?.lowercased() != "between" { return nil }
         let start = leadWord?.range.lowerBound ?? low.range.lowerBound
-        return Atom(range: start..<high.range.upperBound, lower: low.lower, upper: high.lower,
+        // The value is the whole range, and "between" or "from" with it when the low end has no
+        // qualifier of its own between them.
+        let valueStart = low.valueRange.lowerBound == low.range.lowerBound ? start : low.valueRange.lowerBound
+        return Atom(range: start..<high.range.upperBound, valueRange: valueStart..<high.valueRange.upperBound,
+                    lower: low.lower, upper: high.lower,
                     lowerSpelling: low.lowerSpelling, upperSpelling: high.lowerSpelling,
                     largestUnit: low.largestUnit, smallestUnit: low.smallestUnit)
     }
