@@ -205,8 +205,9 @@ private struct FilterValuesList: View {
                         filter.toggle(value.id, of: kind, options: options)
                     } label: {
                         HStack {
+                            // The label color, not the button's tint; the checkmark carries the tint.
                             Text(value.name)
-                                .foregroundStyle(.primary)
+                                .foregroundStyle(Color.primary)
                             Spacer()
                             if isSelected {
                                 Image(systemName: "checkmark")
