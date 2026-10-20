@@ -318,6 +318,70 @@ struct IngredientNoteTests {
         #expect(parsed.quantity == Rational(5))
         #expect(parsed.unit == .fluidOunce)
     }
+
+    /// ux-notes row 58: amounts a cookbook writes as words, and the openings it sets before the
+    /// amount. Invented lines.
+    @Test(arguments: [
+        IngredientParserTests.Case(line: "Two large eggs", quantity: Rational(2), unit: nil, item: "large eggs"),
+        IngredientParserTests.Case(line: "One 3-pound chicken, patted dry", quantity: Rational(1), unit: nil, item: "3-pound chicken", preparation: "patted dry"),
+        IngredientParserTests.Case(line: "Twelve small shallots", quantity: Rational(12), unit: nil, item: "small shallots"),
+        IngredientParserTests.Case(line: "three cups whole milk", quantity: Rational(3), unit: .cup, item: "whole milk"),
+        IngredientParserTests.Case(line: "One and a half cups rolled oats", quantity: Rational(3, 2), unit: .cup, item: "rolled oats"),
+        IngredientParserTests.Case(line: "Two or three thyme sprigs", quantity: Rational(2), unit: nil, item: "thyme sprigs"),
+        IngredientParserTests.Case(line: "A dozen littleneck clams", quantity: Rational(12), unit: nil, item: "littleneck clams"),
+        IngredientParserTests.Case(line: "Two dozen quail eggs", quantity: Rational(24), unit: nil, item: "quail eggs"),
+        IngredientParserTests.Case(line: "1 dozen oysters", quantity: Rational(12), unit: nil, item: "oysters"),
+        IngredientParserTests.Case(line: "Half a lemon", quantity: Rational(1, 2), unit: nil, item: "lemon"),
+        IngredientParserTests.Case(line: "half an onion, thinly sliced", quantity: Rational(1, 2), unit: nil, item: "onion", preparation: "thinly sliced"),
+        IngredientParserTests.Case(line: "About 2 cups chicken stock", quantity: Rational(2), unit: .cup, item: "chicken stock"),
+        IngredientParserTests.Case(line: "about 1½ pounds small potatoes", quantity: Rational(3, 2), unit: .pound, item: "small potatoes"),
+        IngredientParserTests.Case(line: "About two tablespoons capers", quantity: Rational(2), unit: .tablespoon, item: "capers"),
+        IngredientParserTests.Case(line: "Zest of 1 lemon", quantity: Rational(1), unit: nil, item: "lemon", preparation: "zested"),
+        IngredientParserTests.Case(line: "Juice of 2 limes", quantity: Rational(2), unit: nil, item: "limes", preparation: "juiced"),
+        IngredientParserTests.Case(line: "Juice of ½ lemon", quantity: Rational(1, 2), unit: nil, item: "lemon", preparation: "juiced"),
+        IngredientParserTests.Case(line: "Zest and juice of 1 orange", quantity: Rational(1), unit: nil, item: "orange", preparation: "zested and juiced"),
+        IngredientParserTests.Case(line: "Finely grated zest of 2 lemons", quantity: Rational(2), unit: nil, item: "lemons", preparation: "finely grated zest"),
+        IngredientParserTests.Case(line: "Juice of about 2 lemons", quantity: Rational(2), unit: nil, item: "lemons", preparation: "juiced"),
+        IngredientParserTests.Case(line: "Juice of one lime", quantity: Rational(1), unit: nil, item: "lime", preparation: "juiced"),
+        // No amount after the opening: the line stays as written.
+        IngredientParserTests.Case(line: "Juice of the roasting pan", quantity: nil, unit: nil, item: "Juice of the roasting pan"),
+        IngredientParserTests.Case(line: "About the rice", quantity: nil, unit: nil, item: "About the rice"),
+        // A number word inside the item is not an amount, nor is "an" without a unit.
+        IngredientParserTests.Case(line: "Kosher salt for the two pans", quantity: nil, unit: nil, item: "Kosher salt for the two pans"),
+        IngredientParserTests.Case(line: "an onion", quantity: nil, unit: nil, item: "an onion"),
+    ])
+    func readsNumberWordsAndOpenings(_ expected: IngredientParserTests.Case) {
+        let parsed = IngredientParser.parse(expected.line)
+        #expect(parsed.quantity == expected.quantity)
+        #expect(parsed.unit == expected.unit)
+        #expect(parsed.item == expected.item)
+        #expect(parsed.preparation == expected.preparation)
+        #expect(parsed.rawText == expected.line)
+    }
+
+    @Test func anOpeningKeepsTheNoteAfterIt() {
+        let parsed = IngredientParser.parse("Juice of 1 lemon, about 3 tablespoons")
+        #expect(parsed.quantity == Rational(1))
+        #expect(parsed.item == "lemon")
+        #expect(parsed.preparation == "juiced")
+        #expect(parsed.note == "about 3 tablespoons")
+        #expect(parsed.noteForm == .clause)
+    }
+
+    @Test func numberWordsCountProduceInANote() {
+        let parsed = IngredientParser.parse("1/2 cup orange juice (from about three oranges)")
+        #expect(parsed.equivalent == ProduceEquivalent(count: Rational(3), item: "oranges"))
+    }
+
+    /// The scan rule stays (ux-notes row 58): no amount reads cleanly, an amount left unread asks.
+    @Test func scannedLinesAskForReviewOnlyWhenAnAmountWentUnread() {
+        for line in ["Two large eggs", "About 2 cups chicken stock", "Zest of 1 lemon", "Kosher salt", "Dijon mustard"] {
+            #expect(!PageLines.isUnparsed(line, parsed: IngredientParser.parse(line)), "\(line)")
+        }
+        // An OCR slip the parser can't read as an amount.
+        let slip = "I½ cups heavy cream"
+        #expect(PageLines.isUnparsed(slip, parsed: IngredientParser.parse(slip)))
+    }
 }
 
 @Suite("Step splitting")

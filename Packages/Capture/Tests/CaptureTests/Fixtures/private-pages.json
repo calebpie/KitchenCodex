@@ -2,7 +2,7 @@
   {"slug": "bouchon", "isbn": "9781579652395", "file": "IMG_1048.HEIC", "kind": "other", "gate": "sharp", "settled": true, "note": "ISBN barcode"},
   {"slug": "bouchon", "isbn": "9781579652395", "file": "IMG_1049.HEIC", "kind": "contents", "gate": "sharp", "settled": true, "note": "contents, first page; a photo on the facing page"},
   {"slug": "bouchon", "isbn": "9781579652395", "file": "IMG_1050.HEIC", "kind": "contents", "gate": "sharp", "settled": true, "note": "contents, second page; no page number read"},
-  {"slug": "bouchon", "isbn": "9781579652395", "file": "IMG_1051.HEIC", "kind": "recipe", "gate": "sharp", "page": 12, "recipes": [{"ingredients": 5, "steps": 5}], "settled": true, "note": "folio read from the foot strip; one amount is a number word, read unparsed"},
+  {"slug": "bouchon", "isbn": "9781579652395", "file": "IMG_1051.HEIC", "kind": "recipe", "gate": "sharp", "page": 12, "recipes": [{"ingredients": 5, "steps": 5}], "settled": true, "note": "folio read from the foot strip; one amount is a number word (read since slice 3)"},
   {"slug": "bouchon", "isbn": "9781579652395", "file": "IMG_1052.HEIC", "kind": "photo", "gate": "sharp", "settled": true, "note": "photo plate"},
   {"slug": "bouchon", "isbn": "9781579652395", "file": "IMG_1053.HEIC", "kind": "recipe", "gate": "sharp", "page": 6, "recipes": [{"ingredients": 9, "steps": 4}], "settled": true},
   {"slug": "bouchon", "isbn": "9781579652395", "file": "IMG_1054.HEIC", "kind": "recipe", "gate": "sharp", "page": 7, "recipes": [{"ingredients": 8, "steps": 7}], "settled": true},

@@ -277,7 +277,9 @@ struct PagePipelineTests {
         #expect(PageLines.ingredientText("11/2-inch piece of ginger") == "1 1/2-inch piece of ginger")
         #expect(PageLines.ingredientText("12 cloves garlic") == "12 cloves garlic")
         func unparsed(_ line: String) -> Bool { PageLines.isUnparsed(line, parsed: IngredientParser.parse(line)) }
-        #expect(unparsed("One 3-pound chicken"))
+        // Number words read as amounts since slice 3 (ux-notes row 58); a slip in the digits still asks.
+        #expect(!unparsed("One 3-pound chicken"))
+        #expect(unparsed("I½ cups heavy cream"))
         #expect(!unparsed("Kosher salt"))
         #expect(!unparsed("1 cup Chicken Stock (page 212)"))
         #expect(PageLines.ingredientShape("2 Grate the cheese over the top and serve at once") == .not)

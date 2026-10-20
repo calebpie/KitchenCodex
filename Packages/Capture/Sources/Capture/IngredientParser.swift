@@ -114,6 +114,9 @@ public enum IngredientParser {
             text.removeSubrange(range)
         }
 
+        // "About 2 cups", "Zest of 1 lemon", "Juice of 2 limes": an opening before the amount.
+        let opening = takeOpening(&text)
+
         var tokens = Tokens(text)
         var quantity = readQuantity(&tokens)
         var unit: CookingUnit?
@@ -137,6 +140,10 @@ public enum IngredientParser {
         if quantity != nil, let prep = preparation, let swapped = leadingPreparation(item, before: prep) {
             item = swapped.item
             preparation = swapped.preparation
+        }
+        // "Juice of 2 limes" reads "2 limes, juiced": the produce to buy, and what to do with it.
+        if let opening {
+            preparation = [opening, preparation].compactMap(\.self).joined(separator: ", ")
         }
         // Ounces of a liquid are fluid ounces, "fl" or not (04 §5.1 Liquid ounces).
         if unit == .ounce, LiquidIngredients.ouncesAreFluid(item: item, equivalent: equivalentUnit) {
@@ -218,13 +225,93 @@ public enum IngredientParser {
 
     // MARK: - Amount
 
+    /// Amounts written as words, as cookbooks set a count at the start of a line ("Two large eggs",
+    /// "One 3-pound chicken").
+    private static let numberWords: [String: Int] = [
+        "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8,
+        "nine": 9, "ten": 10, "eleven": 11, "twelve": 12, "fifteen": 15, "twenty": 20,
+    ]
+
+    private static func numberWord(_ token: String?) -> Int? {
+        token.flatMap { numberWords[$0.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: ","))] }
+    }
+
+    /// The openings a cookbook sets before the amount (ux-notes row 58): "About 2 cups" (dropped;
+    /// the line as written keeps it), "Zest of 1 lemon", "Juice of 2 limes", "Zest and juice of 1
+    /// orange", which read as the produce with its preparation ("1 lemon, zested"). Taken only when
+    /// an amount follows, so "Juice of the lemon" stays an item. Returns the preparation.
+    private static func takeOpening(_ text: inout String) -> String? {
+        let approximately = #"^(about|approximately|approx\.|roughly)\s+"#
+        let produce: [(pattern: String, preparation: String?)] = [
+            (#"^zest\s+and\s+juice\s+of\s+"#, "zested and juiced"),
+            (#"^juice\s+and\s+zest\s+of\s+"#, "juiced and zested"),
+            (#"^finely\s+grated\s+zest\s+of\s+"#, "finely grated zest"),
+            (#"^grated\s+zest\s+of\s+"#, "grated zest"),
+            (#"^zest\s+of\s+"#, "zested"),
+            (#"^juice\s+of\s+"#, "juiced"),
+        ]
+        var preparation: String?
+        // At most an opening and an "about" ("Juice of about 2 lemons").
+        for _ in 0..<2 {
+            var candidate: (rest: String, preparation: String?)?
+            let current = text
+            if let range = current.range(of: approximately, options: [.regularExpression, .caseInsensitive]) {
+                candidate = (String(current[range.upperBound...]), nil)
+            } else if preparation == nil {
+                for entry in produce {
+                    guard let range = current.range(of: entry.pattern, options: [.regularExpression, .caseInsensitive]) else { continue }
+                    candidate = (String(current[range.upperBound...]), entry.preparation)
+                    break
+                }
+            }
+            guard let candidate else { break }
+            // An "about" may stand between an opening and its amount.
+            let amount = candidate.rest.replacingOccurrences(of: approximately, with: "", options: [.regularExpression, .caseInsensitive])
+            var probe = Tokens(amount)
+            guard readQuantity(&probe) != nil else { break }
+            text = candidate.rest
+            preparation = preparation ?? candidate.preparation
+        }
+        return preparation
+    }
+
     private static func readQuantity(_ tokens: inout Tokens) -> Rational? {
         guard let first = tokens.peek() else { return nil }
+        let word = first.lowercased()
+
+        // "a dozen eggs", "half a lemon", "half an onion".
+        if ["a", "an"].contains(word), tokens.peek(1)?.lowercased() == "dozen" {
+            tokens.advance(2)
+            return Rational(12)
+        }
+        if word == "half", let next = tokens.peek(1)?.lowercased(), ["a", "an"].contains(next) {
+            tokens.advance(2)
+            return Rational(1, 2)
+        }
 
         // "a pinch", "an 8 oz" — only when a unit follows, so "an onion" stays an item.
-        if ["a", "an"].contains(first.lowercased()), let next = tokens.peek(1), unit(for: next) != nil {
+        if ["a", "an"].contains(word), let next = tokens.peek(1), unit(for: next) != nil {
             tokens.advance()
             return .one
+        }
+
+        // "Two large eggs", "one and a half cups", "two dozen", "two or three cloves".
+        if let count = numberWord(first) {
+            tokens.advance()
+            var value = Rational(count)
+            if tokens.peek()?.lowercased() == "and", tokens.peek(1)?.lowercased() == "a", tokens.peek(2)?.lowercased() == "half" {
+                tokens.advance(3)
+                value = value + Rational(1, 2)
+            }
+            if tokens.peek()?.lowercased() == "dozen" {
+                tokens.advance()
+                value = value * Rational(12)
+            }
+            if let joiner = tokens.peek()?.lowercased(), ["-", "to", "or"].contains(joiner),
+               numberWord(tokens.peek(1)) != nil || tokens.peek(1).flatMap(number) != nil {
+                tokens.advance(2)
+            }
+            return value
         }
 
         // "2-3" or "1-1/2" in one token.
@@ -251,6 +338,11 @@ public enum IngredientParser {
             if let next = tokens.peek(), next.contains("/"), let fraction = number(next), fraction < .one {
                 tokens.advance()
             }
+        }
+        // "2 dozen clams".
+        if tokens.peek()?.lowercased() == "dozen" {
+            tokens.advance()
+            value = value * Rational(12)
         }
         return value
     }
