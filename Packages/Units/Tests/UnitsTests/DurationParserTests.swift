@@ -401,6 +401,125 @@ struct DurationParserTests {
         }
     }
 
+    // MARK: - The value inside a mention
+
+    @Test(arguments: [
+        ("Salt up to 2 days ahead.", "up to 2 days", "2 days"),
+        ("Marinate at least 6 hours.", "at least 6 hours", "6 hours"),
+        ("Cook another 10–30 minutes.", "another 10–30 minutes", "10–30 minutes"),
+        ("Cook another 10 to 30 minutes.", "another 10 to 30 minutes", "10 to 30 minutes"),
+        ("Roast 30 to 40 minutes longer.", "30 to 40 minutes longer", "30 to 40 minutes"),
+        ("Simmer about 5 minutes more.", "about 5 minutes more", "5 minutes"),
+        ("Rest 5 minutes or so.", "5 minutes or so", "5 minutes"),
+        ("Rest about 8–10 minutes.", "about 8–10 minutes", "8–10 minutes"),
+        ("Rest for a good 20 minutes.", "a good 20 minutes", "20 minutes"),
+        ("Cook for at least another 10 minutes.", "at least another 10 minutes", "10 minutes"),
+        ("Simmer about 2 hours and a half.", "about 2 hours and a half", "2 hours and a half"),
+        ("Bake 1 hr 15 min.", "1 hr 15 min", "1 hr 15 min"),
+        ("Braise 1 hour and 15 minutes.", "1 hour and 15 minutes", "1 hour and 15 minutes"),
+        ("Bake about 1 hour 15 minutes.", "about 1 hour 15 minutes", "1 hour 15 minutes"),
+        ("Bake 1 hour 15 minutes longer.", "1 hour 15 minutes longer", "1 hour 15 minutes"),
+        ("Simmer between 8 and 10 minutes.", "between 8 and 10 minutes", "between 8 and 10 minutes"),
+        ("Rest 45 minutes to 1 hour longer.", "45 minutes to 1 hour longer", "45 minutes to 1 hour"),
+        ("Rest from about 45 minutes to 1 hour.", "from about 45 minutes to 1 hour", "45 minutes to 1 hour"),
+        ("Chill at least an hour or up to 2 days.", "at least an hour or up to 2 days", "an hour or up to 2 days"),
+        ("Stir for a minute or two.", "a minute or two", "a minute or two"),
+        ("Cook 5 more minutes.", "5 more minutes", "5 more minutes"),
+        ("Chill overnight.", "overnight", "overnight"),
+        ("Proof 8 hours or overnight.", "8 hours or overnight", "8 hours or overnight"),
+        ("Braise 1:30 hours.", "1:30 hours", "1:30 hours"),
+        ("Bake 1h30.", "1h30", "1h30"),
+        ("Simmer 20 minutes.", "20 minutes", "20 minutes"),
+    ] as [(String, String, String)])
+    func valueRangeCoversTheNumberAndUnit(text: String, mentionText: String, valueText: String) throws {
+        let mentions = DurationParser.mentions(in: text)
+        #expect(mentions.count == 1)
+        let mention = try #require(mentions.first)
+        #expect(String(text[mention.range]) == mentionText, "the mention keeps its qualifiers")
+        #expect(mention.originalText == mentionText)
+        #expect(String(text[mention.valueRange]) == valueText)
+        #expect(mention.range.lowerBound <= mention.valueRange.lowerBound)
+        #expect(mention.valueRange.upperBound <= mention.range.upperBound)
+    }
+
+    @Test func aMentionWithNoQualifierIsAllValue() {
+        let text = "Rest 12 minutes, bake 1 hr 30 min, then 1h30, 8–10 minutes, 45 minutes to 1 hour, "
+            + "an hour or two, a 20-minute rest, 1:30 hours, 2 hours and a half, and chill overnight."
+        let mentions = DurationParser.mentions(in: text)
+        #expect(mentions.map { String(text[$0.range]) } == [
+            "12 minutes", "1 hr 30 min", "1h30", "8–10 minutes", "45 minutes to 1 hour",
+            "an hour or two", "20-minute", "1:30 hours", "2 hours and a half", "overnight",
+        ])
+        for mention in mentions {
+            #expect(mention.valueRange == mention.range, Comment(rawValue: String(text[mention.range])))
+        }
+    }
+
+    @Test func aMentionMadeInCodeIsAllValueUnlessToldOtherwise() throws {
+        let text = "about 20 minutes"
+        let duration = try #require(DurationParser.parse(text))
+        let whole = text.startIndex..<text.endIndex
+        #expect(DurationMention(range: whole, duration: duration).valueRange == whole)
+        let value = try #require(text.range(of: "20 minutes"))
+        #expect(DurationMention(range: whole, valueRange: value, duration: duration).valueRange == value)
+    }
+
+    @Test func pillsCoverTheValueAndLeaveTheQualifiersAsText() {
+        let text = "Salt up to 2 days ahead. Marinate at least 6 hours, cook another 10–30 minutes, "
+            + "then 30 to 40 minutes longer, and rest about 5 minutes more."
+        var rendered = text
+        for mention in DurationParser.mentions(in: text).reversed() {
+            rendered.replaceSubrange(mention.valueRange, with: "[\(mention.duration.formatted())]")
+        }
+        #expect(rendered == "Salt up to [2 days] ahead. Marinate at least [6 hr], cook another [10–30 min], "
+            + "then [30–40 min] longer, and rest about [5 min] more.")
+    }
+
+    // MARK: - Compounds written with periods
+
+    @Test(arguments: [
+        ("Cook 1 hr. 15 min. at 300°F.", "1 hr. 15 min", CookingDuration(minutes: 75), "1 hr 15 min", "1 hour 15 minutes"),
+        ("Braise 2 hrs. 30 mins. covered.", "2 hrs. 30 mins", CookingDuration(minutes: 150), "2 hr 30 min", "2 hours 30 minutes"),
+        ("Cook 1 hr. and 15 min. at 300°F.", "1 hr. and 15 min", CookingDuration(minutes: 75), "1 hr 15 min", "1 hour 15 minutes"),
+        ("Whisk 1 min. 30 sec. until pale.", "1 min. 30 sec", CookingDuration(seconds: 90), "1 min 30 sec", "1 minute 30 seconds"),
+        ("Smoke 2 hrs. 15 min. 30 sec. exactly.", "2 hrs. 15 min. 30 sec", CookingDuration(seconds: 8130),
+         "2 hr 15 min 30 sec", "2 hours 15 minutes 30 seconds"),
+        ("Bake about 1 hr. 15 min. in all.", "about 1 hr. 15 min", CookingDuration(minutes: 75), "1 hr 15 min", "1 hour 15 minutes"),
+    ] as [(String, String, CookingDuration, String, String)])
+    func aPeriodAfterAnAbbreviatedUnitStillCompounds(text: String, mentionText: String, duration: CookingDuration,
+                                                     abbreviated: String, full: String) throws {
+        let mentions = DurationParser.mentions(in: text)
+        #expect(mentions.count == 1)
+        let mention = try #require(mentions.first)
+        #expect(String(text[mention.range]) == mentionText, "the final period stays outside")
+        #expect(mention.duration.lower == duration)
+        #expect(mention.duration.upper == nil)
+        #expect(mention.duration.formatted(style: .abbreviated) == abbreviated)
+        #expect(mention.duration.formatted(style: .full) == full)
+        #expect(String(text[mention.valueRange]) == mentionText.replacingOccurrences(of: "about ", with: ""))
+    }
+
+    @Test func periodCompoundsParseAlone() {
+        #expect(DurationParser.parse("1 hr. 15 min.")?.lower == CookingDuration(minutes: 75))
+        #expect(DurationParser.parse("1 hr. 15 min.")?.originalText == "1 hr. 15 min")
+        #expect(DurationParser.parse("2 hrs. 30 mins.")?.formatted() == "2 hr 30 min")
+    }
+
+    @Test(arguments: [
+        ("Cook 1 hr. Then stir for 15 min.", ["1 hr", "15 min"]),
+        ("Smoke 1 hr. 15 lb of brisket feeds a crowd.", ["1 hr"]),
+        ("Cook 1 hr. About 15 min before the end, add the peas.", ["1 hr", "About 15 min"]),
+        ("Rest 1 hr. A minute before serving, slice.", ["1 hr", "A minute"]),
+        ("Rest 1 hr. Fifteen minutes before serving, slice.", ["1 hr", "Fifteen minutes"]),
+        ("Rest 1 hour. 15 minutes before serving, slice.", ["1 hour", "15 minutes"]),
+        ("Bake 15 min. 1 hr later, glaze.", ["15 min", "1 hr"]),
+        ("Simmer 10 min. 5 min more if needed.", ["10 min", "5 min more"]),
+        ("Bake 1 hr. 15–20 min. more if needed.", ["1 hr", "15–20 min"]),
+    ] as [(String, [String])])
+    func aPeriodThatEndsASentenceDoesNotCompound(text: String, mentions expected: [String]) {
+        #expect(DurationParser.mentions(in: text).map { String(text[$0.range]) } == expected)
+    }
+
     // MARK: - Formatting
 
     @Test(arguments: [
