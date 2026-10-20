@@ -95,7 +95,7 @@ Each slice follows the Phase 1 pattern: a brief with groups and a verification l
 
 ### Slice 8 — Accuracy, cover selection, PDF import, and the exit
 
-- **Accuracy pass**: the harness's report against the full fixture set; prompt and heuristic iteration until the review step averages under a minute per recipe (04 §2); the image-input second pass if the stall risk shows (04 §6). The pass replays the phone's blocks from the Read Fixtures report in the harness and measures on the phone (04 §5.1 "Device readings"), IMG_1051's split title and misfiled ingredient lines first; a bilingual title's dash when both names stay (row 69).
+- **Accuracy pass**: the harness's report against the full fixture set; prompt and heuristic iteration until the review step averages under a minute per recipe (04 §2); the image-input second pass if the stall risk shows (04 §6). The pass replays the phone's blocks from the Read Fixtures report in the harness and measures on the phone (04 §5.1 "Device readings"), IMG_1051's split title and misfiled ingredient lines first; a bilingual title's dash when both names stay (row 69). First device timing (Oct 20, ux-notes row 64): about 1.6 s a photo to read on the iPhone 17 Pro, and 15 s to review and fix the hardest page, well under the target.
 - **Cover selection** (`CalculateImageAestheticScoresRequest` over a recipe's images) and **PDF and photo-library import** through the same pipeline.
 - **Exit**: the exit book captured end to end on the device by Caleb; the notes end with the Phase 2 exit checklist.
 
