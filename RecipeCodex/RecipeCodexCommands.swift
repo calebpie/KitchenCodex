@@ -8,7 +8,8 @@ struct LibraryPageCommands {
     var layout: Binding<RecipeLayout>
     /// The recipes view with recipes in it, where Grid, List and Filter apply.
     var showsRecipes: Bool
-    var filterItems: RecipeFilterMenuItems
+    /// Opens the Filter list, as the toolbar's Filter does (ux-notes row 41).
+    var showFilter: () -> Void
 }
 
 extension FocusedValues {
@@ -19,7 +20,7 @@ extension FocusedValues {
 /// The iPad menu bar and hardware-keyboard shortcuts for what Phase 1 has (03 §4 Menu bar and
 /// keyboard); items for features that haven't shipped are left out, not disabled (04 §5.1 Add menu).
 /// File starts a recipe from any tab, on the Recipes page. View acts on the Recipes page while it
-/// is on screen and is disabled otherwise. Search (⌘F) selects the search tab and starts the search
+/// is on screen and is disabled otherwise; its Filter… opens the Filter list. Search (⌘F) selects the search tab and starts the search
 /// (`AppRouter.openSearch()`).
 struct RecipeCodexCommands: Commands {
     @FocusedValue(AppRouter.self) private var router
@@ -54,10 +55,8 @@ struct RecipeCodexCommands: Commands {
             .pickerStyle(.inline)
             .disabled(page?.showsRecipes != true)
 
-            Menu("Filter") {
-                page?.filterItems
-            }
-            .disabled(page?.showsRecipes != true)
+            Button("Filter…") { page?.showFilter() }
+                .disabled(page?.showsRecipes != true)
 
             Divider()
             Button("Search") { router?.openSearch() }

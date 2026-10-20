@@ -41,6 +41,8 @@ struct RecipesView: View {
     @AppStorage("recipes.groupBy") private var grouping: RecipeGrouping = .course
     @AppStorage("books.sort") private var bookSort: BookSort = .title
     @State private var filter = RecipeFilter()
+    /// The Filter list: a popover from the Filter button on iPad, a sheet on iPhone.
+    @State private var isShowingFilter = false
     @State private var isAddingRecipe = false
     @State private var isImportingFromWeb = false
     @State private var isImportingLibrary = false
@@ -221,13 +223,13 @@ struct RecipesView: View {
             },
             layout: $layout,
             showsRecipes: activeView == .recipes && !allRecipes.isEmpty,
-            filterItems: filterItems
+            showFilter: { isShowingFilter = true }
         )
     }
 
     /// Starts what the File menu asked for, unless one of this page's sheets is already up.
     private func start(_ request: LibraryRequest) {
-        guard !isAddingRecipe, !isImportingFromWeb, !isImportingLibrary, !isAddingCookbook else { return }
+        guard !isAddingRecipe, !isImportingFromWeb, !isImportingLibrary, !isAddingCookbook, !isShowingFilter else { return }
         switch request {
         case .enterManually: isAddingRecipe = true
         case .importFromWeb: isImportingFromWeb = true
@@ -331,52 +333,37 @@ struct RecipesView: View {
         return RecipeCourse.options(including: allRecipes).filter(used.contains)
     }
 
-    /// One token per active filter, each removing only itself.
+    /// One token per active kind, reading the kind and its selection ("Course: Main, Side"), each
+    /// removing only its kind (04 §5.1 Recipes filters).
     private var filterTokens: [FilterTokens.Token] {
-        var tokens: [FilterTokens.Token] = []
-        for course in filterCourses where filter.courses.contains(course) {
-            tokens.append(.init(id: "course:\(course)", title: course) { filter.courses.remove(course) })
+        let options = filterOptions
+        return RecipeFilterKind.allCases.compactMap { kind in
+            filter.token(for: kind, options: options).map { title in
+                FilterTokens.Token(id: kind.rawValue, title: title) { filter.clear(kind) }
+            }
         }
-        if filter.cooked != .any {
-            tokens.append(.init(id: "cooked", title: filter.cooked.title) { filter.cooked = .any })
-        }
-        if filter.favorites {
-            tokens.append(.init(id: "favorites", title: "Favorites") { filter.favorites = false })
-        }
-        if filter.needsReview {
-            tokens.append(.init(id: "needsReview", title: "Needs a Look") { filter.needsReview = false })
-        }
-        if let id = filter.collection {
-            let name = collections.first { $0.persistentModelID == id }?.name ?? "Collection"
-            tokens.append(.init(id: "collection", title: name) { filter.collection = nil })
-        }
-        if let id = filter.book {
-            let title = books.first { $0.persistentModelID == id }?.title ?? "Cookbook"
-            tokens.append(.init(id: "book", title: title) { filter.book = nil })
-        }
-        if let id = filter.tag {
-            let name = tags.first { $0.persistentModelID == id }?.name ?? "Tag"
-            tokens.append(.init(id: "tag", title: name) { filter.tag = nil })
-        }
-        return tokens
     }
 
-    /// Filter (04 §5.1 Recipes filters): checkable sections; the menu closes after each choice, as
-    /// menus do. The View menu's Filter holds the same items.
-    private var filterMenu: some View {
-        Menu {
-            filterItems
+    /// Filter (04 §5.1 Recipes filters, ux-notes row 41): the funnel, tinted while a filter is
+    /// active, opening the Filter list, a popover on iPad that adapts to a sheet on iPhone.
+    private var filterButton: some View {
+        Button {
+            isShowingFilter = true
         } label: {
             Label("Filter", systemImage: filter.isActive ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
         }
         .tint(filter.isActive ? .accentColor : nil)
         .accessibilityValue(filter.isActive ? "\(filterTokens.count) active" : "None")
+        .popover(isPresented: $isShowingFilter) {
+            RecipeFilterList(filter: $filter, options: filterOptions)
+                .frame(minWidth: isWide ? 340 : nil, idealWidth: isWide ? 360 : nil, minHeight: isWide ? 420 : nil, idealHeight: isWide ? 480 : nil)
+                .presentationDetents([.medium, .large])
+        }
     }
 
-    /// The Filter menu's sections. Collections are sidebar tabs on iPad, so the section is iPhone only.
-    private var filterItems: RecipeFilterMenuItems {
-        RecipeFilterMenuItems(
-            filter: $filter,
+    /// What the Filter list offers. Collections are sidebar tabs on iPad, so the kind is iPhone only.
+    private var filterOptions: RecipeFilterOptions {
+        RecipeFilterOptions(
             courses: filterCourses,
             collections: isWide ? [] : collections.map { ($0.persistentModelID, $0.name) },
             books: books.map { ($0.persistentModelID, $0.displayTitle) },
@@ -423,7 +410,7 @@ struct RecipesView: View {
                 }
             }
             ToolbarItem(placement: .primaryAction) {
-                filterMenu
+                filterButton
             }
             // Primary placement, not .secondaryAction: the latter nests this menu inside the
             // system overflow menu, so More would open a menu holding only "More".
@@ -882,68 +869,7 @@ private struct RecipeRowDragSource: ViewModifier {
     }
 }
 
-/// The Filter menu's checkable sections (04 §5.1 Recipes filters), shared by the toolbar's Filter
-/// and the menu bar's View → Filter: Course (several), Cooked, Favorites and Needs a Look, then a
-/// submenu each for Collection, Cookbook and Tag when there are any, and Clear Filters.
-struct RecipeFilterMenuItems: View {
-    @Binding var filter: RecipeFilter
-    /// Courses the library uses, in the standard order.
-    let courses: [String]
-    /// Empty on iPad, where collections are sidebar tabs.
-    let collections: [(PersistentIdentifier, String)]
-    let books: [(PersistentIdentifier, String)]
-    let tags: [(PersistentIdentifier, String)]
-
-    var body: some View {
-        if !courses.isEmpty {
-            Section("Course") {
-                ForEach(courses, id: \.self) { course in
-                    Toggle(course, isOn: Binding {
-                        filter.courses.contains(course)
-                    } set: { isOn in
-                        if isOn { filter.courses.insert(course) } else { filter.courses.remove(course) }
-                    })
-                }
-            }
-        }
-        Section("Cooked") {
-            ForEach([CookedFilter.neverCooked, .cooked]) { option in
-                Toggle(option.title, isOn: Binding { filter.cooked == option } set: { filter.cooked = $0 ? option : .any })
-            }
-        }
-        Section {
-            Toggle("Favorites", systemImage: "heart", isOn: $filter.favorites)
-            Toggle("Needs a Look", systemImage: "exclamationmark.bubble", isOn: $filter.needsReview)
-        }
-        if !collections.isEmpty {
-            submenu("Collection", systemImage: "rectangle.stack", items: collections, selection: $filter.collection)
-        }
-        if !books.isEmpty {
-            submenu("Cookbook", systemImage: "book", items: books, selection: $filter.book)
-        }
-        if !tags.isEmpty {
-            submenu("Tag", systemImage: "tag", items: tags, selection: $filter.tag)
-        }
-        if filter.isActive {
-            Section {
-                Button("Clear Filters", systemImage: "xmark.circle") { filter = RecipeFilter() }
-            }
-        }
-    }
-
-    /// A submenu with one checkable item per collection, cookbook or tag; checking another replaces it.
-    private func submenu(_ title: String, systemImage: String, items: [(PersistentIdentifier, String)], selection: Binding<PersistentIdentifier?>) -> some View {
-        Menu {
-            ForEach(items, id: \.0) { id, name in
-                Toggle(name, isOn: Binding { selection.wrappedValue == id } set: { selection.wrappedValue = $0 ? id : nil })
-            }
-        } label: {
-            Label(title, systemImage: systemImage)
-        }
-    }
-}
-
-/// The active filters as removable tokens, one per filter, and Clear, scrolling with the content
+/// The active filters as removable tokens, one per kind, and Clear, scrolling with the content
 /// (04 §5.1 Recipes filters). Never shown while nothing is filtered.
 private struct FilterTokens: View {
     struct Token: Identifiable {
