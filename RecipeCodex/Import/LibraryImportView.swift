@@ -43,15 +43,20 @@ struct LibraryImportView: View {
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
+                        // Escape stops an import, cancels the sheet, or closes the summary (03 §4,
+                        // ux-notes row 43).
                         if isImporting {
                             Button("Stop", role: .cancel) { work?.cancel() }
+                                .keyboardShortcut(.cancelAction)
                         } else if !isFinished {
                             Button(role: .cancel) { dismiss() }
+                                .keyboardShortcut(.cancelAction)
                         }
                     }
                     ToolbarItem(placement: .confirmationAction) {
                         if isFinished {
                             Button("Done", role: .confirm) { dismiss() }
+                                .keyboardShortcut(.cancelAction)
                         }
                     }
                 }

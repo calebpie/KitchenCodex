@@ -105,6 +105,7 @@ struct StepPhotoViewer: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done", systemImage: "xmark") { dismiss() }
+                        .keyboardShortcut(.cancelAction)
                 }
             }
             .toolbarBackgroundVisibility(.hidden, for: .navigationBar)

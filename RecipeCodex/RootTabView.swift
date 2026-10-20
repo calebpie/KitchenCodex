@@ -168,9 +168,12 @@ struct RootTabView: View {
             .padding(.bottom, 8)
         }
         .onChange(of: router.selectedTab) { previous, selected in
-            // Search opens on the scope of the tab the cook came from.
+            // Search opens on the scope of the tab the cook came from. Chosen in the iPad sidebar,
+            // where the system shows it without starting the search, it focuses the field as ⌘F
+            // does (ux-notes row 45); the iPhone's bubble starts the search itself.
             if selected == .search, previous != .search {
                 router.searchScope = SearchScope(origin: previous)
+                if isWide { router.isSearchFieldRequested = true }
             }
             router.selectionDidChange()
         }

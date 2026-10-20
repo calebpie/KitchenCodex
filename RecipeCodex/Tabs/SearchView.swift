@@ -101,10 +101,11 @@ struct SearchView: View {
                 }
             }
             .onSubmit(of: .search) { remember(query) }
-            // ⌘F (RecipeCodexCommands): on iPhone selecting the tab starts the search, scopes and
-            // all; in the iPad sidebar it shows Search without starting it, so there the command
-            // also focuses the field, ready to type. Not an `isPresented` binding, which kept the
-            // scope bar from appearing when the iPhone's bubble was tapped.
+            // ⌘F (RecipeCodexCommands) and choosing Search in the iPad sidebar (RootTabView): on
+            // iPhone selecting the tab starts the search, scopes and all; in the iPad sidebar it
+            // shows Search without starting it, so there both focus the field, ready to type. Not
+            // an `isPresented` binding, which kept the scope bar from appearing when the iPhone's
+            // bubble was tapped.
             .onChange(of: router.isSearchFieldRequested, initial: true) { _, isRequested in
                 guard isRequested else { return }
                 router.isSearchFieldRequested = false

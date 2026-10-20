@@ -131,6 +131,8 @@ struct RecipeEditorView: View {
                     Button(role: .cancel) {
                         if hasChanges { isConfirmingDiscard = true } else { dismiss() }
                     }
+                    // Escape cancels the sheet (03 §4, ux-notes row 43).
+                    .keyboardShortcut(.cancelAction)
                     .confirmationDialog("Discard changes?", isPresented: $isConfirmingDiscard, titleVisibility: .visible) {
                         Button("Discard Changes", role: .destructive) { dismiss() }
                         Button("Keep Editing", role: .cancel) {}

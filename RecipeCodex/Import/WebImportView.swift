@@ -85,6 +85,8 @@ struct WebImportView: View {
             Button(role: .cancel) {
                 if phase == .preview { isConfirmingDiscard = true } else { dismiss() }
             }
+            // Escape cancels the sheet (03 §4, ux-notes row 43).
+            .keyboardShortcut(.cancelAction)
             .confirmationDialog("Discard this recipe?", isPresented: $isConfirmingDiscard, titleVisibility: .visible) {
                 Button("Discard", role: .destructive) { dismiss() }
                 Button("Keep Editing", role: .cancel) {}
