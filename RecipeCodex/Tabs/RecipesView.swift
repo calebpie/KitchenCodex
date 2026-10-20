@@ -8,8 +8,7 @@ enum LibraryRoute: Hashable {
     case recipe(PersistentIdentifier)
     case needsReview
     case collections
-    /// A book's detail (03 §3.7), pushed over the shelf as a recipe is over the grid. Nothing
-    /// pushes it yet: books arrive with Phase 2.
+    /// A book's detail (03 §3.7), pushed over the shelf as a recipe is over the grid.
     case book(PersistentIdentifier)
 }
 
@@ -40,10 +39,14 @@ struct RecipesView: View {
     @AppStorage("recipes.layout") private var layout: RecipeLayout = .grid
     @AppStorage("recipes.sort") private var sort: RecipeSort = .title
     @AppStorage("recipes.groupBy") private var grouping: RecipeGrouping = .course
+    @AppStorage("books.sort") private var bookSort: BookSort = .title
     @State private var filter = RecipeFilter()
     @State private var isAddingRecipe = false
     @State private var isImportingFromWeb = false
     @State private var isImportingLibrary = false
+    @State private var isAddingCookbook = false
+    /// Set by Add Cookbook; its detail opens once the sheet has gone.
+    @State private var addedBook: Book?
     /// What is pushed over the grid. One path for both widths, so an open recipe stays open when
     /// an iPad window changes width.
     @State private var path: [LibraryRoute] = []
@@ -111,7 +114,11 @@ struct RecipesView: View {
     var body: some View {
         NavigationStack(path: $path) {
             Group {
-                if shownScope == .shelf || allRecipes.isEmpty {
+                if shownScope == .shelf, !books.isEmpty {
+                    BookShelf(books: bookSort.sorted(books), isWide: isWide) {
+                        libraryHeader(showsSwitch: usesTitleSwitch)
+                    }
+                } else if shownScope == .shelf || allRecipes.isEmpty {
                     if usesTitleSwitch {
                         // The switch stays at the top, above the empty shelf or library.
                         ScrollView {
@@ -149,6 +156,9 @@ struct RecipesView: View {
         .sheet(isPresented: $isImportingLibrary) {
             LibraryImportView()
         }
+        .sheet(isPresented: $isAddingCookbook, onDismiss: openAddedBook) {
+            AddCookbookView { book in addedBook = book }
+        }
         .collectionNamePrompt("New Collection", isPresented: $isCreatingCollection, actionTitle: "Create") { name in
             show(CollectionActions.create(named: name, in: modelContext))
         }
@@ -181,6 +191,10 @@ struct RecipesView: View {
         // the tab bar hidden.
         .onChange(of: libraryView) { endSelection() }
         .onDisappear { endSelection() }
+        // A deleted cookbook leaves the Cookbook filter.
+        .onChange(of: books.map(\.persistentModelID)) { _, ids in
+            if let book = filter.book, !ids.contains(book) { filter.book = nil }
+        }
     }
 
     // MARK: - Menu bar
@@ -213,7 +227,7 @@ struct RecipesView: View {
 
     /// Starts what the File menu asked for, unless one of this page's sheets is already up.
     private func start(_ request: LibraryRequest) {
-        guard !isAddingRecipe, !isImportingFromWeb, !isImportingLibrary else { return }
+        guard !isAddingRecipe, !isImportingFromWeb, !isImportingLibrary, !isAddingCookbook else { return }
         switch request {
         case .enterManually: isAddingRecipe = true
         case .importFromWeb: isImportingFromWeb = true
@@ -252,9 +266,11 @@ struct RecipesView: View {
             } onDelete: { collection in
                 if filter.collection == collection.persistentModelID { filter.collection = nil }
             }
-        case .book:
-            // Book detail (03 §3.7) arrives with books in Phase 2 and pushes here, over the shelf.
-            ContentUnavailableView("Cookbook", systemImage: "book", description: Text("Cookbook details arrive with the shelf."))
+        case let .book(id):
+            if let book = books.first(where: { $0.persistentModelID == id }) {
+                BookDetailView(book: book)
+                    .id(id)
+            }
         }
     }
 
@@ -295,6 +311,8 @@ struct RecipesView: View {
                 Label("No cookbooks yet", systemImage: "books.vertical")
             } description: {
                 Text("Cookbooks you add will be listed here with their recipes.")
+            } actions: {
+                Button("Add Cookbook") { isAddingCookbook = true }
             }
         } else {
             ContentUnavailableView {
@@ -361,7 +379,7 @@ struct RecipesView: View {
             filter: $filter,
             courses: filterCourses,
             collections: isWide ? [] : collections.map { ($0.persistentModelID, $0.name) },
-            books: books.map { ($0.persistentModelID, $0.title.isEmpty ? "Untitled Cookbook" : $0.title) },
+            books: books.map { ($0.persistentModelID, $0.displayTitle) },
             tags: tags.map { ($0.persistentModelID, $0.name) }
         )
     }
@@ -408,9 +426,7 @@ struct RecipesView: View {
                 filterMenu
             }
             // Primary placement, not .secondaryAction: the latter nests this menu inside the
-            // system overflow menu, so More would open a menu holding only "More". The Books view
-            // has no More until the shelf has something to sort (04 §5.1 Add menu: hidden, not
-            // disabled), and no Add until Add Book ships.
+            // system overflow menu, so More would open a menu holding only "More".
             ToolbarItem(placement: .primaryAction) {
                 Menu {
                     Picker(selection: $layout) {
@@ -479,6 +495,32 @@ struct RecipesView: View {
                     Text("The recipes stay in your library.")
                 }
             }
+        } else {
+            // The Cookbooks view (03 §3.7): Add names the way in (04 §5.1 Add menu); Scan Sources
+            // Page joins it with its slice. More appears once the shelf has something to sort.
+            ToolbarItem(placement: .primaryAction) {
+                Menu {
+                    Button("Add Cookbook", systemImage: "barcode") { isAddingCookbook = true }
+                } label: {
+                    Label("Add", systemImage: "plus")
+                }
+            }
+            if !books.isEmpty {
+                ToolbarItem(placement: .primaryAction) {
+                    Menu {
+                        Picker(selection: $bookSort) {
+                            ForEach(BookSort.allCases) { option in
+                                Text(option.title).tag(option)
+                            }
+                        } label: {
+                            Label("Sort By", systemImage: "arrow.up.arrow.down")
+                        }
+                        .pickerStyle(.menu)
+                    } label: {
+                        Label("More", systemImage: "ellipsis")
+                    }
+                }
+            }
         }
     }
 
@@ -506,6 +548,14 @@ struct RecipesView: View {
     private func deleteCollection(_ collection: RecipeCollection) {
         if filter.collection == collection.persistentModelID { filter.collection = nil }
         router.delete(collection, in: modelContext)
+    }
+
+    /// The book Add Cookbook added or found on the shelf, pushed over the shelf.
+    private func openAddedBook() {
+        guard let book = addedBook else { return }
+        addedBook = nil
+        libraryView = .books
+        path = [.book(book.persistentModelID)]
     }
 
     private func openImportedRecipe() {

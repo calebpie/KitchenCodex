@@ -2,6 +2,9 @@ import Foundation
 #if canImport(FoundationNetworking)
 import FoundationNetworking
 #endif
+#if canImport(os)
+import os
+#endif
 
 /// An ISBN as printed on a cookbook (Flow C step 1), checked and normalised to ISBN-13.
 public enum ISBN {
@@ -272,8 +275,16 @@ public struct BookLookup: Sendable {
         do {
             return try JSONDecoder().decode(type, from: data)
         } catch {
+            log("Book lookup: couldn't read \(T.self): \(error)")
             throw .badResponse
         }
+    }
+
+    /// Why a lookup failed, in the app's log (category "books"); the sheet shows only the kind.
+    static func log(_ message: String) {
+        #if canImport(os)
+        Logger(subsystem: "com.calebpietrafesa.RecipeCodex", category: "books").error("\(message, privacy: .public)")
+        #endif
     }
 
     /// "The Food Lab: Better Home Cooking Through Science" → ("The Food Lab", "Better Home Cooking
@@ -307,13 +318,18 @@ public struct BookLookup: Sendable {
             do {
                 (data, response) = try await session.data(for: request)
             } catch let error as URLError where offlineCodes.contains(error.code) {
+                log("Book lookup: \(url.absoluteString) unreachable: \(error.code.rawValue)")
                 throw .offline
             } catch {
+                log("Book lookup: \(url.absoluteString) failed: \(error)")
                 throw .badResponse
             }
             guard let http = response as? HTTPURLResponse else { return data }
             if http.statusCode == 404 { return nil }
-            guard (200..<300).contains(http.statusCode) else { throw .badResponse }
+            guard (200..<300).contains(http.statusCode) else {
+                log("Book lookup: \(url.absoluteString) answered \(http.statusCode)")
+                throw .badResponse
+            }
             return data
         }
     }
