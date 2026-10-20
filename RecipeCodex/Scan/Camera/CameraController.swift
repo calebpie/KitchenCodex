@@ -199,7 +199,7 @@ nonisolated final class CameraController: NSObject, @unchecked Sendable {
         }
     }
 
-    private final class PhotoDelegate: NSObject, AVCapturePhotoCaptureDelegate, @unchecked Sendable {
+    nonisolated private final class PhotoDelegate: NSObject, AVCapturePhotoCaptureDelegate, @unchecked Sendable {
         private let completion: (Result<Data, Error>) -> Void
         /// Answered once: the photo, or the capture's failure if no photo came.
         private let isDone = Mutex(false)
@@ -231,7 +231,7 @@ nonisolated final class CameraController: NSObject, @unchecked Sendable {
 
 // MARK: - Frames
 
-extension CameraController: AVCaptureVideoDataOutputSampleBufferDelegate {
+nonisolated extension CameraController: AVCaptureVideoDataOutputSampleBufferDelegate {
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
         guard let pixels = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         let now = ContinuousClock.now
@@ -279,7 +279,7 @@ extension CameraController: AVCaptureVideoDataOutputSampleBufferDelegate {
 
 // MARK: - Barcodes
 
-extension CameraController: AVCaptureMetadataOutputObjectsDelegate {
+nonisolated extension CameraController: AVCaptureMetadataOutputObjectsDelegate {
     func metadataOutput(_ output: AVCaptureMetadataOutput, didOutput metadataObjects: [AVMetadataObject], from connection: AVCaptureConnection) {
         for case let code as AVMetadataMachineReadableCodeObject in metadataObjects {
             if let value = code.stringValue, let isbn = ISBN.normalized(value) {
