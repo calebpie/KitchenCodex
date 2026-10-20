@@ -21,6 +21,7 @@ struct RecipeEditorView: View {
     @State private var isLoadingPhoto = false
     @State private var photoFailed = false
     @State private var isConfirmingDiscard = false
+    @State private var isShowingHistory = false
     private let original: RecipeDraft
 
     init(recipe: Recipe?, isReviewing: Bool = false) {
@@ -103,6 +104,24 @@ struct RecipeEditorView: View {
                     }
 
                     if let recipe {
+                        // The cooks from before the app, as detail's cooked chip opens them (ux-notes row 54).
+                        Section {
+                            Button {
+                                isShowingHistory = true
+                            } label: {
+                                LabeledContent {
+                                    Text(recipe.isNeverCooked ? "Never" : (recipe.cookCount == 1 ? recipe.sortedCookSessions[0].cookedOn.formatted(date: .abbreviated, time: .omitted) : "\(recipe.cookCount) times"))
+                                } label: {
+                                    Label("Cooked Before", systemImage: "frying.pan")
+                                        .foregroundStyle(.primary)
+                                }
+                            }
+                        } footer: {
+                            Text("Add the times you cooked it before Recipe Codex, with a date and a rating.")
+                        }
+                    }
+
+                    if let recipe {
                         Section {
                             TextField("What changed? (optional)", text: $draft.changeSummary)
                         } header: {
@@ -145,6 +164,9 @@ struct RecipeEditorView: View {
                 }
             }
             .interactiveDismissDisabled(hasChanges)
+            .sheet(isPresented: $isShowingHistory) {
+                if let recipe { CookingHistoryView(recipe: recipe) }
+            }
             .onChange(of: photoItem) { _, item in
                 guard let item else { return }
                 Task { await loadPhoto(item) }

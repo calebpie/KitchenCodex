@@ -34,8 +34,12 @@ struct BookDetailView: View {
                     .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
             }
 
-            Section {
-                CompletenessRow(captured: progress.captured, total: progress.total, needReview: progress.needReview)
+            // The ring's row waits for the punchlist (ux-notes row 52); until then the list under
+            // the switcher says "No recipes listed yet" once.
+            if progress.total > 0 {
+                Section {
+                    CompletenessRow(captured: progress.captured, total: progress.total, needReview: progress.needReview)
+                }
             }
 
             Section {
@@ -170,8 +174,8 @@ struct BookDetailView: View {
     }
 }
 
-/// The completeness ring and its line: "47 of 112 captured, 3 need review", or "No recipes listed
-/// yet" before the punchlist exists.
+/// The completeness ring and its line: "47 of 112 captured, 3 need review". Shown once the book
+/// has a punchlist.
 private struct CompletenessRow: View {
     let captured: Int
     let total: Int

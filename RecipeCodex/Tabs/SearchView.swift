@@ -82,7 +82,12 @@ struct SearchView: View {
                     results
                 }
             }
+            // The header is drawn by the app as the first scrolling item, as the Recipes title is, so
+            // it keeps the lists' leading inset in both widths, the iPad's tabs along the top
+            // included (ux-notes row 53); the bar keeps the title for Back.
             .navigationTitle("Search")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar(removing: .title)
             .navigationDestination(for: SearchRoute.self) { route in
                 switch route {
                 case let .recipe(recipe):
@@ -133,7 +138,10 @@ struct SearchView: View {
                     }
                 }
             } else {
-                List { recentSection }
+                List {
+                    SearchHeader()
+                    recentSection
+                }
             }
         case .recipes:
             if recipes.isEmpty {
@@ -146,6 +154,7 @@ struct SearchView: View {
                 }
             } else {
                 List {
+                    SearchHeader()
                     recentSection
                     Section("Suggestions") {
                         suggestionRow("Never Cooked", systemImage: "sparkles", count: recipes.count(where: \.isNeverCooked), route: .recipes(.neverCooked))
@@ -178,6 +187,7 @@ struct SearchView: View {
                 }
             } else {
                 List {
+                    SearchHeader()
                     recentSection
                     if !sources.isEmpty {
                         Section("Sources") {
@@ -207,6 +217,7 @@ struct SearchView: View {
                 }
             } else {
                 List {
+                    SearchHeader()
                     recentSection
                     Section("Upcoming") {
                         ForEach(upcoming) { event in
@@ -262,14 +273,17 @@ struct SearchView: View {
                 // The Recipes tab's own cells, so searching from Recipes reads as filtering it.
                 RecipeResults(recipes: found.map(\.recipe), matchedIngredients: Dictionary(found.compactMap { result in
                     result.matchedIngredient.map { (result.recipe.persistentModelID, $0) }
-                }, uniquingKeysWith: { first, _ in first }), layout: layout)
+                }, uniquingKeysWith: { first, _ in first }), layout: layout, showsHeader: true)
             }
         case .pantry:
             let matches = pantryMatches
             if matches.isEmpty {
                 Scrolling { ContentUnavailableView.search(text: query) }
             } else {
-                List { pantrySections(matches) }
+                List {
+                    SearchHeader()
+                    pantrySections(matches)
+                }
             }
         case .plan:
             let matching = matchingEvents
@@ -277,6 +291,7 @@ struct SearchView: View {
                 Scrolling { ContentUnavailableView.search(text: query) }
             } else {
                 List {
+                    SearchHeader()
                     ForEach(matching) { EventRow(event: $0) }
                 }
             }
@@ -288,6 +303,7 @@ struct SearchView: View {
                 Scrolling { ContentUnavailableView.search(text: query) }
             } else {
                 List {
+                    SearchHeader()
                     if !found.isEmpty {
                         Section("Recipes") {
                             ForEach(found) { result in
@@ -362,15 +378,34 @@ struct SearchView: View {
     }
 }
 
-/// An empty state inside a scroll view, so the search scopes stay on screen above it.
+/// An empty state inside a scroll view, so the search scopes stay on screen above it, under the
+/// Search header.
 private struct Scrolling<Content: View>: View {
     @ViewBuilder var content: Content
 
     var body: some View {
         ScrollView {
-            content
-                .containerRelativeFrame(.vertical)
+            VStack(spacing: 0) {
+                SearchHeader()
+                    .padding(.horizontal)
+                content
+                    .containerRelativeFrame(.vertical) { height, _ in height * 0.8 }
+            }
         }
+    }
+}
+
+/// "Search" in large-title type, the first item of the page's scrolling content (ux-notes row 53).
+/// In a list it is a row without a background, so it starts where the rows' text starts.
+private struct SearchHeader: View {
+    var body: some View {
+        Text("Search")
+            .font(.largeTitle.bold())
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityAddTraits(.isHeader)
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+            .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
     }
 }
 
@@ -379,11 +414,17 @@ private struct RecipeResults: View {
     let recipes: [Recipe]
     var matchedIngredients: [PersistentIdentifier: String] = [:]
     let layout: RecipeLayout
+    /// The search page's own results carry the Search header; a pushed set of recipes has its title.
+    var showsHeader = false
 
     var body: some View {
         switch layout {
         case .grid:
             ScrollView {
+                if showsHeader {
+                    SearchHeader()
+                        .padding(.horizontal)
+                }
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 160), spacing: 12)], spacing: 12) {
                     ForEach(recipes) { recipe in
                         NavigationLink(value: SearchRoute.recipe(recipe)) {
@@ -398,9 +439,12 @@ private struct RecipeResults: View {
                 if recipes.isEmpty { emptyState }
             }
         case .list:
-            List(recipes) { recipe in
-                NavigationLink(value: SearchRoute.recipe(recipe)) {
-                    RecipeRow(recipe: recipe, matchedIngredient: matchedIngredients[recipe.persistentModelID])
+            List {
+                if showsHeader { SearchHeader() }
+                ForEach(recipes) { recipe in
+                    NavigationLink(value: SearchRoute.recipe(recipe)) {
+                        RecipeRow(recipe: recipe, matchedIngredient: matchedIngredients[recipe.persistentModelID])
+                    }
                 }
             }
             .listStyle(.plain)

@@ -81,9 +81,12 @@ extension RecipeFilter {
     }
 
     /// The token under the title: "Course: Main, Side", "Cookbook: The Food Lab", "Favorites".
+    /// Cooked reads its value alone ("Never Cooked", "Cooked"), as the switches read their names
+    /// (ux-notes row 46).
     func token(for kind: RecipeFilterKind, options: RecipeFilterOptions) -> String? {
         guard let selection = selection(of: kind, options: options) else { return nil }
-        return kind.isToggle ? kind.rawValue : "\(kind.rawValue): \(selection)"
+        if kind.isToggle { return kind.rawValue }
+        return kind == .cooked ? selection : "\(kind.rawValue): \(selection)"
     }
 
     /// Clears one kind; the token's ×.
