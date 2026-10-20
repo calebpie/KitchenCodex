@@ -26,10 +26,17 @@ import Units
 ///   takes the fresh item, and fluid ounces where the dropped measure now tells them apart, when
 ///   the item without it is the fresh item and nothing else on the line reads differently. The
 ///   roast potatoes read "4 lb russet or Yukon Gold potatoes".
+/// - **Leading preparations** (slice 9, its own flag). A line whose preparation was written before
+///   the comma, which the parser used to store as the item ("1 cup packed, fresh spinach leaves"
+///   stored as the item "packed", preparation "fresh spinach leaves"), takes the fresh item and
+///   preparation where the stored item is the fresh preparation, the fresh item is the stored
+///   preparation's first clause, and nothing else on the line reads differently. The lasagne reads
+///   "1 cup fresh spinach leaves, packed (3.5 ounces)".
 enum IngredientReread {
     static let defaultsKey = "ingredients.reread.notesAndLiquidOunces"
     static let noteFormsKey = "ingredients.reread.noteForms"
     static let approximateEquivalentsKey = "ingredients.reread.approximateEquivalents"
+    static let leadingPreparationsKey = "ingredients.reread.leadingPreparations"
     private static let logger = Logger(subsystem: "com.calebpietrafesa.RecipeCodex", category: "store")
 
     /// Runs each pass once per install, in order; later launches return at once.
@@ -37,7 +44,8 @@ enum IngredientReread {
         let rereadsLines = !defaults.bool(forKey: defaultsKey)
         let setsNoteForms = !defaults.bool(forKey: noteFormsKey)
         let dropsEquivalents = !defaults.bool(forKey: approximateEquivalentsKey)
-        guard rereadsLines || setsNoteForms || dropsEquivalents else { return }
+        let swapsPreparations = !defaults.bool(forKey: leadingPreparationsKey)
+        guard rereadsLines || setsNoteForms || dropsEquivalents || swapsPreparations else { return }
         guard let ingredients = try? context.fetch(FetchDescriptor<Ingredient>()) else { return }
         if rereadsLines {
             var fluidOunces = 0
@@ -75,10 +83,45 @@ enum IngredientReread {
             }
             logger.notice("Dropped an approximate equivalent from \(items) of \(ingredients.count) stored items, \(fluidOunces) now fluid ounces")
         }
+        if swapsPreparations {
+            let swapped = ingredients.count(where: swapLeadingPreparation)
+            logger.notice("Swapped the item and preparation of \(swapped) of \(ingredients.count) stored lines")
+        }
         if context.hasChanges { try? context.save() }
         defaults.set(true, forKey: defaultsKey)
         defaults.set(true, forKey: noteFormsKey)
         defaults.set(true, forKey: approximateEquivalentsKey)
+        defaults.set(true, forKey: leadingPreparationsKey)
+    }
+
+    /// Takes the fresh item and preparation for a line whose preparation, written before the comma,
+    /// was stored as the item: when the stored item is the fresh preparation, the fresh item is the
+    /// stored preparation's first clause, the two readings hold the same words, and the amount,
+    /// unit, note, note form, produce equivalent and optional flag read the same. A line with a
+    /// clause after the item ("peeled, grated fresh ginger, divided" reads the preparation
+    /// "peeled, divided") does not qualify.
+    @discardableResult
+    static func swapLeadingPreparation(_ ingredient: Ingredient) -> Bool {
+        guard let storedPreparation = ingredient.preparation, !storedPreparation.isEmpty, !ingredient.item.isEmpty else { return false }
+        let parsed = IngredientParser.parse(ingredient.rawText)
+        let firstClause = storedPreparation.split(separator: ",", maxSplits: 1).first.map { $0.trimmingCharacters(in: .whitespaces) }
+        let storedQuantity = ingredient.quantityNumerator.map { Rational($0, max(1, ingredient.quantityDenominator ?? 1)) }
+        let storedEquivalent = ingredient.equivalentCountNumerator.map { Rational($0, max(1, ingredient.equivalentCountDenominator ?? 1)) }
+        guard parsed.preparation == ingredient.item,
+              parsed.item == firstClause,
+              // Never drops words: the stored preparation's later clauses would have to reappear.
+              words(parsed.preparation, parsed.item) == words(ingredient.item, storedPreparation),
+              parsed.quantity == storedQuantity,
+              parsed.unit?.rawValue == ingredient.unit,
+              parsed.note == ingredient.note,
+              ingredient.note == nil || parsed.noteForm?.rawValue == ingredient.noteForm,
+              parsed.equivalent?.count == storedEquivalent,
+              parsed.equivalent?.item == ingredient.equivalentItem,
+              parsed.isOptional == ingredient.isOptional
+        else { return false }
+        ingredient.item = parsed.item
+        ingredient.preparation = parsed.preparation
+        return true
     }
 
     enum EquivalentChange: Equatable {
