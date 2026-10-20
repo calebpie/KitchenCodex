@@ -104,6 +104,12 @@ private struct ProfileForm: View {
                     ? "Add a recipe to export your library."
                     : "A Markdown file for each of your \(recipes.count) recipes, in one .zip archive, as written.")
             }
+
+            AboutSection()
+
+            #if DEBUG
+            DeveloperSection()
+            #endif
         }
     }
 }

@@ -33,6 +33,7 @@ struct RecipesView: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(AppRouter.self) private var router
     @Environment(\.modelContext) private var modelContext
+    @Environment(SyncMonitor.self) private var sync
 
     /// iPhone: the title switch's view.
     @State private var libraryView: LibraryView = .recipes
@@ -64,6 +65,8 @@ struct RecipesView: View {
     @State private var selectedIDs: Set<PersistentIdentifier> = []
     /// Select mode → Add to Collection → New Collection…
     @State private var isCollectingSelection = false
+    /// The sync flag's detail.
+    @State private var isShowingSync = false
 
     /// Unsorted; used for the empty state, the Filter menu's courses and resolving the selection.
     /// The collection runs its own sorted query.
@@ -168,6 +171,17 @@ struct RecipesView: View {
             ScanPageView { recipes in importedRecipe = recipes.count == 1 ? recipes.first : nil }
                 // iPad: the page beside the recipe in review wants the room (03 §3.6).
                 .presentationSizing(.page)
+        }
+        .sheet(isPresented: $isShowingSync) {
+            NavigationStack {
+                SyncStatusView()
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done", role: .confirm) { isShowingSync = false }
+                                .keyboardShortcut(.cancelAction)
+                        }
+                    }
+            }
         }
         .collectionNamePrompt("New Collection", isPresented: $isCreatingCollection, actionTitle: "Create") { name in
             show(CollectionActions.create(named: name, in: modelContext))
@@ -285,16 +299,22 @@ struct RecipesView: View {
         }
     }
 
-    /// The first items of the scrolling content: the view switch (iPhone), the review prompt while
-    /// imports wait for a check, and one token per active filter.
+    /// The first items of the scrolling content: the view switch (iPhone), the sync flag while a sync
+    /// issue stands, the review prompt while imports wait for a check, and one token per active filter.
     @ViewBuilder
     private func libraryHeader(showsSwitch: Bool) -> some View {
+        let showsSyncFlag = shownScope == .all && sync.hasIssue && !isSelecting
         let showsPrompt = activeView == .recipes && reviewCount > 0 && scope != .needsReview && !isSelecting
         let showsTokens = activeView == .recipes && filter.isActive
-        if showsSwitch || showsPrompt || showsTokens {
+        if showsSwitch || showsSyncFlag || showsPrompt || showsTokens {
             VStack(alignment: .leading, spacing: 12) {
                 if showsSwitch {
                     LibraryTitleSwitch(selection: $libraryView)
+                        .padding(.horizontal)
+                }
+                if showsSyncFlag {
+                    // The app no longer keeps a library that doesn't sync quietly (ux-notes row 56).
+                    SyncIssueRow(state: sync.state) { isShowingSync = true }
                         .padding(.horizontal)
                 }
                 if showsPrompt {
@@ -991,5 +1011,6 @@ private struct LibraryTitleSwitch: View {
 #Preview {
     RecipesView(scope: .all)
         .environment(AppRouter())
+        .environment(SyncMonitor(store: .inMemory(reason: "Preview")))
         .modelContainer(try! RecipeStore.makeContainer(inMemory: true))
 }

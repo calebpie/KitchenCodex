@@ -226,5 +226,6 @@ struct RootTabView: View {
 
 #Preview("Root") {
     RootTabView()
+        .environment(SyncMonitor(store: .inMemory(reason: "Preview")))
         .modelContainer(try! RecipeStore.makeContainer(inMemory: true))
 }

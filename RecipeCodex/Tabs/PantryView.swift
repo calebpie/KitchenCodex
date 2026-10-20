@@ -190,5 +190,6 @@ private struct PantryHubRows: View {
 #Preview {
     PantryView()
         .environment(AppRouter())
+        .environment(SyncMonitor(store: .inMemory(reason: "Preview")))
         .modelContainer(try! RecipeStore.makeContainer(inMemory: true))
 }
