@@ -13,9 +13,6 @@
 
 | # | Status | Seen | Where | Do instead | Decided by |
 |---|---|---|---|---|---|
-| 36 | Proposed | iPad (slice 9 build): with no collections the sidebar has no Collections section, so its New Collection action is missing too; More → New Collection… is the only way to make the first one, after which the section and its action appear (seen on the iPad store, which had none). | `RecipeCodex/RootTabView.swift` (`TabSection("Collections")`, `sectionActions`) | Keep: a `TabSection` with no tabs is not drawn, and a placeholder tab would be a destination with nothing behind it; More → New Collection… covers the first collection. | |
-| 37 | Proposed | iPad (slice 9 build): the sidebar shows a count only on Needs a Look; slice 8's sidebar counted every row (All Recipes, the smart collections, each collection, the shelf). | `RecipeCodex/RootTabView.swift` (`.badge` on the Needs a Look tab) | Keep the one count, which is work waiting; a tab badge also shows as a red notification badge in the collapsed floating bar whenever its tab is selected there, which suits Needs a Look and would not suit a collection's size. Or badge every section tab with its count. | |
-| 38 | Proposed | Planning docs after slice 9: 04 §5.1 "iPad tabs" and "Bookshelf", 03 §3.2 (iPad) and §4 name an All Recipes row under the Recipes tab, but the Recipes tab's own page is the whole library (titled "Recipes"), so there is no such row; 04 §5.1 "Search tab" and 03 §3.18 still say Search stays inside the top tab bar on iPad, where it now sits at the sidebar's top (and in the floating bar when the sidebar is collapsed). | `Docs/Planning/04-Execution-Plan.md` §5.1, `Docs/Planning/03-UX-Proposals.md` §3.2, §3.18, §4 | Fold into the docs: the Recipes tab is All Recipes; the sections are Bookshelf, Smart Collections, Collections and Pantry, sidebar-only and present in regular width only; Search sits at the sidebar's top. | |
 
 ## Done
 
@@ -56,3 +53,6 @@
 | 35 | iPad tabs (04 §5.1 "iPad tabs") | `c1a1c6c`, `b0bfa8c` | `.sidebarAdaptable` with sidebar-only sections in regular width, Profile in the sidebar's bottom bar, drops onto collection tabs, More → Collections on iPad for reordering. The system sidebar is a flat full-height column on the simulator, not an inset island. |
 | 30 | Step pills (04 §5.1 "Step pills") | `c946f56` | Units reads "1 hr. 15 min." with periods as one compound (PR 6); the app shows "[1 hr 15 min]" as one pill. |
 | 32 | iPad tabs, superseded (04 §5.1 "iPad tabs") | — | Kept as the system drew it, then made moot by row 35's sidebar. No code change. |
+| 36 | iPad tabs (04 §5.1 "iPad tabs") | — | Kept: a section with no tabs is not drawn; the first collection comes from More → New Collection…. No code change. |
+| 37 | iPad tabs (04 §5.1 "iPad tabs") | — | Kept: only Needs a Look carries a count, which the collapsed bar shows as a red badge. No code change. |
+| 38 | iPad tabs, Search tab (04 §5.1 "iPad tabs", "Search tab") | — | Planning docs folded Oct 19, 2026: the Recipes tab is the whole library with no All Recipes row; the sections exist in regular width only; Search sits at the sidebar's top. No code change. |
