@@ -1,0 +1,12 @@
+{
+    "title": "Two Cooks",
+    "subtitle": "Recipes from a Shared Table",
+    "authors": [{"key": "/authors/OL1000001A"}, {"key": "/authors/OL1000002A"}],
+    "publish_date": "c2019",
+    "publishers": ["Example House"],
+    "covers": [-1],
+    "isbn_13": ["9780000000033"],
+    "type": {"key": "/type/edition"},
+    "key": "/books/OL1000002M",
+    "works": [{"key": "/works/OL1000002W"}]
+}

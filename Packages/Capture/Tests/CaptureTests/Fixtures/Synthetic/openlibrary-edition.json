@@ -1,0 +1,18 @@
+{
+    "title": "The Example Kitchen: Everyday Cooking for Company",
+    "publish_date": "Sep 21, 2015",
+    "publishers": ["Example House"],
+    "source_records": ["synthetic:fixture"],
+    "covers": [10000001],
+    "isbn_10": ["0000000019"],
+    "isbn_13": ["9780000000019"],
+    "type": {"key": "/type/edition"},
+    "key": "/books/OL1000001M",
+    "works": [{"key": "/works/OL1000001W"}],
+    "number_of_pages": 320,
+    "languages": [{"key": "/languages/eng"}],
+    "latest_revision": 3,
+    "revision": 3,
+    "created": {"type": "/type/datetime", "value": "2019-02-04T13:45:59.120987"},
+    "last_modified": {"type": "/type/datetime", "value": "2026-08-14T16:42:10.050211"}
+}

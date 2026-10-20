@@ -1,0 +1,24 @@
+{
+    "kind": "books#volumes",
+    "totalItems": 1,
+    "items": [
+        {
+            "kind": "books#volume",
+            "id": "SyntheticVol1",
+            "volumeInfo": {
+                "title": "A Small-Press Cookbook",
+                "authors": ["Robin Placeholder"],
+                "publisher": "Tiny Press",
+                "publishedDate": "2008-05-01",
+                "industryIdentifiers": [
+                    {"type": "ISBN_10", "identifier": "0306406152"},
+                    {"type": "ISBN_13", "identifier": "9780306406157"}
+                ],
+                "imageLinks": {
+                    "smallThumbnail": "http://books.google.com/books/content?id=SyntheticVol1&printsec=frontcover&img=1&zoom=5",
+                    "thumbnail": "http://books.google.com/books/content?id=SyntheticVol1&printsec=frontcover&img=1&zoom=1"
+                }
+            }
+        }
+    ]
+}
