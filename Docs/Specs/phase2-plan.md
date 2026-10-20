@@ -66,7 +66,7 @@ Each slice follows the Phase 1 pattern: a brief with groups and a verification l
 
 - **Scan Page** (03 §3.5): VisionKit's document camera as a full-screen cover with Close, the quality pill from slice 2's gate on the captured image (and live, if the custom AVFoundation camera is worth it; otherwise reject and re-shoot), Add next page, the thumbnail stack with count; the iPad split with the running text preview.
 - **Barcode scanner** (`DataScannerViewController`): the live way in for Add Cookbook and for Which book?'s new book on a device; slice 3's photo path stays for the simulator.
-- **Quality pill** advisory at Apple's threshold, escalating only after a run of hazy, poorly read captures (row 57); a sticky **Recipe · Photo** capture mode if Caleb confirms it (row 62). **Profile riders** (rows 55, 56): About shows the build from the `BuildInfo.plist` the project's Build Info phase writes; a sync-state row, and a flag on Recipes while a sync issue stands.
+- **Quality pill** advisory at Apple's threshold, escalating only after a run of hazy, poorly read captures (row 57); a sticky **Recipe · Photo** capture mode beside the shutter (row 62, decided). **Profile riders** (rows 55, 56): About shows the build from the `BuildInfo.plist` the project's Build Info phase writes; a sync-state row, and a flag on Recipes while a sync issue stands.
 - **Photo cleanup**: deskew, crop, levels, sharpen with Core Image before OCR; the original kept.
 - Needs the camera usage description. Verified by Caleb on the device; the slice verifies the pipeline with the simulator's fixture path and the camera code by inspection and a device build.
 
