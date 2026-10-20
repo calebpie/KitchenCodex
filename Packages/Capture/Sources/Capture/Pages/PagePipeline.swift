@@ -49,30 +49,62 @@ public struct PagePipeline: Sendable {
         try await read(contentsOf: url, page: 0, of: 1, progress: nil)
     }
 
-    func read(contentsOf url: URL, page: Int, of count: Int, progress: Progress?) async throws -> PageReading {
+    func read(contentsOf url: URL, page: Int, of count: Int, quality: PageQualityReading? = nil, progress: Progress?) async throws -> PageReading {
+        let image = try PageImage.load(contentsOf: url, maxPixelSize: reader.maxPixelSize)
+        var reading = try await readPage(image, file: url.lastPathComponent, page: page, of: count, quality: quality, progress: progress).reading
+        if model != nil, !reading.isContinuation {
+            reading = await refine(reading, image: image, progress: progress)
+        }
+        return reading
+    }
+
+    /// One photo of a run, deterministic: gate (unless the caller measured the photo already, as the
+    /// camera does on the capture before cleanup), read, structure, with each stage reported. The
+    /// model and stitching wait for `finish(_:urls:progress:)`, so a camera session can read each
+    /// capture as it is taken.
+    public func readPage(contentsOf url: URL, page: Int, of count: Int, quality: PageQualityReading? = nil, progress: Progress? = nil) async throws -> PageReading {
+        let image = try PageImage.load(contentsOf: url, maxPixelSize: reader.maxPixelSize)
+        return try await readPage(image, file: url.lastPathComponent, page: page, of: count, quality: quality, progress: progress).reading
+    }
+
+    /// What one photo gave at each step, for Read Fixtures' report (04 §5.1 "Device readings"): the
+    /// reader's scan, the margin lines read again when no folio was found, and the reading.
+    public struct PageRead: Sendable {
+        public var reading: PageReading
+        public var scan: PageScan
+        public var marginLines: [String]?
+        public var quality: PageQualityReading
+    }
+
+    /// One photo read as `readPage` reads it, with the reader's scan kept (no model).
+    public func readForReport(contentsOf url: URL) async throws -> PageRead {
+        let image = try PageImage.load(contentsOf: url, maxPixelSize: reader.maxPixelSize)
+        return try await readPage(image, file: url.lastPathComponent, page: 0, of: 1, quality: nil, progress: nil)
+    }
+
+    func readPage(_ image: CGImage, file: String, page: Int, of count: Int, quality known: PageQualityReading?, progress: Progress?) async throws -> PageRead {
         let clock = ContinuousClock()
         let start = clock.now
         progress?(.checking(page: page, of: count))
-        let image = try PageImage.load(contentsOf: url, maxPixelSize: reader.maxPixelSize)
-        let quality = await gate.assess(image)
+        let quality: PageQualityReading
+        if let known { quality = known } else { quality = await gate.assess(image) }
         progress?(.reading(page: page, of: count, quality: quality))
         var scan = try await reader.read(image)
         scan.duration = clock.now - start
         progress?(.structuring(page: page, of: count, lines: scan.blocks.reduce(0) { $0 + $1.lines.count }))
-        var reading = structurer.read(scan, file: url.lastPathComponent, quality: quality)
+        var reading = structurer.read(scan, file: file, quality: quality)
+        var marginLines: [String]?
         if reading.pageNumber == nil, reading.kind == .recipe {
             // The folio's small type, read again from the page's foot and head.
             let margins = await reader.marginLines(of: image, paper: scan.paper)
+            marginLines = margins
             if let number = PageStructurer.folioNumber(in: margins) { reading.pageNumbers = [number] }
         }
         reading.durations = [clock.now - start]
         progress?(.read(page: page, of: count, kind: reading.kind, recipes: reading.recipes.count,
                         ingredients: reading.recipes.reduce(0) { $0 + $1.ingredients.count },
                         steps: reading.recipes.reduce(0) { $0 + $1.steps.count }))
-        if model != nil, !reading.isContinuation {
-            reading = await refine(reading, image: image, progress: progress)
-        }
-        return reading
+        return PageRead(reading: reading, scan: scan, marginLines: marginLines, quality: quality)
     }
 
     /// Consecutive photos in capture order, read and stitched: a page that opens without a title
@@ -80,10 +112,14 @@ public struct PagePipeline: Sendable {
     public func read(contentsOf urls: [URL], progress: Progress? = nil) async throws -> [PageReading] {
         var readings: [PageReading] = []
         for (page, url) in urls.enumerated() {
-            var single = self
-            single.model = nil
-            readings.append(try await single.read(contentsOf: url, page: page, of: urls.count, progress: progress))
+            readings.append(try await readPage(contentsOf: url, page: page, of: urls.count, progress: progress))
         }
+        return await finish(readings, urls: urls, progress: progress)
+    }
+
+    /// The run's single-page readings (`readPage`) stitched, then refined by the model where a
+    /// recipe falls short. `urls` holds the photos by file name, for the model's image pass.
+    public func finish(_ readings: [PageReading], urls: [URL], progress: Progress? = nil) async -> [PageReading] {
         var stitched = PageStitcher.stitch(readings)
         if model != nil {
             for index in stitched.indices {

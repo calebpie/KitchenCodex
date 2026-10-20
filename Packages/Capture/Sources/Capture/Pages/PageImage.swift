@@ -36,6 +36,22 @@ public enum PageImage {
         return image
     }
 
+    /// A photo's bytes (a camera capture, before anything is written), oriented as its metadata
+    /// says, at full size or downscaled.
+    public static func load(data: Data, maxPixelSize: Int? = nil) throws -> CGImage {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { throw LoadError.unreadable("capture") }
+        let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any]
+        let longSide = maxPixelSize ?? max(properties?[kCGImagePropertyPixelWidth] as? Int ?? 4096, properties?[kCGImagePropertyPixelHeight] as? Int ?? 4096)
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceThumbnailMaxPixelSize: longSide,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+        ]
+        guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { throw LoadError.unreadable("capture") }
+        return image
+    }
+
     /// `image` scaled so its long side is `longSide`.
     static func scaled(_ image: CGImage, longSide: Int) -> CGImage? {
         let scale = Double(longSide) / Double(max(image.width, image.height))
