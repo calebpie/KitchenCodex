@@ -21,6 +21,12 @@ extension RecipeSchemaV1 {
         @Relationship(deleteRule: .cascade, inverse: \BookSection.book) public var sections: [BookSection]?
         @Relationship(deleteRule: .nullify, inverse: \Recipe.book) public var recipes: [Recipe]?
         @Relationship(deleteRule: .nullify, inverse: \Source.book) public var sources: [Source]?
+        /// Prose captured from this book: technique chapters and essays.
+        @Relationship(deleteRule: .nullify, inverse: \Reference.book) public var references: [Reference]?
+        /// The book's own scanned pages: contents and index pages (the punchlist), a Sources page, and
+        /// pages captured in a scanning session that are not a recipe yet (Flow C). A recipe's page
+        /// scan has its book set too. Deleting the book leaves its scans, as it leaves its recipes.
+        @Relationship(deleteRule: .nullify, inverse: \RecipeImage.book) public var pageScans: [RecipeImage]?
 
         public init(title: String = "", author: String = "", isbn: String? = nil) {
             self.title = title
@@ -57,6 +63,9 @@ extension RecipeSchemaV1 {
 
         public var section: BookSection?
         @Relationship(deleteRule: .nullify, inverse: \Recipe.bookEntry) public var recipe: Recipe?
+        /// Set when the entry is an essay or technique chapter ("The Importance of Brown Butter")
+        /// captured as a reference rather than a recipe.
+        @Relationship(deleteRule: .nullify, inverse: \Reference.bookEntry) public var reference: Reference?
 
         public init(title: String = "", page: Int? = nil) {
             self.title = title
@@ -77,6 +86,11 @@ extension RecipeSchemaV1 {
         public var updatedAt: Date = Date.now
         public var pageNumber: Int?
         @Attribute(.externalStorage) public var coverImageData: Data?
+        /// 0…1: how sure the page reading behind a scanned recipe was, OCR, ingredient parser and
+        /// structure (and the model, when it was asked) combined. Nil for recipes that were not
+        /// read from a page. Kept on the recipe, unlike a version's `captureConfidence`, so it
+        /// still says how the scan went after the cook's edits.
+        public var extractionConfidence: Double?
 
         public var book: Book?
         public var bookEntry: BookEntry?
@@ -92,6 +106,8 @@ extension RecipeSchemaV1 {
         @Relationship(deleteRule: .cascade, inverse: \RecipeImage.recipe) public var images: [RecipeImage]?
         @Relationship(deleteRule: .nullify, inverse: \Candidate.recipe) public var candidates: [Candidate]?
         @Relationship(deleteRule: .nullify, inverse: \ScheduleTask.recipe) public var scheduleTasks: [ScheduleTask]?
+        /// Related reading: the references that inform this recipe, and that list it back.
+        @Relationship(deleteRule: .nullify, inverse: \Reference.recipes) public var references: [Reference]?
 
         public init(title: String = "") {
             self.title = title
@@ -115,6 +131,11 @@ extension RecipeSchemaV1 {
         public var captureConfidence: Double?
         /// Set when capture confidence was low or the book's layout was new, until the cook reviews it.
         public var needsReview: Bool = false
+        /// Why a scanned version wants review, as Capture's `ReviewReason` raw values: the book's
+        /// first recipe, a layout not yet confirmed, low OCR confidence, unparsed ingredient lines,
+        /// a step count that disagrees with the page, a region nothing claimed (04 §5.1 "Scan
+        /// review"). Empty when nothing asked for review.
+        public var reviewReasons: [String] = []
 
         public var recipe: Recipe?
         public var isCurrentOf: Recipe?
@@ -270,8 +291,20 @@ extension RecipeSchemaV1 {
         public var importedAt: Date?
         public var readerSummary: String?
         public var isOriginal: Bool = false
+        /// How the recipe came in (04 §5.1 "Which book"). Nil for recipes saved before Phase 2.
+        public var captureMethod: CaptureMethod?
+        /// The pages it was read from, for a recipe or reference scanned from a book: one page, or
+        /// a range when it runs over a spread or a chapter. The book is the recipe's or reference's.
+        public var firstPage: Int?
+        public var lastPage: Int?
+        /// When the cook went through scan review for it. Nil on a scan saved straight to the
+        /// library, which its source line calls "Accepted automatically".
+        public var reviewedAt: Date?
 
         public var recipe: Recipe?
+        /// The reference this is the source of. Every reference has one (02 §4.2): a URL, or its
+        /// book and pages.
+        public var reference: Reference?
 
         public init(url: URL? = nil, author: String? = nil) {
             self.url = url
@@ -306,15 +339,78 @@ extension RecipeSchemaV1 {
         public var pageNumber: Int?
         public var createdAt: Date = Date.now
         @Attribute(.externalStorage) public var imageData: Data?
+        /// A page scan's regions for review: `ScanRegions` as JSON. Nil for other images and for
+        /// scans not read yet.
+        public var regions: Data?
+        /// What a page scan turned out to be once read; nil for other images and for a captured page
+        /// still waiting in the queue.
+        public var pageKind: ScanPageKind?
 
         public var recipe: Recipe?
         public var cookSession: CookSession?
         /// Set for `.stepPhoto` images. Deleting the step deletes its photos; deleting a photo leaves the step.
         public var step: Step?
+        /// The book a page scan came from.
+        public var book: Book?
+        /// Set for the pages and pictures of a reference.
+        public var reference: Reference?
 
         public init(role: RecipeImageRole = .photo, imageData: Data? = nil) {
             self.role = role
             self.imageData = imageData
+        }
+    }
+}
+
+// MARK: - References
+
+extension RecipeSchemaV1 {
+    /// Prose that is not a recipe (02 §4.2): a technique essay saved from the web, a cookbook's
+    /// technique chapter, a clipping. Captured by the same pipelines as recipes, it keeps its source
+    /// (a URL, or its book and pages), links to the recipes it informs in both directions, and is
+    /// what cook mode's technique lookups consult before the model. Added in Phase 2's schema
+    /// change (slice 2); where it shows in the library is 04 §5.2's question.
+    @Model
+    public final class Reference {
+        public var id: UUID = UUID()
+        public var title: String = ""
+        public var author: String = ""
+        public var kind: ReferenceKind = ReferenceKind.article
+        public var capturedAt: Date = Date.now
+        public var tags: [String] = []
+
+        public var book: Book?
+        public var bookEntry: BookEntry?
+        public var recipes: [Recipe]?
+        @Relationship(deleteRule: .cascade, inverse: \ReferenceSection.reference) public var sections: [ReferenceSection]?
+        /// Required in use (a URL, or a book and pages); optional in the schema, as CloudKit asks.
+        @Relationship(deleteRule: .cascade, inverse: \SourceInfo.reference) public var source: SourceInfo?
+        /// Page scans and pictures, as a recipe keeps its own.
+        @Relationship(deleteRule: .cascade, inverse: \RecipeImage.reference) public var images: [RecipeImage]?
+
+        public init(title: String = "", author: String = "", kind: ReferenceKind = .article) {
+            self.title = title
+            self.author = author
+            self.kind = kind
+        }
+    }
+
+    /// One headed section of a reference, in order.
+    @Model
+    public final class ReferenceSection {
+        public var id: UUID = UUID()
+        /// Empty for a reference's opening text, before its first heading.
+        public var heading: String = ""
+        public var body: String = ""
+        /// Position in the reference, lowest first (02's "order").
+        public var sortOrder: Int = 0
+
+        public var reference: Reference?
+
+        public init(heading: String = "", body: String = "", sortOrder: Int = 0) {
+            self.heading = heading
+            self.body = body
+            self.sortOrder = sortOrder
         }
     }
 }

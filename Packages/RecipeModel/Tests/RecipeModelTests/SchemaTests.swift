@@ -19,6 +19,7 @@ struct SchemaTests {
             Recipe(title: "Roast Chicken"), RecipeVersion(), Ingredient(item: "chicken", rawText: "1 whole chicken"),
             Step(text: "Salt it."), RecipeLink(), Tag(name: "weeknight"), CookSession(), SourceInfo(),
             NutritionEstimate(), RecipeImage(role: .pageScan, imageData: Data([0xFF, 0xD8])), RecipeCollection(name: "Sunday Suppers"),
+            Reference(title: "Brown Butter", kind: .technique), ReferenceSection(heading: "Why it works", body: "…"),
             Event(name: "Sunday Supper", guestCount: 8), Guest(name: "Rosa", restrictions: ["gluten-free"]),
             EventMenu(), Slot(name: "Main"), Candidate(servings: 8), Pairing(role: .wine, text: "a dry Riesling"),
             ShoppingList(), ShoppingItem(normalizedIngredient: "chicken"),
@@ -186,11 +187,144 @@ struct SchemaTests {
         #expect(try count(of: RecipeCollection.self, in: context) == 1)
     }
 
+    /// A reference keeps its book, its sections in order, its source (book and pages) and the
+    /// recipes it informs, both ways. Deleting it takes its sections, source and images and leaves
+    /// the book and recipes.
+    @Test func referenceLinksBookRecipesAndSource() throws {
+        let container = try RecipeStore.makeContainer(inMemory: true)
+        let context = ModelContext(container)
+
+        let book = Book(title: "A Bistro Book")
+        let entry = BookEntry(title: "The Importance of Brown Butter", page: 171)
+        let fish = Recipe(title: "Skate with Brown Butter")
+        let gnocchi = Recipe(title: "Gnocchi")
+        let reference = Reference(title: "The Importance of Brown Butter", author: "A. Chef", kind: .technique)
+        reference.tags = ["butter", "sauce"]
+        let opening = ReferenceSection(heading: "", body: "Opening text.", sortOrder: 0)
+        let method = ReferenceSection(heading: "Method", body: "Method text.", sortOrder: 1)
+        let source = SourceInfo()
+        source.captureMethod = .scan
+        source.firstPage = 171
+        source.lastPage = 172
+        let scan = RecipeImage(role: .pageScan, imageData: Data([0xFF, 0xD8]))
+        scan.pageKind = .reference
+        for model in [book, entry, fish, gnocchi, reference, opening, method, source, scan] as [any PersistentModel] { context.insert(model) }
+        reference.book = book
+        reference.bookEntry = entry
+        reference.sections = [method, opening]
+        reference.source = source
+        reference.images = [scan]
+        reference.recipes = [fish, gnocchi]
+        scan.book = book
+        try context.save()
+
+        let fetched = try #require(try context.fetch(FetchDescriptor<Reference>()).first)
+        #expect(fetched.kind == .technique && fetched.tags == ["butter", "sauce"])
+        #expect(fetched.sections?.sorted { $0.sortOrder < $1.sortOrder }.map(\.heading) == ["", "Method"])
+        #expect(fetched.source?.firstPage == 171 && fetched.source?.lastPage == 172 && fetched.source?.captureMethod == .scan)
+        #expect(book.references?.map(\.title) == ["The Importance of Brown Butter"])
+        #expect(book.pageScans?.count == 1)
+        #expect(entry.reference?.title == "The Importance of Brown Butter")
+        #expect(fish.references?.map(\.title) == ["The Importance of Brown Butter"])
+        #expect(Set(fetched.recipes?.map(\.title) ?? []) == ["Skate with Brown Butter", "Gnocchi"])
+        #expect(source.reference?.title == fetched.title)
+
+        context.delete(fetched)
+        try context.save()
+        #expect(try count(of: ReferenceSection.self, in: context) == 0)
+        #expect(try count(of: SourceInfo.self, in: context) == 0)
+        #expect(try count(of: RecipeImage.self, in: context) == 0)
+        #expect(try count(of: Recipe.self, in: context) == 2)
+        #expect(try count(of: Book.self, in: context) == 1)
+        #expect(fish.references?.isEmpty == true)
+        #expect(entry.reference == nil)
+    }
+
+    /// A page scan keeps its review regions as JSON, its page kind and its book; a scanned recipe its
+    /// extraction confidence, how it came in, its pages, its review reasons.
+    @Test func pageScanKeepsRegionsAndProvenance() throws {
+        let container = try RecipeStore.makeContainer(inMemory: true)
+        let context = ModelContext(container)
+
+        let book = Book(title: "A Bistro Book")
+        let recipe = Recipe(title: "Roast Chicken")
+        recipe.extractionConfidence = 0.82
+        let version = RecipeVersion()
+        version.needsReview = true
+        version.reviewReasons = ["firstRecipeOfBook", "unparsedIngredients"]
+        let source = SourceInfo()
+        source.captureMethod = .photo
+        source.firstPage = 12
+        let scan = RecipeImage(role: .pageScan, imageData: Data([0xFF, 0xD8]))
+        scan.pageNumber = 12
+        scan.pageKind = .recipe
+        let regions = ScanRegions(layoutSignature: "c2 t:center", pageNumber: 12, regions: [
+            ScanRegion(kind: "heading", role: "title", x: 0.1, y: 0.2, width: 0.6, height: 0.03, text: "Roast Chicken", confidence: 0.9),
+            ScanRegion(kind: "line", role: "ingredient", x: 0.1, y: 0.3, width: 0.2, height: 0.01, text: "1 chicken", confidence: 0.8, item: 0),
+            ScanRegion(kind: "photo", x: 0.5, y: 0.6, width: 0.3, height: 0.2),
+        ])
+        scan.regions = try regions.encoded()
+        let contents = RecipeImage(role: .pageScan, imageData: Data([0xFF, 0xD8, 0x02]))
+        contents.pageKind = .contents
+        let queued = RecipeImage(role: .pageScan, imageData: Data([0xFF, 0xD8, 0x03]))
+        for model in [book, recipe, version, source, scan, contents, queued] as [any PersistentModel] { context.insert(model) }
+        recipe.book = book
+        recipe.addVersion(version)
+        recipe.source = source
+        recipe.images = [scan]
+        scan.book = book
+        contents.book = book
+        queued.book = book
+        try context.save()
+
+        let fetched = try #require(try context.fetch(FetchDescriptor<Recipe>()).first)
+        #expect(fetched.extractionConfidence == 0.82)
+        #expect(fetched.currentVersion?.reviewReasons == ["firstRecipeOfBook", "unparsedIngredients"])
+        #expect(fetched.source?.captureMethod == .photo && fetched.source?.reviewedAt == nil)
+        let image = try #require(fetched.images?.first)
+        #expect(ScanRegions.decoded(from: image.regions) == regions)
+        #expect(image.pageKind == .recipe && image.book?.title == "A Bistro Book")
+        #expect(Set(book.pageScans?.map(\.pageKind) ?? []) == [.recipe, .contents, nil])
+        #expect(ScanRegions.decoded(from: nil) == nil)
+        #expect(ScanRegions.decoded(from: Data("not json".utf8)) == nil)
+
+        // Deleting the book leaves its recipes and their scans.
+        context.delete(book)
+        try context.save()
+        #expect(try count(of: Recipe.self, in: context) == 1)
+        #expect(try count(of: RecipeImage.self, in: context) == 3)
+        #expect(image.book == nil)
+    }
+
     /// 02 §4.2: every relationship optional with an inverse, no unique constraints,
     /// defaults on non-optional attributes, images in external storage.
     @Test func followsCloudKitRules() throws {
         let schema = RecipeStore.schema
         let entitiesByName = Dictionary(uniqueKeysWithValues: schema.entities.map { ($0.name, $0) })
+
+        // Phase 2's schema change (slice 2) is present, so the loop below checks it too.
+        let phase2: [String: [String]] = [
+            "Reference": ["title", "author", "kind", "capturedAt", "tags", "book", "bookEntry", "recipes", "sections", "source", "images"],
+            "ReferenceSection": ["heading", "body", "sortOrder", "reference"],
+            "Recipe": ["extractionConfidence", "references"],
+            "RecipeVersion": ["reviewReasons"],
+            "RecipeImage": ["regions", "pageKind", "book", "reference"],
+            "SourceInfo": ["captureMethod", "firstPage", "lastPage", "reviewedAt", "reference"],
+            "Book": ["references", "pageScans"],
+            "BookEntry": ["reference"],
+        ]
+        for (entityName, names) in phase2 {
+            let entity = try #require(entitiesByName[entityName], "missing entity \(entityName)")
+            let present = Set(entity.attributes.map(\.name) + entity.relationships.map(\.name))
+            for name in names {
+                #expect(present.contains(name), "missing \(entityName).\(name)")
+            }
+        }
+        for (entityName, name) in [("Recipe", "extractionConfidence"), ("RecipeImage", "regions"), ("RecipeImage", "pageKind"),
+                                   ("SourceInfo", "captureMethod"), ("SourceInfo", "firstPage"), ("SourceInfo", "reviewedAt")] {
+            let attribute = entitiesByName[entityName]?.attributes.first { $0.name == name }
+            #expect(attribute?.isOptional == true, "\(entityName).\(name) must be optional")
+        }
 
         for entity in schema.entities {
             for relationship in entity.relationships {

@@ -84,3 +84,46 @@ public enum BeverageKind: String, Codable, Sendable, CaseIterable {
 public enum PairingRole: String, Codable, Sendable, CaseIterable {
     case wine, cocktail, beer, nonAlcoholic, other
 }
+
+/// What a `Reference` is (02 §4.2): prose kept beside the recipes it informs.
+public enum ReferenceKind: String, Codable, Sendable, CaseIterable {
+    /// An essay or article saved from the web (Article markup, no recipe).
+    case article
+    /// A technique written up on its own: "The Importance of Brown Butter".
+    case technique
+    /// A cookbook chapter or chapter opener, captured from its pages.
+    case chapter
+    /// Anything else kept for reference: a clipping, a card, a note from a class.
+    case clipping
+}
+
+/// How a recipe or reference came into the library, which its source line says (04 §5.1 "Which
+/// book"): scanned from a book and page, imported from the web, typed by hand, or imported from
+/// another app.
+public enum CaptureMethod: String, Codable, Sendable, CaseIterable {
+    /// Typed in the editor.
+    case manual
+    /// A web page, in the app or through the Share Extension.
+    case web
+    /// A Paprika or Mela export.
+    case library
+    /// Pages photographed with the document camera.
+    case scan
+    /// Pages chosen from Photos or Files.
+    case photo
+}
+
+/// What a scanned page turned out to be once read. A recipe page belongs to its recipe; the others
+/// stay with their book (contents and index pages build the punchlist, a Sources page fills Pantry →
+/// Sources). Nil on a captured page that has not been read yet (Flow C's background queue).
+public enum ScanPageKind: String, Codable, Sendable, CaseIterable {
+    case recipe
+    case contents
+    case index
+    case sources
+    /// A photo plate: a picture with little or no text.
+    case photo
+    /// A technique chapter or essay, which becomes a `Reference`.
+    case reference
+    case other
+}

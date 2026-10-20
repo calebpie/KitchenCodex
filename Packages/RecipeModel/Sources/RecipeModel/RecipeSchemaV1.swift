@@ -19,6 +19,7 @@ public enum RecipeSchemaV1: VersionedSchema {
             Recipe.self, RecipeVersion.self, Ingredient.self, Step.self,
             RecipeLink.self, Tag.self, CookSession.self, SourceInfo.self,
             NutritionEstimate.self, RecipeImage.self, RecipeCollection.self,
+            Reference.self, ReferenceSection.self,
             // Planning
             Event.self, Guest.self, EventMenu.self, Slot.self, Candidate.self,
             Pairing.self, ShoppingList.self, ShoppingItem.self, Schedule.self, ScheduleTask.self,
@@ -50,6 +51,8 @@ public typealias SourceInfo = RecipeSchemaV1.SourceInfo
 public typealias NutritionEstimate = RecipeSchemaV1.NutritionEstimate
 public typealias RecipeImage = RecipeSchemaV1.RecipeImage
 public typealias RecipeCollection = RecipeSchemaV1.RecipeCollection
+public typealias Reference = RecipeSchemaV1.Reference
+public typealias ReferenceSection = RecipeSchemaV1.ReferenceSection
 public typealias Event = RecipeSchemaV1.Event
 public typealias Guest = RecipeSchemaV1.Guest
 /// The planning doc calls this `Menu`; the class is `EventMenu` to avoid clashing with SwiftUI's `Menu`.
