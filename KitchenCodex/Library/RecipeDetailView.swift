@@ -42,6 +42,25 @@ struct RecipeDetailView: View {
     @State private var barsFrame: CGRect = .zero
     @State private var columnsFrame: CGRect = .zero
     @State private var ingredientsHeight: CGFloat = 0
+    /// Page pointers (04 §5.1 "Page pointers"): the recipe or Reference a pill opened, the page
+    /// offered for scanning when the book holds nothing from it yet, and the book session opened
+    /// at that page's entry.
+    @State private var openedRecipe: Recipe?
+    @State private var openedReference: Reference?
+    @State private var offeredScan: OfferedScan?
+    @State private var scanning: ScanStart?
+
+    struct OfferedScan: Identifiable {
+        let id = UUID()
+        let page: Int
+        let title: String
+        let pointer: PagePointer
+    }
+
+    struct ScanStart: Identifiable {
+        let id = UUID()
+        let entry: BookEntry
+    }
 
     private static let batchSteps: [Rational] = [Rational(1, 4), Rational(1, 2), Rational(3, 4), .one, Rational(3, 2), Rational(2), Rational(3), Rational(4)]
     /// The hero is lower in the wide layout, where the photo already spans the column (03 §3.3).
@@ -175,6 +194,27 @@ struct RecipeDetailView: View {
         .collectionNamePrompt("New Collection", isPresented: $isNamingCollection, actionTitle: "Create") { name in
             CollectionActions.create(named: name, adding: recipe, in: modelContext)
         }
+        // A component, a parent or a page pointer's recipe, on whichever stack shows this one.
+        .navigationDestination(item: $openedRecipe) { linked in
+            RecipeDetailView(recipe: linked)
+        }
+        .sheet(item: $openedReference) { reference in
+            ReferencePageView(reference: reference)
+        }
+        .confirmationDialog(offeredScan.map { "Nothing from page \($0.page) yet" } ?? "", isPresented: Binding { offeredScan != nil } set: { if !$0 { offeredScan = nil } }, titleVisibility: .visible) {
+            if let offer = offeredScan {
+                Button("Scan Page \(offer.page)") { scan(offer) }
+            }
+        } message: {
+            if let book = recipe.book, let offer = offeredScan {
+                Text("\(book.displayTitle) has nothing scanned from page \(offer.page). Scanning it adds “\(offer.title)” to the book's list if it isn't there.")
+            }
+        }
+        .fullScreenCover(item: $scanning) { start in
+            if let book = recipe.book {
+                BookScanView(book: book, startAt: start.entry)
+            }
+        }
         .onChange(of: version?.servings) {
             // A new version may have a different yield; start again from it.
             servings = nil
@@ -240,6 +280,9 @@ struct RecipeDetailView: View {
                                 notesSection(version.notes)
                             }
                         }
+                    }
+                    if !components.isEmpty || !parents.isEmpty {
+                        includesSection
                     }
                     versionsSection
                 }
@@ -339,6 +382,48 @@ struct RecipeDetailView: View {
         }
         .buttonStyle(.plain)
         .accessibilityHint("Shows when it was cooked, and adds a past cook.")
+    }
+
+    // MARK: - Page pointers
+
+    /// A pill's page pointer, from a recipe in a book: what the book holds from that page opens; with
+    /// nothing there yet, Scan Page N (04 §5.1 "Page pointers"). `item` is the ingredient the
+    /// pointer sits on, for the entry's title.
+    private func open(_ pointer: PagePointer, item: String? = nil) {
+        guard let book = recipe.book else { return }
+        switch book.holding(pages: pointer.pages, named: pointer.target ?? item, from: recipe) {
+        case let .recipe(linked):
+            openedRecipe = linked
+        case let .reference(reference):
+            openedReference = reference
+        case let .nothing(page, entry):
+            offeredScan = OfferedScan(page: page, title: entry?.title ?? pointer.entryTitle(item: item), pointer: pointer)
+        }
+    }
+
+    /// Scan Page N: the book session at that page's entry, listed now when the list lacks it, as
+    /// Scan Now opens it.
+    private func scan(_ offer: OfferedScan) {
+        guard let book = recipe.book else { return }
+        book.reconcilePunchlist()
+        let (entry, isNew) = book.toScanEntry(page: offer.page, title: offer.title, in: modelContext)
+        // Remembered as the card's Add does, so the recipe links to the page's once it is scanned.
+        let recipeID = recipe.id
+        BookScanStore.shared.updateState(for: book) { state in
+            if let index = state.pointerEntries.firstIndex(where: { $0.entry == entry.id }) {
+                if !state.pointerEntries[index].recipes.contains(recipeID) { state.pointerEntries[index].recipes.append(recipeID) }
+            } else {
+                let isReference = offer.pointer.kind != .recipe || (!isNew && !CrossReferenceLinking.isRecipePage(offer.page, in: book, state: state)) || isNew
+                state.pointerEntries.append(BookScanState.PointerEntry(entry: entry.id, page: offer.page, isReference: isReference, phrase: offer.pointer.text,
+                                                                       kind: offer.pointer.kind.rawValue, recipes: [recipeID], madeEntry: isNew))
+            }
+        }
+        scanning = ScanStart(entry: entry)
+    }
+
+    /// The pill handler where pointers can open something: a recipe from a book.
+    private var pointerHandler: ((PagePointer) -> Void)? {
+        recipe.book == nil ? nil : { open($0) }
     }
 
     // MARK: - Scaling
@@ -487,7 +572,8 @@ struct RecipeDetailView: View {
                             .accessibilityAddTraits(.isHeader)
                     }
                     ForEach(group.ingredients) { ingredient in
-                        IngredientLine(ingredient: ingredient, factor: factor, units: units, preferred: preferredSystem, temperatureScale: shownTemperatureScale)
+                        IngredientLine(ingredient: ingredient, factor: factor, units: units, preferred: preferredSystem, temperatureScale: shownTemperatureScale,
+                                       onPointer: recipe.book == nil ? nil : { open($0, item: ingredient.item) })
                     }
                 }
             }
@@ -538,9 +624,9 @@ struct RecipeDetailView: View {
                 if stacksPhoto, !photos.isEmpty {
                     stepThumbnail(step, photos: photos, number: number)
                 }
-                StepTextView(text: step.text, scale: shownTemperatureScale, exclusion: stacksPhoto || photos.isEmpty ? nil : StepPhotoThumbnail.size)
+                StepTextView(text: step.text, scale: shownTemperatureScale, exclusion: stacksPhoto || photos.isEmpty ? nil : StepPhotoThumbnail.size, onPointer: pointerHandler)
                     // Temperatures read in the shown unit and times in full, with As Written as an action.
-                    .pillTextAccessibility(step.text, scale: shownTemperatureScale, prefix: "Step \(number).")
+                    .pillTextAccessibility(step.text, scale: shownTemperatureScale, prefix: "Step \(number).", onPointer: pointerHandler)
                     .overlay(alignment: .topTrailing) {
                         if !stacksPhoto, !photos.isEmpty {
                             stepThumbnail(step, photos: photos, number: number)
@@ -563,8 +649,8 @@ struct RecipeDetailView: View {
     /// The headnote and the notes use the step view, so their temperatures and times are pills too.
     private var headnoteSection: some View {
         DisclosureGroup {
-            StepTextView(text: recipe.headnote, scale: shownTemperatureScale)
-                .pillTextAccessibility(recipe.headnote, scale: shownTemperatureScale)
+            StepTextView(text: recipe.headnote, scale: shownTemperatureScale, onPointer: pointerHandler)
+                .pillTextAccessibility(recipe.headnote, scale: shownTemperatureScale, onPointer: pointerHandler)
                 .padding(.top, 8)
                 .frame(maxWidth: .infinity, alignment: .leading)
         } label: {
@@ -577,9 +663,81 @@ struct RecipeDetailView: View {
     private func notesSection(_ notes: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             SectionTitle("Notes")
-            StepTextView(text: notes, scale: shownTemperatureScale)
-                .pillTextAccessibility(notes, scale: shownTemperatureScale)
+            StepTextView(text: notes, scale: shownTemperatureScale, onPointer: pointerHandler)
+                .pillTextAccessibility(notes, scale: shownTemperatureScale, onPointer: pointerHandler)
         }
+    }
+
+    // MARK: - Includes
+
+    /// The component recipes this one links (`RecipeLink` with the component role): a split's
+    /// parts and the pages its pointers were linked to, in the order they were made.
+    private var components: [Recipe] {
+        (recipe.links ?? []).filter { $0.role == .component }.compactMap(\.subRecipe)
+            .sorted { $0.createdAt < $1.createdAt }
+    }
+
+    /// The recipes this one is a component of.
+    private var parents: [Recipe] {
+        (recipe.linkedFrom ?? []).filter { $0.role == .component }.compactMap(\.parent)
+            .sorted { $0.createdAt < $1.createdAt }
+    }
+
+    /// "Includes" with a row to each component, and "Part of" with a row to each parent (03 §3.3:
+    /// sub-recipes with a link to their own page). Cook mode inlines them in Phase 3.
+    private var includesSection: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            if !components.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    SectionTitle("Includes")
+                    ForEach(components) { component in
+                        linkedRow(component)
+                    }
+                }
+            }
+            if !parents.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    SectionTitle("Part Of")
+                    ForEach(parents) { parent in
+                        linkedRow(parent)
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: isSideBySide ? Self.stepsMeasure : .infinity, alignment: .leading)
+    }
+
+    private func linkedRow(_ linked: Recipe) -> some View {
+        Button {
+            openedRecipe = linked
+        } label: {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(linked.title)
+                        .font(.body)
+                        .foregroundStyle(.primary)
+                        .multilineTextAlignment(.leading)
+                    if let page = linked.pageNumber, linked.book == recipe.book {
+                        Text("p. \(page)")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text(linked.sourceLine)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.forward")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
+            }
+            .padding(.vertical, 8)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Opens the recipe.")
     }
 
     private var versionsSection: some View {
@@ -731,10 +889,12 @@ private struct IngredientLine: View {
     let preferred: MeasurementSystem
     /// The unit temperatures are shown in; nil keeps them as written.
     let temperatureScale: TemperatureScale?
+    /// A page pointer's pill in the note ("Dashi (see page 17)"); nil leaves pointers as words.
+    var onPointer: ((PagePointer) -> Void)?
 
     var body: some View {
         Group {
-            if hasTemperatures {
+            if hasTemperatures || hasPointers {
                 // The renderer draws the capsules; it takes the place of the numeric transition.
                 line
                     .textRenderer(TemperaturePillRenderer())
@@ -745,6 +905,17 @@ private struct IngredientLine: View {
         }
         .fixedSize(horizontal: false, vertical: true)
         .animation(.default, value: amount)
+        // The pointer's pill is a link the line takes itself; nothing leaves the app.
+        .environment(\.openURL, OpenURLAction { url in
+            guard let pointer = PagePointerAction.pointer(from: url) else { return .systemAction }
+            onPointer?(pointer)
+            return .handled
+        })
+        .accessibilityActions {
+            ForEach(Array(pointers.enumerated()), id: \.offset) { _, pointer in
+                Button(PagePointerAction.title(for: pointer)) { onPointer?(pointer) }
+            }
+        }
         .contextMenu {
             Section("As Written") {
                 Label(ingredient.rawText, systemImage: "text.quote")
@@ -758,8 +929,16 @@ private struct IngredientLine: View {
         [itemText, ingredient.preparation ?? "", ingredient.note ?? ""].contains(where: StepText.hasTemperatures)
     }
 
+    /// The line's page pointers, where they can open something.
+    private var pointers: [PagePointer] {
+        guard onPointer != nil else { return [] }
+        return [itemText, ingredient.preparation ?? "", ingredient.note ?? ""].flatMap(StepText.pointersIn)
+    }
+
+    private var hasPointers: Bool { !pointers.isEmpty }
+
     private var line: Text {
-        let item = Text.withTemperaturePills(itemText, scale: temperatureScale, isSecondary: false)
+        let item = Text.withTemperaturePills(itemText, scale: temperatureScale, isSecondary: false, pointers: onPointer != nil)
         var text = item
         if let amount {
             text = Text("\(Text(amount).fontWeight(.semibold).monospacedDigit()) \(item)")
@@ -812,7 +991,7 @@ private struct IngredientLine: View {
             text += NoteForm.suffix(for: note, form: ingredient.noteForm.flatMap(NoteForm.init(rawValue:)))
         }
         if ingredient.isOptional { text += " (optional)" }
-        return text.isEmpty ? nil : Text.withTemperaturePills(text, scale: temperatureScale)
+        return text.isEmpty ? nil : Text.withTemperaturePills(text, scale: temperatureScale, pointers: onPointer != nil)
     }
 }
 

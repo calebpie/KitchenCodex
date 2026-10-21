@@ -65,6 +65,12 @@ final class BookScanSession: PageCaptureSink {
         state.save(bookID: bookID)
     }
 
+    /// A change to the state from outside the queue (the cross-reference card, Scan page N), kept.
+    func updateState(_ change: (inout BookScanState) -> Void) {
+        change(&state)
+        save()
+    }
+
     // MARK: - Opening and pausing
 
     /// Opens a sitting: earlier sittings' finished captures let go, the current item set (Scan now
@@ -259,12 +265,20 @@ final class BookScanSession: PageCaptureSink {
         }
     }
 
-    /// Takes back what a processed capture saved.
+    /// Takes back what a processed capture saved: its recipes, the entries made for them because
+    /// the list lacked them (the Oct 21 review's finding 8), and their places on entries their
+    /// pointers put on the list.
     private func undo(_ capture: BookScanState.StoredCapture) {
+        let created = Set(capture.createdEntries)
         for recipe in recipes(of: capture) {
             if let entry = recipe.bookEntry { entry.status = .listed }
             context.delete(recipe)
         }
+        for entry in book.orderedEntries where created.contains(entry.id) && entry.reference == nil {
+            context.delete(entry)
+        }
+        if let index = state.captures.firstIndex(where: { $0.id == capture.id }) { state.captures[index].createdEntries = [] }
+        CrossReferenceLinking.forget(recipes: Set(capture.recipes), in: book, state: &state, context: context)
         if let photoID = capture.photo,
            let image = try? context.fetch(FetchDescriptor<RecipeImage>(predicate: #Predicate { $0.id == photoID })).first {
             if image.caption == "Cover" { image.recipe?.coverImageData = nil }
@@ -447,7 +461,7 @@ final class BookScanSession: PageCaptureSink {
             // A recipe saved again over a page join that was in the queue stays there: the book's
             // first recipe and its layout were counted when it was first saved.
             let wantsLook = flagged ?? (!reasons.isEmpty || read.title.isEmpty || ownerCapture.queued)
-            let recipe = await ScanSaving.saveNew(model, recipe: recipeIndex, book: book, reviewed: false, images: images, in: context)
+            let recipe = await ScanSaving.saveNew(model, recipe: recipeIndex, book: book, reviewed: false, images: images, appliesPointers: false, in: context)
             recipe.currentVersion?.needsReview = wantsLook
             if PunchlistLinking.link(recipe, to: entry, reviewed: false), let entry {
                 linked.append(entry)
@@ -463,11 +477,20 @@ final class BookScanSession: PageCaptureSink {
             queued = queued || wantsLook
             saved.append(recipe)
         }
+        // Cross-references without a card (02 Flow C step 6): pointers to these pages link their
+        // recipes to the ones just saved; these recipes' own pointers link to a recipe the book has
+        // from that page, or put the page on the to-scan list. After the whole page, so "recipe
+        // follows" finds the recipe printed after it.
+        for (recipe, recipeIndex) in zip(saved, model.recipes.indices.filter { !model.recipes[$0].isSkipped }) {
+            CrossReferenceLinking.linkWaiting(to: recipe, pages: pages.isEmpty ? [recipe.pageNumber].compactMap(\.self) : pages, in: book, state: &state, context: context)
+            CrossReferenceLinking.applySessionRule(reading.recipes[recipeIndex].crossReferences, for: recipe, in: book, state: &state, context: context)
+        }
         try? context.save()
 
         let photographs = reading.recipes.flatMap(\.crossReferences).filter { $0.kind == .photograph }.flatMap(\.pages)
         finish(owner) { capture in
             capture.recipes = saved.map(\.id)
+            capture.createdEntries = match.created.map(\.id)
             capture.queued = queued
             capture.pageNumber = pages.first
             capture.photographPages = photographs
@@ -564,6 +587,9 @@ final class BookScanStore {
         sessions[book.id] = session
         return session
     }
+
+    /// The book's session, when one is alive.
+    func liveSession(for bookID: UUID) -> BookScanSession? { sessions[bookID] }
 
     /// The courses chosen per chapter in the book's sessions.
     func courseChoices(for book: Book) -> [UUID: String] {

@@ -10,8 +10,12 @@ import SwiftUI
 /// around it holds Cancel and Save.
 struct ScanReviewView: View {
     @Bindable var model: ScanReviewModel
-    /// The book the page is from, for the line that says why review was asked.
-    var bookTitle: String?
+    /// The book the page is from, for the line that says why review was asked and for its
+    /// cross-reference cards.
+    var book: Book?
+    /// A stored recipe under review again, which its pointers don't link to itself.
+    var stored: Recipe?
+    var bookTitle: String? { book?.displayTitle }
     /// More → Rescan: read the photo again. Nil hides it.
     var onRescan: (() -> Void)?
     /// A page scanned on its own offers Skip for each recipe on it (ux-notes row 60).
@@ -341,6 +345,20 @@ struct ScanReviewView: View {
                     Label("Skipped: this recipe won't be saved. More → Include This Recipe brings it back.", systemImage: "minus.circle")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
+                }
+            }
+            // The banner's cross-references (03 §3.6, 02 Flow C step 6): a card per pointer.
+            if !model.recipe.pointers.isEmpty {
+                Section {
+                    ForEach(model.recipe.pointers) { pointer in
+                        PointerCard(pointer: pointer, book: book, stored: stored) { choice in
+                            withAnimation { model.setPointerChoice(choice, for: pointer.id) }
+                        }
+                    }
+                } header: {
+                    Text(model.recipe.pointers.count == 1 ? "Cross-Reference" : "Cross-References")
+                } footer: {
+                    Text("Linked recipes show under Includes. A pointer stays a tappable pill in the recipe whatever you choose.")
                 }
             }
 

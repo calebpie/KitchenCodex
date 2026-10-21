@@ -102,6 +102,11 @@ struct ReviewRecipe: Equatable {
     /// The course it is saved with: the last one chosen for its book until the contents page's
     /// chapter sets it (ux-notes row 73).
     var course: String?
+    /// Its pointers to other pages, each with the cook's answer on its card (02 Flow C step 6).
+    var pointers: [ReviewPointer] = []
+    /// Split into components on save, the parts the cook chose (`ComponentSplit`), nil for one
+    /// recipe (04 §5.1 "Sub-recipes on one page").
+    var split: SplitChoice?
 
     var prepTime: Duration?
     var cookTime: Duration?
@@ -437,6 +442,20 @@ final class ScanReviewModel {
         recipes[current].course = course
     }
 
+    /// A pointer card's answer (Link · Add to this book's to-scan list · Ignore).
+    func setPointerChoice(_ choice: PointerChoice, for id: Int) {
+        guard let index = recipes[current].pointers.firstIndex(where: { $0.id == id }), recipes[current].pointers[index].choice != choice else { return }
+        checkpoint()
+        recipes[current].pointers[index].choice = choice
+    }
+
+    /// Split into N recipes, confirmed on its sheet, or back to one recipe.
+    func setSplit(_ split: SplitChoice?) {
+        guard recipes[current].split != split else { return }
+        checkpoint()
+        recipes[current].split = split
+    }
+
     // MARK: - What the page pane shows
 
     /// The role a region shows: its own, or for a printed photo, what the cook made it.
@@ -516,6 +535,7 @@ extension ScanReviewModel {
             review.layoutSignature = recipe.layoutSignature
             review.confidence = recipe.confidence
             review.method = recipe.method
+            review.pointers = CrossReferenceLinking.pointers(in: recipe.crossReferences).enumerated().map { ReviewPointer(id: $0.offset, reference: $0.element) }
             return review
         }
         // A printed photo the structurer put beside a step still belongs to that recipe.
@@ -591,6 +611,19 @@ extension ScanReviewModel {
         review.confidence = PageConfidence(ocr: 0, parser: 0, structure: 0)
         review.reasons = version.reviewReasons.compactMap(ReviewReason.init(rawValue:))
         review.course = recipe.course
+        // The pointers as the recipe's text has them, each showing what was already made of it: a
+        // link to the page's recipe, or the page on the to-scan list.
+        let state = BookScanStore.shared.state(for: recipe.book)
+        review.pointers = CrossReferenceLinking.pointers(of: recipe).enumerated().map { offset, reference in
+            var pointer = ReviewPointer(id: offset, reference: reference)
+            let page = recipe.book.flatMap { CrossReferenceLinking.read(reference, from: recipe, in: $0, state: state).page }
+            if let page, let linked = (recipe.links ?? []).first(where: { $0.role == .component && ($0.subRecipe.map(CrossReferenceLinking.ownPages).map { $0.contains(page) } ?? false || $0.subRecipe?.pageNumber == page) })?.subRecipe {
+                pointer.choice = .link(linked.id)
+            } else if let page, state?.pointerEntries.contains(where: { $0.page == page && $0.recipes.contains(recipe.id) }) == true {
+                pointer.choice = .addToList
+            }
+            return pointer
+        }
         self.init(pages: pages, regions: regions, recipes: [review])
         storedCover = review.cover
     }

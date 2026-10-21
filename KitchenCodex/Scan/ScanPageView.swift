@@ -104,7 +104,7 @@ struct ScanPageView: View {
             WhichBookView(session: session)
         case .reviewing:
             if let review = session.review {
-                ScanReviewView(model: review, bookTitle: session.book?.displayTitle) {
+                ScanReviewView(model: review, book: session.book) {
                     Task { await session.rescan() }
                 }
                 .disabled(session.isSaving)

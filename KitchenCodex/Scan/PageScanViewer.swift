@@ -99,7 +99,7 @@ struct StoredScanReview: View {
         NavigationStack {
             Group {
                 if let model, !isRescanning {
-                    ScanReviewView(model: model, bookTitle: recipe.book?.displayTitle, onRescan: rescan, offersSkip: false)
+                    ScanReviewView(model: model, book: recipe.book, stored: recipe, onRescan: rescan, offersSkip: false)
                         .id(ObjectIdentifier(model))
                         .disabled(isSaving)
                 } else {

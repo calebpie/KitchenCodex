@@ -52,6 +52,13 @@ public enum PagePointers {
         return found
     }
 
+    /// The cross-references in a recipe's stored text (an ingredient line, a step, the headnote), as
+    /// the structurer lists them for a fresh scan: for the cross-reference card on a recipe reviewed
+    /// again, photographs left out.
+    public static func crossReferences(in text: String) -> [PageCrossReference] {
+        PageCrossReferences.find(in: text, kind: .recipe).filter { $0.kind != .photograph }
+    }
+
     /// "PHOTOGRAPH ON " (or "photographs on ") just before the page words.
     private static func isPhotograph(before index: String.Index, in text: String) -> Bool {
         let before = text[..<index].suffix(20).lowercased()

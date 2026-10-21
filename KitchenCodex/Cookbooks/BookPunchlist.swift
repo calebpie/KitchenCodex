@@ -75,6 +75,38 @@ extension Book {
     var matcherEntries: [PunchlistMatcher.Entry] {
         orderedEntries.map { PunchlistMatcher.Entry(title: $0.title, page: $0.page, isCaptured: $0.status != .listed) }
     }
+
+    /// A `listed` entry the contents didn't have, placed by its page in the chapter the page falls
+    /// in (the last chapter when the page comes after every first page); nil for a book with no
+    /// chapters.
+    func addEntry(title: String, page: Int, in context: ModelContext) -> BookEntry? {
+        guard let section = section(forPage: page) ?? orderedSections.last else { return nil }
+        let entry = BookEntry(title: title, page: page)
+        entry.sortOrder = (section.orderedEntries.firstIndex { ($0.page ?? .max) > page }).map { section.orderedEntries[$0].sortOrder } ?? ((section.orderedEntries.map(\.sortOrder).max() ?? -1) + 1)
+        for later in section.orderedEntries where later.sortOrder >= entry.sortOrder { later.sortOrder += 1 }
+        context.insert(entry)
+        entry.section = section
+        return entry
+    }
+
+    /// The entry to scan `page` from (Scan page N, the cross-reference card's Add to this book's
+    /// to-scan list): one already listed at that page with nothing captured, or a new `listed` one
+    /// titled `title` in the chapter the page falls in. A book with no list yet gains a "To Scan"
+    /// chapter for it, so the ring and Missing count it.
+    func toScanEntry(page: Int, title: String, in context: ModelContext) -> (entry: BookEntry, isNew: Bool) {
+        let open = orderedEntries.filter { $0.page == page && $0.recipe == nil && $0.reference == nil }
+        if let existing = open.max(by: { PunchlistMatcher.similarity($0.title, title) < PunchlistMatcher.similarity($1.title, title) }) {
+            return (existing, false)
+        }
+        if orderedSections.isEmpty {
+            let section = BookSection(title: "To Scan", sortOrder: 0)
+            context.insert(section)
+            section.book = self
+        }
+        let entry = addEntry(title: title, page: page, in: context)!
+        try? context.save()
+        return (entry, true)
+    }
 }
 
 extension BookSection {
@@ -109,6 +141,8 @@ enum PunchlistLinking {
     struct Match {
         var entries: [BookEntry?]
         var courses: [String?]
+        /// The entries made for recipes the list lacked, so taking the capture back takes them too.
+        var created: [BookEntry] = []
     }
 
     static func match(titles: [String], pages: [Int], in book: Book, current: BookEntry?, courses choices: [UUID: String], createsMissing: Bool = true, context: ModelContext) -> Match {
@@ -119,17 +153,14 @@ enum PunchlistLinking {
         }
         let indices = PunchlistMatcher.match(titles: titles, pages: pages, entries: book.matcherEntries, current: current.flatMap { entries.firstIndex(of: $0) })
         var matched: [BookEntry?] = []
+        var created: [BookEntry] = []
         for (offset, index) in indices.enumerated() {
             if let index {
                 matched.append(entries[index])
-            } else if createsMissing, let page = pages.first, let section = book.section(forPage: page) ?? book.orderedSections.last {
+            } else if createsMissing, let page = pages.first, let entry = book.addEntry(title: titles[offset], page: page, in: context) {
                 // A recipe the contents didn't list: the punchlist gains it, so the counts stay true.
-                let entry = BookEntry(title: titles[offset], page: page)
-                entry.sortOrder = (section.orderedEntries.firstIndex { ($0.page ?? .max) > page }).map { section.orderedEntries[$0].sortOrder } ?? ((section.orderedEntries.map(\.sortOrder).max() ?? -1) + 1)
-                for later in section.orderedEntries where later.sortOrder >= entry.sortOrder { later.sortOrder += 1 }
-                context.insert(entry)
-                entry.section = section
                 matched.append(entry)
+                created.append(entry)
             } else {
                 matched.append(nil)
             }
@@ -140,7 +171,7 @@ enum PunchlistLinking {
             if let page = pages.first, let section = book.section(forPage: page) { return section.course(choices: choices) }
             return ScanSession.lastCourse(of: book)
         }
-        return Match(entries: matched, courses: courses)
+        return Match(entries: matched, courses: courses, created: created)
     }
 
     /// The recipe is its entry's: captured, or reviewed when the cook went through review. An entry

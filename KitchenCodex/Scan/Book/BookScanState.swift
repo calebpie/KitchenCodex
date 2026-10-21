@@ -6,7 +6,11 @@ import Foundation
 /// queue up where it stopped. The punchlist's progress is the entries' statuses, in the library;
 /// this holds what the library has no place for: the current item, the courses the cook chose per
 /// chapter (no schema change is available, so the saved recipes carry them), the layouts the
-/// session has seen, and the captures not yet let go.
+/// session has seen, the captures not yet let go, and the entries page pointers put on the list
+/// (a reference pointer's entry is what slice 7 captures as a `Reference`).
+///
+/// Every key is read if present, so a field added later leaves an older file readable (the Oct 21
+/// review's finding 12).
 struct BookScanState: Codable {
     /// The punchlist's current item (`BookEntry.id`).
     var currentEntry: UUID?
@@ -18,6 +22,10 @@ struct BookScanState: Codable {
     var layouts: [String] = []
     var captures: [StoredCapture] = []
     var nextCaptureID = 0
+    /// Bumped each time the session opens.
+    var sitting = 0
+    /// Pages the book's recipes point to that went on its to-scan list (04 §5.1 "Page pointers").
+    var pointerEntries: [PointerEntry] = []
 
     /// One capture: the cleaned page in the folder, what the camera noted, and what it became.
     struct StoredCapture: Codable, Identifiable {
@@ -58,6 +66,70 @@ struct BookScanState: Codable {
         var joinedTo: Int?
         /// The sitting it was taken in, so a later sitting's counts start afresh.
         var sitting: Int = 0
+        /// Entries made for its recipes because the list lacked them (`BookEntry.id`), taken back
+        /// with the capture (the Oct 21 review's finding 8).
+        var createdEntries: [UUID] = []
+        /// Its recipes that are a page shot again over a recipe the cook reviewed or edited: both
+        /// kept until the captures sheet's Keep Earlier · Keep New is answered (ux-notes row 93).
+        var duplicates: [Duplicate] = []
+
+        init(id: Int, file: String, mode: CaptureMode, quality: Quality?, note: String) {
+            self.id = id
+            self.file = file
+            self.mode = mode
+            self.quality = quality
+            self.note = note
+        }
+
+        init(from decoder: any Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            id = try container.decode(Int.self, forKey: .id)
+            file = try container.decode(String.self, forKey: .file)
+            mode = try container.decodeIfPresent(CaptureMode.self, forKey: .mode) ?? .recipe
+            quality = try container.decodeIfPresent(Quality.self, forKey: .quality)
+            note = try container.decodeIfPresent(String.self, forKey: .note) ?? ""
+            entry = try container.decodeIfPresent(UUID.self, forKey: .entry)
+            flagged = try container.decodeIfPresent(Bool.self, forKey: .flagged)
+            status = try container.decodeIfPresent(Status.self, forKey: .status) ?? .pending
+            recipes = try container.decodeIfPresent([UUID].self, forKey: .recipes) ?? []
+            photo = try container.decodeIfPresent(UUID.self, forKey: .photo)
+            pageNumber = try container.decodeIfPresent(Int.self, forKey: .pageNumber)
+            photographPages = try container.decodeIfPresent([Int].self, forKey: .photographPages) ?? []
+            queued = try container.decodeIfPresent(Bool.self, forKey: .queued) ?? false
+            detail = try container.decodeIfPresent(String.self, forKey: .detail)
+            joinedTo = try container.decodeIfPresent(Int.self, forKey: .joinedTo)
+            sitting = try container.decodeIfPresent(Int.self, forKey: .sitting) ?? 0
+            createdEntries = try container.decodeIfPresent([UUID].self, forKey: .createdEntries) ?? []
+            duplicates = try container.decodeIfPresent([Duplicate].self, forKey: .duplicates) ?? []
+        }
+    }
+
+    /// A recipe saved from a page already captured, beside the earlier one it would replace.
+    struct Duplicate: Codable, Equatable {
+        /// The recipe saved from this capture (`Recipe.id`).
+        var new: UUID
+        /// The recipe already on the entry.
+        var earlier: UUID
+        /// The entry both are of (`BookEntry.id`).
+        var entry: UUID
+    }
+
+    /// A page a recipe points to, put on the to-scan list (or found on it) by the cross-reference
+    /// card or the session's rule: the entry, the page, whether it reads as reference material
+    /// rather than a recipe, and the recipes pointing there, which link to the recipe once it is
+    /// captured (or, for a reference, which slice 7 links to the `Reference` as related reading).
+    struct PointerEntry: Codable, Equatable {
+        var entry: UUID
+        var page: Int
+        var isReference: Bool
+        /// The pointer as printed ("see page 253").
+        var phrase: String
+        /// `PageCrossReference.Kind` raw value.
+        var kind: String
+        var recipes: [UUID]
+        /// The pointer made the entry (rather than finding it on the contents list), so it goes
+        /// once no recipe points there and nothing was captured.
+        var madeEntry: Bool
     }
 
     /// The gate's reading of a capture before cleanup.
@@ -77,8 +149,18 @@ struct BookScanState: Codable {
         }
     }
 
-    /// Bumped each time the session opens.
-    var sitting = 0
+    init() {}
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        currentEntry = try container.decodeIfPresent(UUID.self, forKey: .currentEntry)
+        courses = try container.decodeIfPresent([UUID: String].self, forKey: .courses) ?? [:]
+        layouts = try container.decodeIfPresent([String].self, forKey: .layouts) ?? []
+        captures = try container.decodeIfPresent([StoredCapture].self, forKey: .captures) ?? []
+        nextCaptureID = try container.decodeIfPresent(Int.self, forKey: .nextCaptureID) ?? (captures.map(\.id).max() ?? -1) + 1
+        sitting = try container.decodeIfPresent(Int.self, forKey: .sitting) ?? 0
+        pointerEntries = try container.decodeIfPresent([PointerEntry].self, forKey: .pointerEntries) ?? []
+    }
 }
 
 extension BookScanState {
@@ -101,8 +183,8 @@ extension BookScanState {
         try? data.write(to: folder.appending(path: "session.json"), options: .atomic)
     }
 
-    /// Books whose sessions left captures waiting, for a relaunch to resume (and, later, a
-    /// background task to drive).
+    /// Books whose sessions left captures waiting, for a relaunch to resume and the background task
+    /// to drain (ux-notes row 92).
     static func booksWithPendingCaptures() -> [UUID] {
         let root = URL.applicationSupportDirectory.appending(path: "Book Scans", directoryHint: .isDirectory)
         let names = (try? FileManager.default.contentsOfDirectory(atPath: root.path)) ?? []

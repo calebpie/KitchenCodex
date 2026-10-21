@@ -161,9 +161,11 @@ enum ScanSaving {
 
     /// Saves recipe `index` of `model` as a new recipe. `reviewed` is whether the cook confirmed it
     /// in review; unreviewed, it is "Accepted automatically" and asks for a look only on low
-    /// confidence (`reasons` beyond the book's first recipe and a new layout).
+    /// confidence (`reasons` beyond the book's first recipe and a new layout). Its cross-reference
+    /// cards' answers are applied unless `appliesPointers` is false (the book session applies its
+    /// own rule once a capture's recipes are all saved).
     @discardableResult
-    static func saveNew(_ model: ScanReviewModel, recipe index: Int, book: Book?, reviewed: Bool, images: PageImages, in context: ModelContext) async -> Recipe {
+    static func saveNew(_ model: ScanReviewModel, recipe index: Int, book: Book?, reviewed: Bool, images: PageImages, appliesPointers: Bool = true, in context: ModelContext) async -> Recipe {
         let review = model.recipes[index]
         let pageNumbers = model.pages.compactMap(\.pageNumber)
         var imported = review.imported
@@ -196,6 +198,9 @@ enum ScanSaving {
             book.reviewedLayouts.append(review.layoutSignature)
         }
         try? context.save()
+        if appliesPointers {
+            CrossReferenceLinking.apply(review.pointers, to: recipe, in: book, context: context)
+        }
         return recipe
     }
 
@@ -237,6 +242,7 @@ enum ScanSaving {
             book.reviewedLayouts.append(review.layoutSignature)
         }
         try? context.save()
+        CrossReferenceLinking.apply(review.pointers, to: recipe, in: recipe.book, context: context)
     }
 
     /// Keeps a page that is not a recipe (a contents, index or Sources page, a photo plate) on its

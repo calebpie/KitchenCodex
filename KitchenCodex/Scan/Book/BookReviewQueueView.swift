@@ -26,7 +26,7 @@ struct BookReviewQueueView: View {
         NavigationStack {
             Group {
                 if let model, current != nil {
-                    ScanReviewView(model: model, bookTitle: book.displayTitle, offersSkip: false)
+                    ScanReviewView(model: model, book: book, stored: current, offersSkip: false)
                         .id(ObjectIdentifier(model))
                         .disabled(isSaving)
                 } else {
