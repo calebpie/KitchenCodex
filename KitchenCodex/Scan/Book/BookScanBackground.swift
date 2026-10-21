@@ -14,9 +14,9 @@ import SwiftData
 /// and sessions need. The expiration handler is `@Sendable`: the system may call it on another
 /// queue, and a main-actor closure there would trap at its executor check (slice 4's camera crash).
 enum BookScanBackground {
-    static let identifier = "com.calebpietrafesa.KitchenCodex.bookscan"
+    nonisolated static let identifier = "com.calebpietrafesa.KitchenCodex.bookscan"
 
-    private static let logger = Logger(subsystem: "com.calebpietrafesa.KitchenCodex", category: "scan")
+    nonisolated private static let logger = Logger(subsystem: "com.calebpietrafesa.KitchenCodex", category: "scan")
 
     /// What the handler decides, apart from BackgroundTasks so it can be checked on its own.
     enum Decision {
@@ -45,18 +45,24 @@ enum BookScanBackground {
         if !registered { logger.error("Book scans: the background task couldn't be registered") }
     }
 
-    /// The scene went to the background: a request for the task, when captures are waiting. No
-    /// network is needed and external power isn't required.
+    /// The scene went to the background: a request for the task, when captures are waiting.
     @MainActor
     static func submitIfNeeded() {
         let pending = BookScanState.booksWithPendingCaptures()
         guard Decision.shouldSubmit(pendingBooks: pending) else { return }
+        Task { await submit(books: pending.count) }
+    }
+
+    /// The request, off the main thread as the scheduler asks: no network needed, external power
+    /// not required.
+    @concurrent
+    nonisolated private static func submit(books: Int) async {
         let request = BGProcessingTaskRequest(identifier: identifier)
         request.requiresNetworkConnectivity = false
         request.requiresExternalPower = false
         do {
-            try BGTaskScheduler.shared.submit(request)
-            logger.info("Book scans: asked for background time for \(pending.count) books")
+            try await BGTaskScheduler.shared.submitTaskRequest(request)
+            logger.info("Book scans: asked for background time for \(books) books")
         } catch {
             // The Simulator can't run background tasks: the queue catches up when the app opens.
             logger.error("Book scans: no background task (\(error.localizedDescription, privacy: .public))")
