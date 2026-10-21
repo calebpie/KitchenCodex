@@ -101,9 +101,9 @@ public enum ContentsReader {
         guard !text.isEmpty, let draft = try? await model.structureContents(pageText: text) else { return contents }
         let sections = draft.sections.map { section in
             BookContents.Section(
-                title: cleanTitle(section.title),
+                title: finalTitle(cleanTitle(section.title)),
                 page: section.page,
-                entries: section.entries.map { BookContents.Entry(title: cleanTitle($0.title), page: $0.page) }.filter { !$0.title.isEmpty }
+                entries: section.entries.map { BookContents.Entry(title: finalTitle(cleanTitle($0.title)), page: $0.page) }.filter { !$0.title.isEmpty }
             )
         }
         let pages = sections.flatMap(\.entries).compactMap(\.page)
@@ -157,9 +157,6 @@ public enum ContentsReader {
         var page: Int?
         /// A page number set alone, in its own column.
         var isNumberOnly: Bool
-        /// The trailing number was read through a digit slip ("5l"), so it must agree with its
-        /// neighbours to count.
-        var isMended = false
     }
 
     /// Every line of text off the page but noise, a price on a jacket flap and the page's own
@@ -178,10 +175,9 @@ public enum ContentsReader {
                 return Line(text: text, rect: line.rect, size: line.size, page: Int(text), isNumberOnly: true)
             }
             var result = Line(text: text, rect: line.rect, size: line.size, page: nil, isNumberOnly: false)
-            if let (title, page, mended) = trailingPage(text) {
+            if let (title, page) = trailingPage(text) {
                 result.text = title
                 result.page = page
-                result.isMended = mended
             } else if let match = text.firstMatch(of: /^(.+?)\s+(?:[0-9IlOo|]{1,3}[A-Za-z?]?|[Il|])$/), match.output.0.split(separator: " ").last?.contains(where: \.isNumber) == true || "Il|".contains(text.last!) {
                 // A page number the recognizer couldn't read ("3a"): the title without it.
                 result.text = cleanTitle(String(match.output.1))
@@ -193,8 +189,8 @@ public enum ContentsReader {
     }
 
     /// The title and page number of "Leek Soup 16", "Leek Soup ........ 16", "Leek Soup · 16",
-    /// "Leek Soup 5l" (a digit read as a letter, `mended`). Nil when the line doesn't end in one.
-    static func trailingPage(_ text: String) -> (String, Int, mended: Bool)? {
+    /// "Leek Soup 5l" (a digit read as a letter). Nil when the line doesn't end in one.
+    static func trailingPage(_ text: String) -> (String, Int)? {
         guard let match = text.firstMatch(of: /^(.+?)(?:\s*[.·•_]{2,}\s*|\s*…+\s*|\s+)([0-9IlOoUDSZB|]{1,3})\??$/) else { return nil }
         let token = String(match.output.2)
         let digits = token.filter(\.isNumber).count
@@ -213,14 +209,20 @@ public enum ContentsReader {
         guard let page = Int(mapped), page > 0 else { return nil }
         let title = cleanTitle(String(match.output.1))
         guard !title.isEmpty else { return nil }
-        return (title, page, digits < token.count)
+        return (title, page)
     }
 
-    /// A title as printed, with its leaders, separators and spare spaces gone.
+    /// A line as printed, with its leaders, separators and spare spaces gone. A comma at its end
+    /// stays: it says the title goes on below (`finalTitle` takes it off once joined).
     static func cleanTitle(_ text: String) -> String {
         var title = text.replacingOccurrences(of: #"[.·•…_]{2,}"#, with: " ", options: .regularExpression)
         title = title.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
-        return title.trimmingCharacters(in: CharacterSet.whitespaces.union(CharacterSet(charactersIn: ".·•…_-–—|,:;")))
+        return title.trimmingCharacters(in: CharacterSet.whitespaces.union(CharacterSet(charactersIn: ".·•…_-–—|:;")))
+    }
+
+    /// An entry's or chapter's title as the list shows it: no comma or colon left at its end.
+    static func finalTitle(_ text: String) -> String {
+        text.trimmingCharacters(in: CharacterSet.whitespaces.union(CharacterSet(charactersIn: ",:;")))
     }
 
     /// A printed line the recognizer read as two pieces side by side ("COI" and "IMENTS & PICKLES
@@ -244,7 +246,6 @@ public enum ContentsReader {
                     lines[left].rect = a.union(b)
                     lines[left].size = size
                     lines[left].page = lines[right].page
-                    lines[left].isMended = lines[right].isMended
                     lines.remove(at: right)
                     changed = true
                     break outer
@@ -298,11 +299,13 @@ public enum ContentsReader {
         return columns.map { $0.sorted { $0.rect.minY < $1.rect.minY } }
     }
 
-    /// Page numbers that jump by six or more from one entry to the next: chapters, not recipes.
+    /// Page numbers that jump by six or more from one entry to the next: chapters, not recipes. A
+    /// detailed page's few misread numbers jump too, so most of the steps must be wide.
     static func isOverview(_ pages: [Int]) -> Bool {
         guard pages.count >= 3, pages.count <= 30 else { return false }
         let gaps = zip(pages, pages.dropFirst()).map { abs($1 - $0) }
-        return (median(gaps.map(Double.init)) ?? 0) >= 6
+        let close = gaps.count { $0 <= 3 }
+        return (median(gaps.map(Double.init)) ?? 0) >= 6 && Double(close) < Double(gaps.count) * 0.4
     }
 
     // MARK: - Reading a column
@@ -345,17 +348,13 @@ public enum ContentsReader {
 
     static func read(_ column: [Line], style: Style, overview: Bool, into sections: inout [BookContents.Section]) {
         guard !column.isEmpty else { return }
-        // The column's line pitch: the step from one entry's top to the next.
-        let steps = zip(column, column.dropFirst()).map { $1.rect.minY - $0.rect.minY }.filter { $0 > 0.003 }
-        let pitch = median(steps) ?? 0.02
+        // The column's line pitch: the step from a line with a page number (an entry's last line)
+        // to the next, so a column of wrapped titles doesn't pull it down to the wrap's step.
+        let pairs = Array(zip(column, column.dropFirst()))
+        let steps = pairs.filter { $0.0.page != nil }.map { $1.rect.minY - $0.rect.minY }.filter { $0 > 0.003 }
+        let pitch = median(steps.count >= 3 ? steps : pairs.map { $1.rect.minY - $0.rect.minY }.filter { $0 > 0.003 }) ?? 0.02
         var lines = column
-        // A mended page number that runs backwards among its neighbours is a misreading.
-        var lastPage: Int?
-        for index in lines.indices {
-            guard let page = lines[index].page else { continue }
-            if lines[index].isMended, let lastPage, page < lastPage { lines[index].page = nil; continue }
-            if !style.isHeadingStyle(lines[index]) { lastPage = page }
-        }
+        if !overview { dropBackwardPages(&lines, style: style) }
 
         var index = 0
         var previousTop: Double?
@@ -370,28 +369,52 @@ public enum ContentsReader {
             index += 1
             if isLabel(line.text) { continue }
             let spaced = gapAbove >= pitch * 1.5
-            // A title wrapped onto the lines below it.
-            while line.page == nil, index < lines.count, continues(line, lines[index], pitch: pitch, spaced: spaced, style: style) {
+            // A title wrapped onto the lines below it, each measured from the line before it.
+            var tail = line
+            while line.page == nil, index < lines.count, continues(tail, lines[index], pitch: pitch, spaced: spaced && tail.rect == line.rect, style: style) {
                 let next = lines[index]
                 line.text = line.text + " " + next.text
                 line.page = next.page
                 line.rect = line.rect.union(next.rect)
                 line.size = max(line.size, next.size)
                 previousTop = next.rect.minY
+                tail = next
                 index += 1
             }
             if style.isHeadingStyle(line) || style.isTitleCaseHeading(line, spaced: spaced) || overview && line.page != nil {
-                sections.append(BookContents.Section(title: displayTitle(line.text), page: line.page))
+                sections.append(BookContents.Section(title: displayTitle(finalTitle(line.text)), page: line.page))
             } else if line.page != nil {
-                addEntry(PageLines.titleText(line.text), page: line.page)
+                addEntry(PageLines.titleText(finalTitle(line.text)), page: line.page)
             } else if overview || spaced {
                 // Set apart with no page number: a heading ("Roots" over its recipes), the first
                 // line of a column included.
-                sections.append(BookContents.Section(title: displayTitle(line.text)))
+                sections.append(BookContents.Section(title: displayTitle(finalTitle(line.text))))
             } else {
                 // An entry whose page number didn't read.
-                addEntry(PageLines.titleText(line.text), page: nil)
+                addEntry(PageLines.titleText(finalTitle(line.text)), page: nil)
             }
+        }
+    }
+
+    /// An entry's page number lower than the one before it in the column is a misreading (a
+    /// dropped digit, a stray number paired with it): the page goes, or the one before it does when
+    /// that one was the outlier (higher than the entry after it too). A chapter's own page is left
+    /// alone.
+    static func dropBackwardPages(_ lines: inout [Line], style: Style) {
+        let entries = lines.indices.filter { lines[$0].page != nil && !style.isHeadingStyle(lines[$0]) }
+        var previous: Int?
+        for (position, index) in entries.enumerated() {
+            guard let page = lines[index].page else { continue }
+            if let before = previous, let last = lines[before].page, page < last {
+                let next = entries.dropFirst(position + 1).first.flatMap { lines[$0].page }
+                if let next, next >= page, next < last {
+                    lines[before].page = nil
+                } else {
+                    lines[index].page = nil
+                    continue
+                }
+            }
+            previous = index
         }
     }
 
@@ -438,13 +461,13 @@ public enum ContentsReader {
     /// section.
     static func readIndex(_ reading: PageReading) -> BookContents {
         var entries: [BookContents.Entry] = []
-        for line in contentLines(of: reading) where !line.isNumberOnly {
-            let text = line.text
-            if let match = text.firstMatch(of: /^(.*?[\p{L}\)])\s*[,:]?\s*(\d{1,3})(?:\s*[,–\-]\s*\d{1,3})*$/) {
-                entries.append(BookContents.Entry(title: cleanTitle(String(match.output.1)), page: Int(match.output.2)))
-            } else if let page = line.page {
-                entries.append(BookContents.Entry(title: text, page: page))
-            }
+        // The printed lines as read: the entries' own commas tell an index's pages from its words.
+        let lines = reading.blocks.filter { $0.kind != .photo }.flatMap(\.lines).map { $0.text.trimmingCharacters(in: .whitespaces) }
+        for text in lines {
+            guard let match = text.firstMatch(of: /^(.*?[\p{L}\)])\s*[,:]?\s*(\d{1,3})(?:\s*[,–\-]\s*\d{1,3})*$/) else { continue }
+            let title = finalTitle(cleanTitle(String(match.output.1)))
+            guard title.filter(\.isLetter).count >= 2 else { continue }
+            entries.append(BookContents.Entry(title: title, page: Int(match.output.2)))
         }
         return BookContents(sections: entries.isEmpty ? [] : [BookContents.Section(title: "Index", entries: entries)])
     }

@@ -135,6 +135,38 @@ struct ContentsReaderTests {
         #expect(combined.entries.count == 5)
     }
 
+    /// Page numbers that run backwards are misreadings; a title can wrap over three lines; a column
+    /// full of wrapped titles keeps the entries' own spacing.
+    @Test func backwardPagesLongWrapsAndWrappedColumns() {
+        let contents = ContentsReader.read(Self.page([
+            Self.line("VEGETABLES 130", x: 0.14, y: 0.10, size: 0.022),
+            Self.line("Roasted Leeks with Brown Butter 131", x: 0.14, y: 0.14),
+            Self.line("Charred Cabbage with Anchovy, Lemon &", x: 0.14, y: 0.16),
+            Self.line("Toasted Breadcrumbs 13", x: 0.14, y: 0.175),
+            Self.line("Braised Fennel with Orange, Olives,", x: 0.14, y: 0.195),
+            Self.line("Chile & Pine Nuts 136", x: 0.14, y: 0.21),
+            Self.line("Glazed Turnips with Honey,", x: 0.14, y: 0.23),
+            Self.line("Thyme & Black Pepper Butter on", x: 0.14, y: 0.245),
+            Self.line("Grilled Bread 139", x: 0.14, y: 0.26),
+            Self.line("Smashed Squash with Sage 941", x: 0.14, y: 0.28),
+            Self.line("Grilled Corn with Lime 142", x: 0.14, y: 0.30),
+            Self.line("Shaved Carrot Salad with Dates", x: 0.14, y: 0.32),
+            Self.line("and Pistachios 144", x: 0.14, y: 0.335),
+        ]))
+        #expect(contents.sections.map(\.title) == ["Vegetables"])
+        #expect(contents.entries.map(\.title) == [
+            "Roasted Leeks with Brown Butter",
+            "Charred Cabbage with Anchovy, Lemon & Toasted Breadcrumbs",
+            "Braised Fennel with Orange, Olives, Chile & Pine Nuts",
+            "Glazed Turnips with Honey, Thyme & Black Pepper Butter on Grilled Bread",
+            "Smashed Squash with Sage",
+            "Grilled Corn with Lime",
+            "Shaved Carrot Salad with Dates and Pistachios",
+        ])
+        // 13 runs back after 131; 941 is the outlier before 142.
+        #expect(contents.entries.map(\.page) == [131, nil, 136, 139, nil, 142, 144])
+    }
+
     /// The iOS Simulator's recognizer can read one printed heading as two pieces side by side.
     @Test func piecesOfOnePrintedLineAreOneLine() {
         let contents = ContentsReader.read(Self.page([
