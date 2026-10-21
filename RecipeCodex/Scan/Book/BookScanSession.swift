@@ -177,7 +177,8 @@ final class BookScanSession: PageCaptureSink {
     var captureItems: [CaptureItem] {
         shownCaptures.map { capture in
             CaptureItem(id: capture.id, url: url(of: capture), mode: capture.mode, note: capture.note,
-                        detail: capture.status == .pending ? "Reading…" : capture.detail)
+                        detail: capture.status == .pending ? "Reading…" : capture.detail,
+                        needsReview: capture.mode == .recipe && !capture.recipes.isEmpty ? needsReview(capture) : nil)
         }
     }
 

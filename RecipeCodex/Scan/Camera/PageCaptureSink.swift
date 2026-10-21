@@ -20,6 +20,8 @@ struct CaptureItem: Identifiable, Equatable {
     var note: String
     /// What became of it, once read: "Saved: Leek Soup", "A cover for Leek Soup".
     var detail: String?
+    /// The book session's Needs Review for the capture; nil where there is no review queue.
+    var needsReview: Bool?
 }
 
 /// One text block of the last capture, for the iPad's running preview (03 §3.5, ux-notes row 87):
@@ -65,8 +67,14 @@ protocol PageCaptureSink: AnyObject, Observable {
     /// Deleting a capture removes it from the queue and the scan.
     func removeCapture(id: Int)
     func setMode(_ mode: CaptureMode, ofCapture id: Int)
+    /// Puts a capture's recipes in the review queue or takes them out (the book session).
+    func setNeedsReview(_ on: Bool, for id: Int)
     /// The shelf's book with this ISBN.
     func shelfBook(isbn: String) -> Book?
+}
+
+extension PageCaptureSink {
+    func setNeedsReview(_ on: Bool, for id: Int) {}
 }
 
 /// Three captures in a row hazy and poorly read (ux-notes row 57): Clean the lens stays advisory
@@ -92,6 +100,8 @@ struct CaptureListSheet: View {
     let items: [CaptureItem]
     var onDelete: (Int) -> Void
     var onSetMode: (Int, CaptureMode) -> Void
+    /// The book session's Needs Review per capture, so a phone with the camera can flag one too.
+    var onSetNeedsReview: ((Int, Bool) -> Void)?
 
     @Environment(\.dismiss) private var dismiss
 
@@ -104,7 +114,7 @@ struct CaptureListSheet: View {
                         .frame(maxWidth: .infinity)
                 }
                 ForEach(items) { item in
-                    CaptureRow(item: item) { onSetMode(item.id, $0) }
+                    CaptureRow(item: item) { onSetMode(item.id, $0) } onSetNeedsReview: { onSetNeedsReview?(item.id, $0) }
                 }
                 .onDelete { offsets in
                     for id in offsets.map({ items[$0].id }) { onDelete(id) }
@@ -126,6 +136,7 @@ struct CaptureListSheet: View {
 private struct CaptureRow: View {
     let item: CaptureItem
     var onSetMode: (CaptureMode) -> Void
+    var onSetNeedsReview: (Bool) -> Void
 
     @State private var thumbnail: UIImage?
 
@@ -157,6 +168,11 @@ private struct CaptureRow: View {
                 }
                 .pickerStyle(.segmented)
                 .frame(maxWidth: 200)
+                if let needsReview = item.needsReview {
+                    Toggle("Needs Review", isOn: Binding { needsReview } set: { onSetNeedsReview($0) })
+                        .font(.subheadline)
+                        .frame(maxWidth: 220)
+                }
             }
         }
         .padding(.vertical, 4)

@@ -69,7 +69,7 @@ struct PageCameraView: View {
             Button("Keep Scanning", role: .cancel) {}
         }
         .sheet(isPresented: $isShowingCaptures) {
-            CaptureListSheet(items: session.captureItems) { camera.removeCapture(id: $0) } onSetMode: { camera.setMode($1, ofCapture: $0) }
+            CaptureListSheet(items: session.captureItems) { camera.removeCapture(id: $0) } onSetMode: { camera.setMode($1, ofCapture: $0) } onSetNeedsReview: { session.setNeedsReview($1, for: $0) }
         }
     }
 
