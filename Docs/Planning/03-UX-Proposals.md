@@ -67,6 +67,8 @@ Each entry gives purpose, layout on both devices, key interactions, states, and 
 
 **HIG notes.** One prominent action (Cook). Large title collapses on scroll; the top edge uses the hard scroll-edge style so step text does not ghost under the title bar (04 §5.1 "Floating headers"). Highlighted times and temperatures are buttons, not just color: tap shows the original wording (04 §5.1 "Step pills"). A time pill covers the number and unit only; qualifying words such as "up to" or "at least" stay as text beside it (decided Oct 19, 2026, ux-notes row 29).
 
+**Disclosures (decided Oct 21, 2026, ux-notes row 97).** Headnote and Versions are compact disclosures: the chevron sits beside the label and the pair is the control, at every width, so the wide iPad detail never puts a chevron a screen from its label.
+
 ### 3.4 Add menu and import preview
 
 **Purpose.** One entry point for every capture method.
@@ -110,6 +112,8 @@ Add (+) presents the same menu on the Recipes and Cookbooks views, whose items n
 **iPhone.** The punchlist collapses to a compact header ("Now: Braised Short Ribs, p. 114 · 12 of 112") with a tap to open it as a sheet; camera fills the rest.
 
 **HIG notes.** Full-screen, immersive, but with a persistent Close and a reliable way back to the list. Progress text is specific.
+
+**Decided Oct 21, 2026 (04 §5.1 "Whole-book session", "Contents pages"; ux-notes rows 92–96, 98).** Captures left waiting are read in the background once the "processing" mode and its identifier are in the project (slice 6 registers the task). A page shot again replaces its earlier recipe when that recipe was neither reviewed nor edited, and asks otherwise. The review queue pages with Previous, Skip and Save & Next rather than a swipe. A sitting keeps the previous sitting's last recipe capture so the next sitting's first page can continue it, and a waiting photo stays until a recipe takes it. A chapter whose title names no course has none until the chip sets it. An essay listed on a contents page is editorial matter: neither a chapter nor an entry, and never something the app guides the cook to capture.
 
 ### 3.9 Event and menu builder
 
