@@ -94,7 +94,7 @@ public struct PagePipeline: Sendable {
         progress?(.structuring(page: page, of: count, lines: scan.blocks.reduce(0) { $0 + $1.lines.count }))
         var reading = structurer.read(scan, file: file, quality: quality)
         var marginLines: [String]?
-        if reading.pageNumber == nil, reading.kind == .recipe {
+        if reading.pageNumber == nil, reading.kind == .recipe || reading.kind == .prose {
             // The folio's small type, read again from the page's foot and head.
             let margins = await reader.marginLines(of: image, paper: scan.paper)
             marginLines = margins

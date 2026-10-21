@@ -26,6 +26,25 @@ struct PagePointerTests {
         #expect(pointers.map(\.target) == [nil, nil, nil, "Herb Butter", nil])
     }
 
+    /// ux-notes row 102: the to-scan entry's title from the pointer.
+    @Test func titlesTheEntryFromTheNameInTheParenthesesElseTheItem() throws {
+        let yam = try #require(PagePointers.find(in: "1 12-inch piece of mountain yam (yama-imo, see page 253)").first)
+        #expect(yam.name == "yama-imo")
+        #expect(yam.entryTitle(item: "12-inch piece of mountain yam") == "Yama-imo")
+        let plain = try #require(PagePointers.find(in: "1 12-inch piece of mountain yam (see page 253)").first)
+        #expect(plain.name == nil)
+        #expect(plain.entryTitle(item: "12-inch piece of mountain yam") == "Mountain yam")
+        #expect(plain.entryTitle(item: "2 large onions, sliced") == "Onions, sliced")
+        #expect(plain.entryTitle(item: nil) == "Page 253")
+        // A capitalized name before the parentheses still comes first.
+        let butter = try #require(PagePointers.find(in: "2 tablespoons Herb Butter (page 214)").first)
+        #expect(butter.entryTitle(item: "Herb Butter") == "Herb Butter")
+        // "or Dashi" names dashi; a Sources pointer names nothing.
+        #expect(PagePointers.find(in: "2 cups water (or Dashi, see page 17)").first?.name == "Dashi")
+        #expect(PagePointers.find(in: "salt (see Sources, page 301)").first?.name == nil)
+        #expect(PagePointers.itemName("one 3-pound chicken") == "chicken")
+    }
+
     @Test func leavesPhotographPointersOut() {
         #expect(PagePointers.find(in: "PHOTOGRAPH ON PAGE 6").isEmpty)
         #expect(PagePointers.find(in: "Photographs on pages 31 and 97").isEmpty)

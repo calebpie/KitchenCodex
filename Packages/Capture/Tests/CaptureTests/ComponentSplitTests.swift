@@ -81,6 +81,9 @@ struct ComponentSplitTests {
         ))
         #expect(plan.parts.map(\.title) == ["Baby Leeks", "Turnips", "Carrots"])
         #expect(plan.parts.map(\.steps) == [[1, 2, 3], [4, 5], [6, 7, 8]])
+        // Vegetables are no sub-recipe by name: every part starts off, each with its switch (row 101).
+        #expect(plan.parts.map(\.isComponent) == [false, false, false])
+        #expect(plan.defaultRecipeCount == 1)
         // The broth, which no heading names, stays with the parent.
         #expect(plan.parent(choosing: Set(plan.parts.indices)) == (ingredients: [0, 1, 2, 3, 4], steps: [0]))
     }
@@ -112,8 +115,37 @@ struct ComponentSplitTests {
                 "For the mushrooms, sauté them in butter.",
             ]
         ))
-        #expect(plan.parts.map(\.isComponent) == [false, true, true])
+        // The braise is the dish; the onions and mushrooms are candidates but no sub-recipe by
+        // name, so they start off too (row 101).
+        #expect(plan.parts.map(\.isComponent) == [false, false, false])
         #expect(plan.parent(choosing: [1, 2]).steps == [0, 1])
+    }
+
+    /// ux-notes row 101: only the parts whose names read as a sub-recipe start on, by the group's
+    /// name or the step label that opens it.
+    @Test func startsWithOnlyTheSubRecipesOn() throws {
+        let plan = try #require(ComponentSplit.plan(
+            title: "Grilled Beef with Pickled Daikon",
+            ingredientGroups: Self.groups([("For the beef", 4), ("For the daikon", 3), ("For the greens", 2), ("Soy Dressing", 3)]),
+            steps: [
+                "Marinate the beef: Whisk the soy, sugar and garlic and coat the slices for an hour.",
+                "Pickle the daikon: Slice it thin and pour the warm brine over.",
+                "Dress the greens: Toss them with a little oil and salt.",
+                "Soy dressing: Whisk everything together and taste for salt.",
+                "Grill the beef over high heat for a minute a side.",
+            ]
+        ))
+        #expect(plan.parts.map(\.title) == ["Beef", "Daikon", "Greens", "Soy Dressing"])
+        // The beef is the dish; the daikon reads as a pickle by its label, the dressing by its
+        // name; the greens are neither.
+        #expect(plan.parts.map(\.isComponent) == [false, true, false, true])
+        #expect(plan.defaultRecipeCount == 3)
+        #expect(ComponentSplit.readsAsSubRecipe("Making the Besciamella"))
+        #expect(ComponentSplit.readsAsSubRecipe("For the ragù"))
+        #expect(ComponentSplit.readsAsSubRecipe("Pasta Dough"))
+        #expect(ComponentSplit.readsAsSubRecipe("For the glaze"))
+        #expect(!ComponentSplit.readsAsSubRecipe("For the glazed onions"))
+        #expect(!ComponentSplit.readsAsSubRecipe("Baby Leeks"))
     }
 
     @Test func offersNothingWhenTheGroupsDoNotLineUp() {

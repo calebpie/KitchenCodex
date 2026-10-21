@@ -276,6 +276,9 @@ public struct PageReading: Sendable {
     /// for one upside down. The blocks' rects are in the turned frame, so a page scan stored upright
     /// matches them.
     public var quarterTurns: [Int] = []
+    /// What a page of reference reading holds (`ReferenceReader`), for a page of kind `.prose`
+    /// that reads as a glossary, a chapter opener or a technique; nil otherwise.
+    public var reference: ImportedReference?
 
     public init(files: [String], blocks: [PageBlock], kind: PageKind, reason: String? = nil, recipes: [PageRecipe] = [], pageNumbers: [Int?] = [], quality: [PageQualityReading?] = [], ocrConfidence: Double = 0, isContinuation: Bool = false, durations: [Duration] = []) {
         self.files = files

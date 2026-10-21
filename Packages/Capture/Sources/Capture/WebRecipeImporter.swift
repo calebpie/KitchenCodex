@@ -49,6 +49,9 @@ public struct WebPageExtraction: Sendable {
     /// "Ingredients" heading and its steps under a heading or numbered. False when the reading had
     /// to guess either, or when there was no page-text reading.
     public var readingFoundHeadings = false
+    /// The article on a page that carries Article markup and no recipe (`WebReferenceReader`),
+    /// for Save as Reference; nil when a recipe was found or the page is no article.
+    public var article: ImportedReference?
 }
 
 /// Imports a recipe from a web page's HTML (Flow A).
@@ -155,6 +158,9 @@ public struct WebRecipeImporter: Sendable {
         if var recipe = partial, !recipe.ingredients.isEmpty || !recipe.steps.isEmpty {
             recipe.confidence = 0.4
             extraction.recipe = recipe
+        }
+        if extraction.recipe == nil {
+            extraction.article = WebReferenceReader.read(page: page, metadata: metadata)
         }
         return extraction
     }

@@ -11,7 +11,11 @@ import Foundation
 /// group has neither, the first later step that names its ingredient ("Trim the leeks…" under
 /// Baby Leeks). A label printed under every group ("TO FINISH:") marks no boundary. A
 /// serving or assembly group ("To serve", "Assembling the Lasagne") stays with the parent unless the
-/// cook picks it.
+/// cook picks it, and so does the dish the title names and a group that carries an earlier one on.
+/// Of the rest, only the parts whose names read as a sub-recipe (a sauce, dressing, vinaigrette,
+/// pickle, dough, stock, marinade, ragù, béchamel and the like, by the group's name or the step
+/// label that opens it) start on (ux-notes row 101); the others start off, so a wrong default costs
+/// one tap rather than a stray recipe.
 public enum ComponentSplit {
     public struct Part: Sendable, Equatable, Identifiable {
         /// The ingredient group's heading as written ("For the vinaigrette").
@@ -22,7 +26,9 @@ public enum ComponentSplit {
         public var ingredients: [Int]
         /// The run of steps the group heads, by index, consecutive.
         public var steps: [Int]
-        /// A recipe of its own unless the cook says otherwise; a serving or assembly group stays.
+        /// Starts on in the split sheet: a part whose name reads as a sub-recipe (ux-notes row 101).
+        /// A serving or assembly group, the dish itself and a group carrying an earlier one on
+        /// start off; every part has a switch.
         public var isComponent: Bool
         /// Its place among the plan's parts.
         public var id: Int
@@ -53,14 +59,14 @@ public enum ComponentSplit {
         guard runs.count >= 2, !runs.isEmpty, steps.count >= 2 else { return nil }
 
         // Every step a label or a section heads, the labels printed under every group left out.
-        var labels: [(step: Int, words: Set<String>, opensComponent: Bool)] = []
+        var labels: [(step: Int, words: Set<String>, opensComponent: Bool, text: String)] = []
         if !stepGroups.isEmpty {
-            labels = stepGroups.sorted { $0.key < $1.key }.filter { steps.indices.contains($0.key) }.map { ($0.key, words($0.value), true) }
+            labels = stepGroups.sorted { $0.key < $1.key }.filter { steps.indices.contains($0.key) }.map { ($0.key, words($0.value), true, $0.value) }
         } else {
             let found = steps.enumerated().compactMap { index, text in label(of: text).map { (index, $0) } }
             let counts = Dictionary(grouping: found, by: { normalized($0.1) }).mapValues(\.count)
             labels = found.filter { counts[normalized($0.1)] == 1 }.map { step, label in
-                (step, words(label), label.range(of: #"^(for|to make|to prepare|make|prepare) the\b"#, options: [.regularExpression, .caseInsensitive]) != nil)
+                (step, words(label), label.range(of: #"^(for|to make|to prepare|make|prepare) the\b"#, options: [.regularExpression, .caseInsensitive]) != nil, label)
             }
         }
 
@@ -106,6 +112,8 @@ public enum ComponentSplit {
         let boundaries = Set(starts.values).union(closing.map { labels[$0].step })
 
         var parts: [Part] = []
+        /// The parts that could be a component: not serving, not the dish, not a continuation.
+        var candidates: [Int] = []
         var seen = Set<String>()
         var hasMain = false
         let dish = words(String(title.split(separator: /(?i)\s+(?:with|in|on|over)\s+/, maxSplits: 1).first ?? Substring(title)))
@@ -123,8 +131,18 @@ public enum ComponentSplit {
             hasMain = hasMain || isMain
             let continues = !substance.isEmpty && substance.isSubset(of: seen)
             seen.formUnion(substance)
-            parts.append(Part(group: name, title: componentTitle(name), ingredients: run.indices, steps: Array(start..<end), isComponent: !isServing && !isMain && !continues, id: parts.count))
+            let isCandidate = !isServing && !isMain && !continues
+            // On to begin with only when its name, or its label, reads as a sub-recipe (row 101).
+            let label = labels.first { $0.step == start }?.text ?? ""
+            let isComponent = isCandidate && (readsAsSubRecipe(name) || readsAsSubRecipe(label))
+            if isCandidate { candidates.append(parts.count) }
+            parts.append(Part(group: name, title: componentTitle(name), ingredients: run.indices, steps: Array(start..<end), isComponent: isComponent, id: parts.count))
         }
+        guard !candidates.isEmpty else { return nil }
+        // One part that would take every step, leaving the parent lines and no method, is a group
+        // that runs to the end because nothing after it says where it stops.
+        let kept = Plan(parts: parts, ingredientCount: ingredientGroups.count, stepCount: steps.count).parent(choosing: Set(candidates))
+        if candidates.count == 1, kept.steps.isEmpty, !kept.ingredients.isEmpty { return nil }
         // A parent left with nothing of its own keeps the part with the most steps: the dish itself
         // ("For the Stew" beside its onions and mushrooms).
         let plan = Plan(parts: parts, ingredientCount: ingredientGroups.count, stepCount: steps.count)
@@ -133,13 +151,18 @@ public enum ComponentSplit {
            let main = parts.indices.filter({ parts[$0].isComponent }).max(by: { (parts[$0].steps.count, -$0) < (parts[$1].steps.count, -$1) }) {
             parts[main].isComponent = false
         }
-        guard parts.contains(where: \.isComponent) else { return nil }
-        // One component that would take every step, leaving the parent lines and no method, is a
-        // group that runs to the end because nothing after it says where it stops.
-        let components = parts.indices.filter { parts[$0].isComponent }
-        let kept = Plan(parts: parts, ingredientCount: ingredientGroups.count, stepCount: steps.count).parent(choosing: Set(components))
-        if components.count == 1, kept.steps.isEmpty, !kept.ingredients.isEmpty { return nil }
         return Plan(parts: parts, ingredientCount: ingredientGroups.count, stepCount: steps.count)
+    }
+
+    /// Words that name a sub-recipe (ux-notes row 101): a group or a step label with one of them
+    /// starts on in the split sheet. Nouns, as written: "the glazed onions" are the dish's onions,
+    /// "the glaze" is a sub-recipe; "Pickle the daikon" makes a pickle, "Dress the greens" finishes
+    /// the greens.
+    static let subRecipePattern = #"\b(sauces?|dressings?|vinaigrettes?|pickles?|pickled|pickling|doughs?|stocks?|broths?|marinades?|marinate|rag[uù]|ragout|b[eé]chamel|besciamella|pesto|salsas?|relish(es)?|aioli|mayonnaise|mayo|glazes?|syrups?|brines?|cure|pur[eé]es?|compotes?|jams?|chutneys?|crusts?|pastry|fillings?|custards?|caramel|ganache|frosting|icing|batters?|pastes?|rubs?|spice mix(ture)?|spices|sachet|confit|jus|gravy|crumble|sofrito|mirepoix|dashi|emulsion|reductions?|coulis|gastrique|chimichurri|tapenade|gremolata|romesco|harissa|kimchi|infusions?|infused oil|chil[ei] oil|compound butter|herb butter|brown butter|dips?|hummus|tahini|crema|mole|adobo|sambal|tzatziki|raita|sauerkraut|kraut|seasonings?|stuffings?|base|liquid|liquor|mixtures?|dumplings|noodles|pasta)\b"#
+
+    /// Whether a group's name or a step's label names a sub-recipe.
+    static func readsAsSubRecipe(_ text: String) -> Bool {
+        text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil).range(of: subRecipePattern, options: .regularExpression) != nil
     }
 
     // MARK: - Groups and labels

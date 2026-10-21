@@ -80,6 +80,14 @@ public struct PageStructurer: Sendable {
             for id in ids { page.blocks[id].recipe = recipe }
         }
         reading.blocks = page.blocks
+        // Reference reading (slice 7): a glossary, a chapter opener or a technique, which a recipe
+        // with no ingredients on this page would otherwise be read as.
+        if let reference = ReferenceReader.read(blocks: page.blocks, recipes: recipes, isContinuation: recipes.first?.title.isEmpty == true) {
+            reading.kind = .prose
+            reading.reason = reference.reason
+            reading.reference = reference
+            return reading
+        }
         if recipes.isEmpty {
             let characters = page.contentCharacters
             reading.kind = characters > 300 ? .prose : .unreadable
