@@ -41,6 +41,8 @@ final class BookScanSession: PageCaptureSink {
 
     @ObservationIgnored private let context: ModelContext
     @ObservationIgnored private var worker: Task<Void, Never>?
+    /// The book was deleted: nothing more is written for it.
+    @ObservationIgnored private var isAbandoned = false
     @ObservationIgnored private var lens = LensWatch()
     @ObservationIgnored private let images = ScanSaving.PageImages()
     private static let logger = Logger(subsystem: "com.calebpietrafesa.RecipeCodex", category: "scan")
@@ -58,7 +60,10 @@ final class BookScanSession: PageCaptureSink {
         folder.appending(path: capture.file)
     }
 
-    private func save() { state.save(bookID: bookID) }
+    private func save() {
+        guard !isAbandoned else { return }
+        state.save(bookID: bookID)
+    }
 
     // MARK: - Opening and pausing
 
@@ -308,11 +313,18 @@ final class BookScanSession: PageCaptureSink {
     }
 
     /// Reads and saves every waiting capture in capture order. What a background task would call.
+    /// Stops when its task is cancelled (the book was deleted).
     func drain() async {
-        while let next = state.captures.filter({ $0.status == .pending }).map(\.id).min() {
+        while !Task.isCancelled, let next = state.captures.filter({ $0.status == .pending }).map(\.id).min() {
             await process(next)
         }
         worker = nil
+    }
+
+    /// The book is gone: nothing more is read or written for it.
+    func abandon() {
+        isAbandoned = true
+        worker?.cancel()
     }
 
     private var pipeline: PagePipeline { ScanSession.makePipeline() }
@@ -322,7 +334,10 @@ final class BookScanSession: PageCaptureSink {
         let capture = state.captures[index]
         let url = url(of: capture)
         let pipeline = pipeline
-        guard let reading = try? await Self.read(url, quality: capture.quality?.reading, with: pipeline) else {
+        let read = try? await Self.read(url, quality: capture.quality?.reading, with: pipeline)
+        // The book was deleted while it was read: nothing is saved for it.
+        guard !isAbandoned else { return }
+        guard let reading = read else {
             finish(id) { $0.status = .failed; $0.detail = "Couldn't be read" }
             return
         }
@@ -396,7 +411,7 @@ final class BookScanSession: PageCaptureSink {
         }
         let reading = await Self.refine(parts, urls: urls, with: pipeline).first ?? single
         refining = nil
-        guard let ownerIndex = state.captures.firstIndex(where: { $0.id == owner }) else { return }
+        guard !isAbandoned, let ownerIndex = state.captures.firstIndex(where: { $0.id == owner }) else { return }
         let ownerCapture = state.captures[ownerIndex]
         // Needs Review as the cook set it on this capture (the last capture's pane shows this one,
         // joined or not), else on the page it joined.
@@ -560,11 +575,19 @@ final class BookScanStore {
         sessions[book.id] != nil || BookScanState.load(bookID: book.id) != nil
     }
 
-    /// Relaunch: every book whose session left captures waiting reads them now.
+    /// Relaunch: every book whose session left captures waiting reads them now. A folder whose
+    /// book the store doesn't hold is left alone: the store may be the in-memory fallback.
     func resume(in context: ModelContext) {
         for id in BookScanState.booksWithPendingCaptures() where sessions[id] == nil {
             guard let book = try? context.fetch(FetchDescriptor<Book>(predicate: #Predicate { $0.id == id })).first else { continue }
             session(for: book, context: context).kick()
         }
+    }
+
+    /// The book is being deleted: its session stops, and its captures and state go with it.
+    func forget(bookID: UUID) {
+        sessions[bookID]?.abandon()
+        sessions[bookID] = nil
+        try? FileManager.default.removeItem(at: BookScanState.folder(for: bookID))
     }
 }

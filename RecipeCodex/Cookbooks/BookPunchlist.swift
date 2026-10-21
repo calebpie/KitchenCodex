@@ -147,7 +147,8 @@ enum PunchlistLinking {
     /// another recipe already has keeps it (a page shot again); false then.
     @discardableResult
     static func link(_ recipe: Recipe, to entry: BookEntry?, reviewed: Bool) -> Bool {
-        guard let entry else { return false }
+        // The entry can go while the recipe is being saved (the list edited after Close).
+        guard let entry, !entry.isDeleted else { return false }
         if let other = entry.recipe, other != recipe, other.modelContext != nil, !other.isDeleted { return false }
         recipe.bookEntry = entry
         entry.status = reviewed ? .reviewed : .captured

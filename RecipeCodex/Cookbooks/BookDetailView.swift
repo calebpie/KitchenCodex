@@ -176,6 +176,8 @@ struct BookDetailView: View {
             // Delete after the pop so the view never renders a deleted model. The book's recipes
             // stay, their link to it cleared (`Book.recipes` nullifies).
             guard isDeleting else { return }
+            // Its whole-book session, with any captures still waiting, goes with it.
+            BookScanStore.shared.forget(bookID: book.id)
             modelContext.delete(book)
             try? modelContext.save()
         }
