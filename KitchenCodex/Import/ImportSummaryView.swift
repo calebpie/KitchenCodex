@@ -77,3 +77,42 @@ struct ImportSummaryView: View {
         }
     }
 }
+
+/// The top of the preview for an article saved as reference reading (02 §4.2): title, source, the
+/// sections it has, and what saving does. Shared by the Share Extension and the in-app sheet.
+struct ReferenceSummaryView: View {
+    let reference: ImportedReference
+    var showsTitle = true
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if showsTitle {
+                Text(reference.title.isEmpty ? "Untitled Article" : reference.title)
+                    .font(.title3.weight(.semibold))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Text([reference.sourceName, reference.author].compactMap(\.self).joined(separator: " · "))
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Label(sectionsLine, systemImage: "text.book.closed")
+                .font(.subheadline)
+            if !reference.headings.isEmpty {
+                Text(reference.headings.prefix(4).joined(separator: " · ") + (reference.headings.count > 4 ? " · …" : ""))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+            Label("An article, not a recipe. It saves as reference reading in Pantry → References, beside the recipes it informs.", systemImage: "info.circle")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var sectionsLine: String {
+        let count = reference.sections.count
+        let words = reference.characterCount / 5
+        return "\(count == 1 ? "1 section" : "\(count) sections"), about \(words.formatted()) words"
+    }
+}

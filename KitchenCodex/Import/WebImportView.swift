@@ -15,9 +15,14 @@ import SwiftUI
 /// "Reading ingredients…" (Use Page Reading skips it); with a page-text reading that had no headings
 /// to go by, the preview shows it while the model reads, says so in a row, and takes the model's
 /// reading in place if the cook hasn't edited the preview by then.
+///
+/// A page with Article markup and no recipe (02 §4.2) offers Save as Reference: its title, author
+/// and headed sections save as reference reading in Pantry → References.
 struct WebImportView: View {
     /// Called with the saved recipe just before the sheet dismisses, so Recipes can open it.
     var onSaved: (Recipe) -> Void
+    /// Called with the saved reference just before the sheet dismisses.
+    var onSavedReference: ((Reference) -> Void)?
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
@@ -26,12 +31,16 @@ struct WebImportView: View {
         case entry
         case working(String)
         case preview
+        /// An article, not a recipe: Save as Reference.
+        case reference
         case failed(String)
     }
 
     @State private var address = ""
     @State private var phase: Phase = .entry
     @State private var imported: ImportedRecipe?
+    /// The article on a page that holds no recipe.
+    @State private var article: ImportedReference?
     @State private var draft = RecipeDraft()
     @State private var coverPreview: UIImage?
     @State private var isLoadingCover = false
@@ -61,13 +70,14 @@ struct WebImportView: View {
                 case .entry: entry
                 case let .working(message): working(message)
                 case .preview: preview
+                case .reference: referencePreview
                 case let .failed(message): failure(message)
                 }
             }
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { toolbar }
-            .interactiveDismissDisabled(phase == .preview)
+            .interactiveDismissDisabled(phase == .preview || phase == .reference)
         }
         .onDisappear {
             work?.cancel()
@@ -78,6 +88,7 @@ struct WebImportView: View {
     private var title: String {
         switch phase {
         case .preview: imported?.method == nil ? "New Recipe" : "Import Recipe"
+        case .reference: "Save as Reference"
         default: "Import from Web"
         }
     }
@@ -86,11 +97,11 @@ struct WebImportView: View {
     private var toolbar: some ToolbarContent {
         ToolbarItem(placement: .cancellationAction) {
             Button(role: .cancel) {
-                if phase == .preview { isConfirmingDiscard = true } else { dismiss() }
+                if phase == .preview || phase == .reference { isConfirmingDiscard = true } else { dismiss() }
             }
             // Escape cancels the sheet (03 §4, ux-notes row 43).
             .keyboardShortcut(.cancelAction)
-            .confirmationDialog("Discard this recipe?", isPresented: $isConfirmingDiscard, titleVisibility: .visible) {
+            .confirmationDialog(phase == .reference ? "Discard this reference?" : "Discard this recipe?", isPresented: $isConfirmingDiscard, titleVisibility: .visible) {
                 Button("Discard", role: .destructive) { dismiss() }
                 Button("Keep Editing", role: .cancel) {}
             }
@@ -103,8 +114,38 @@ struct WebImportView: View {
             case .preview:
                 Button("Save", role: .confirm) { save() }
                     .disabled(!draft.canSave || isLoadingCover)
+            case .reference:
+                Button("Save", role: .confirm) { saveReference() }
+                    .disabled(article?.title.trimmed.isEmpty != false)
             default:
                 EmptyView()
+            }
+        }
+    }
+
+    /// The article's title, source and sections, read-only; Save keeps it as a Reference.
+    private var referencePreview: some View {
+        Form {
+            if let article {
+                Section {
+                    ReferenceSummaryView(reference: article)
+                }
+                ForEach(Array(article.sections.enumerated()), id: \.offset) { _, section in
+                    Section {
+                        Text(section.body)
+                            .lineLimit(6)
+                            .font(.callout)
+                    } header: {
+                        if !section.heading.isEmpty { Text(section.heading) }
+                    }
+                }
+                if let url = article.sourceURL {
+                    Section("Source") {
+                        Link(destination: url) {
+                            Label(url.host()?.replacingOccurrences(of: "www.", with: "") ?? url.absoluteString, systemImage: "safari")
+                        }
+                    }
+                }
             }
         }
     }
@@ -323,7 +364,16 @@ struct WebImportView: View {
                 if let refined { result = refined }
             }
             try Task.checkCancellation()
-            guard let result else { throw WebImportError.noRecipeFound }
+            guard let result else {
+                // No recipe, but an article (02 §4.2): offered as reference reading.
+                if let found = extraction.article {
+                    logTiming("article shown", for: ImportedRecipe(title: found.title))
+                    article = found
+                    phase = .reference
+                    return
+                }
+                throw WebImportError.noRecipeFound
+            }
             show(result)
         } catch is CancellationError {
             return
@@ -378,8 +428,9 @@ struct WebImportView: View {
             return nil
         }
         guard let reading, !Task.isCancelled else { return nil }
-        // Keep the rendering when it found the recipe, or at least more text for the model to read.
-        return reading.recipe != nil || reading.recipeText.count > 0 ? reading : nil
+        // Keep the rendering when it found the recipe or an article, or at least more text for
+        // the model to read.
+        return reading.recipe != nil || reading.article != nil || reading.recipeText.count > 0 ? reading : nil
     }
 
     /// Parsing a large page takes tens of milliseconds; keep it off the main actor.
@@ -434,6 +485,13 @@ struct WebImportView: View {
         draft = RecipeDraft(imported: manual)
         coverPreview = nil
         phase = .preview
+    }
+
+    private func saveReference() {
+        guard let article else { return }
+        let reference = article.save(in: modelContext)
+        onSavedReference?(reference)
+        dismiss()
     }
 
     private func save() {

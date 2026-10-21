@@ -167,6 +167,44 @@ extension RecipeDraft {
     }
 }
 
+extension ImportedReference {
+    /// Saves an article read from the web as a Reference with its sections and its source (the
+    /// link, the author and the site), kind article (02 §4.2). Shared by Import from Web and the
+    /// Share Extension, as `saveImport` is for recipes.
+    @discardableResult
+    func save(in context: ModelContext) -> Reference {
+        let reference = Reference(title: title, author: author ?? "", kind: referenceKind)
+        context.insert(reference)
+        for (index, section) in sections.enumerated() {
+            let stored = ReferenceSection(heading: section.heading, body: section.body, sortOrder: index)
+            context.insert(stored)
+            stored.reference = reference
+        }
+        let source = SourceInfo(url: sourceURL, author: author)
+        source.siteName = siteName ?? sourceURL?.host()?.replacingOccurrences(of: "www.", with: "")
+        source.importedAt = .now
+        source.captureMethod = .web
+        context.insert(source)
+        reference.source = source
+        try? context.save()
+        return reference
+    }
+
+    /// The library's kind: a glossary is a chapter of its book.
+    var referenceKind: ReferenceKind {
+        switch kind {
+        case .article: .article
+        case .technique: .technique
+        case .chapter, .glossary: .chapter
+        }
+    }
+
+    /// "Serious Eats", or the host when the page names no site.
+    var sourceName: String {
+        siteName ?? sourceURL?.host()?.replacingOccurrences(of: "www.", with: "") ?? "the web"
+    }
+}
+
 extension ImportedRecipe {
     /// "Serious Eats", or the host when the page names no site.
     var sourceName: String {

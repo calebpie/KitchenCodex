@@ -10,6 +10,11 @@ import UniformTypeIdentifiers
 /// Entry point for "Share → Kitchen Codex" (Flow A). Reads the shared page (Safari hands over the
 /// rendered DOM through GetPageSource.js; other apps share a link, which is fetched), imports it
 /// with the same importer as the app, shows a compact preview, and saves into the App Group store.
+/// A complete reading shows at once and the on-device model refines it in place with the same
+/// "Reading ingredients…" row as the app (ux-notes row 44); an Article page with no recipe offers
+/// Save as Reference (02 §4.2). There is no Open in app button: iOS 27 gives a share extension no
+/// supported way to open its containing app (`NSExtensionContext.open` is for Today widgets), and
+/// the responder-chain workaround is not used.
 final class ShareViewController: UIViewController {
     private let model = ShareImportModel()
 
@@ -122,14 +127,20 @@ final class ShareImportModel {
     enum Phase: Equatable {
         case reading(String)
         case ready
+        /// An article, not a recipe: Save keeps it as a Reference.
+        case readyReference
         case saving
         case failed(String)
     }
 
     var phase: Phase = .reading("Reading the page…")
     var recipe: ImportedRecipe?
+    /// The article on a page that holds no recipe.
+    var reference: ImportedReference?
     var cover: UIImage?
     var isLoadingCover = false
+    /// The preview shows a page reading while the model reads the page (ux-notes row 44).
+    var isRefining = false
     var onFinish: ((Bool) -> Void)?
     private var photo: RecipeDraft.PhotoChange = .unchanged
     /// The deterministic reading while the model works, so the cook can skip the wait.
@@ -156,6 +167,13 @@ final class ShareImportModel {
             let extraction = await Self.extract(html: html, url: pageURL)
             var result = extraction.recipe
             let importer = WebRecipeImporter(structurer: OnDeviceRecipeStructurer())
+            if let reading = result, WebRecipeImporter.isComplete(reading) {
+                // Shown at once; the model, when asked, refines it in place (Flow A, row 44).
+                log.info("Imported by \(reading.method?.rawValue ?? "-", privacy: .public): \(reading.ingredients.count) ingredients, \(reading.steps.count) steps")
+                await show(reading)
+                if importer.canRefine(extraction) { await refine(reading, from: extraction, with: importer) }
+                return
+            }
             if importer.canRefine(extraction) {
                 // HIG Generative AI: specific progress text while the model works.
                 phase = .reading("Reading ingredients…")
@@ -169,12 +187,41 @@ final class ShareImportModel {
                 pageReading = nil
                 if let refined { result = refined }
             }
-            guard let result else { throw WebImportError.noRecipeFound }
+            guard let result else {
+                // No recipe, but an article (02 §4.2): offered as reference reading.
+                if let article = extraction.article {
+                    log.info("Article found: \(article.sections.count) sections")
+                    reference = article
+                    phase = .readyReference
+                    return
+                }
+                throw WebImportError.noRecipeFound
+            }
             log.info("Imported by \(result.method?.rawValue ?? "-", privacy: .public): \(result.ingredients.count) ingredients, \(result.steps.count) steps")
             await show(result)
         } catch {
             phase = .failed((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
         }
+    }
+
+    /// The model reads the page while the preview shows `reading`; its reading replaces the
+    /// preview when it does better (the extension edits nothing, so nothing of the cook's is lost).
+    private func refine(_ reading: ImportedRecipe, from extraction: WebPageExtraction, with importer: WebRecipeImporter) async {
+        isRefining = true
+        let task = Task { await importer.refine(extraction) }
+        modelWork = task
+        let refined = await task.value
+        // Saved or cancelled while the model read.
+        guard modelWork != nil else { return }
+        modelWork = nil
+        isRefining = false
+        guard let refined, recipe == reading, phase == .ready else {
+            log.info("Kept the page reading; the model's was missing or dropped lines")
+            return
+        }
+        log.info("Model reading shown: \(refined.ingredients.count) ingredients, \(refined.steps.count) steps")
+        // The model keeps the page's cover; the one already downloaded stays.
+        recipe = refined
     }
 
     private func show(_ result: ImportedRecipe) async {
@@ -204,15 +251,22 @@ final class ShareImportModel {
     }
 
     func save() {
-        guard let recipe else { return }
+        guard recipe != nil || reference != nil else { return }
+        // Saving keeps what the preview shows; a model still reading is no longer needed.
+        modelWork?.cancel()
+        modelWork = nil
         phase = .saving
         do {
             // The same App Group store as the app, without CloudKit; the app syncs what lands here.
             let container = try RecipeStore.makeContainer()
             let context = ModelContext(container)
-            var draft = RecipeDraft(imported: recipe)
-            draft.photo = photo
-            draft.saveImport(recipe, in: context)
+            if let recipe {
+                var draft = RecipeDraft(imported: recipe)
+                draft.photo = photo
+                draft.saveImport(recipe, in: context)
+            } else if let reference {
+                reference.save(in: context)
+            }
             // `saveImport` saves quietly; a second save surfaces a failure instead of losing the recipe.
             try context.save()
             onFinish?(true)
@@ -250,12 +304,32 @@ struct SharePreviewView: View {
                 case .ready, .saving:
                     if let recipe = model.recipe {
                         ScrollView {
-                            ImportSummaryView(recipe: recipe, cover: model.cover)
-                                .overlay(alignment: .top) {
-                                    if model.isLoadingCover {
-                                        ProgressView().padding(.top, 80)
+                            VStack(alignment: .leading, spacing: 12) {
+                                ImportSummaryView(recipe: recipe, cover: model.cover)
+                                    .overlay(alignment: .top) {
+                                        if model.isLoadingCover {
+                                            ProgressView().padding(.top, 80)
+                                        }
                                     }
+                                if model.isRefining {
+                                    // HIG Generative AI: say specifically what the model is doing.
+                                    Label {
+                                        Text("Reading ingredients…")
+                                    } icon: {
+                                        ProgressView()
+                                    }
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                                    .accessibilityLabel("Apple Intelligence is reading the ingredients. The page reading is shown until it finishes.")
                                 }
+                            }
+                            .padding()
+                        }
+                    }
+                case .readyReference:
+                    if let reference = model.reference {
+                        ScrollView {
+                            ReferenceSummaryView(reference: reference)
                                 .padding()
                         }
                     }
@@ -267,7 +341,7 @@ struct SharePreviewView: View {
                     }
                 }
             }
-            .navigationTitle("Save Recipe")
+            .navigationTitle(model.phase == .readyReference ? "Save Reference" : "Save Recipe")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -275,7 +349,7 @@ struct SharePreviewView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save", role: .confirm) { model.save() }
-                        .disabled(model.phase != .ready || model.isLoadingCover)
+                        .disabled(!(model.phase == .ready || model.phase == .readyReference) || model.isLoadingCover)
                 }
             }
         }
