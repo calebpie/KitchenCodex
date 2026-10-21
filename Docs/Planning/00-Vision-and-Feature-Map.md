@@ -1,10 +1,12 @@
-# Recipe Codex — Product Vision and Feature Map
+# Kitchen Codex — Product Vision and Feature Map
 
 *Prepared Oct 17, 2026 from `Docs/Input/InitialProposal.md`, Apple's developer and design documentation as of iOS 27 / Xcode 27, and a survey of the recipe-app market. Companion documents: [01-Feasibility](01-Feasibility.md), [02-Flows-and-Architecture](02-Flows-and-Architecture.md), [03-UX-Proposals](03-UX-Proposals.md), [04-Execution-Plan](04-Execution-Plan.md), and the rendered wireframes in [wireframes.html](wireframes.html).*
 
+*Named **Kitchen Codex** on Oct 21, 2026 (04 §5.1 "Name"); it was Recipe Codex until then, and the rest of these documents say so until the rename lands (`Docs/Specs/rename-plan.md`).*
+
 ## 1. The one-sentence pitch
 
-Recipe Codex is a personal kitchen system for a serious home cook who hosts: it captures every recipe you own (cookbooks, web, apps, your own), understands them well enough to plan a multi-course menu, and then runs the event with you so the cooking looks effortless to your guests.
+Kitchen Codex is a personal kitchen system for a serious home cook who hosts: it captures every recipe you own (cookbooks, web, apps, your own), understands them well enough to plan a multi-course menu, and then runs the event with you so the cooking looks effortless to your guests.
 
 ## 2. What makes it different
 

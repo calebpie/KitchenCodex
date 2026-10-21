@@ -1,6 +1,6 @@
 # Renaming the app
 
-*Teed up Oct 21, 2026, after Caleb's market pass: he prefers **Kitchen Codex** over Recipe Codex. This is the runbook; the name itself is still his decision (04 §5.1 gets a "Name" row when he makes it). An unrelated iPad app called "RecipeCodex" is already on the App Store, so the current display name would collide if the app ever ships; a web search on Oct 21 found no app called Kitchen Codex (only a $2.99 ebook of that title).*
+*Teed up Oct 21, 2026, after Caleb's market pass, and **decided the same day: the app is Kitchen Codex** (04 §5.1 "Name"), both tiers below to run at the Phase 2 slice 5 → 6 boundary. This is the runbook. An unrelated iPad app called "RecipeCodex" is already on the App Store, so the current display name would collide if the app ever ships; a web search on Oct 21 found no app called Kitchen Codex (only a $2.99 ebook of that title).*
 
 ## 1. What the name touches
 
@@ -34,7 +34,7 @@ Fixture folders under `Docs/Fixtures/Private/` are gitignored and keep their nam
 
 ## 2. When and in what order
 
-1. **Decide the name** (Caleb). Record it in 04 §5.1 as a "Name" row and in 00 Vision's title; this file is the runbook.
+1. **The name**: Kitchen Codex, decided Oct 21, 2026 and recorded in 04 §5.1 ("Name"), 00 Vision's title and pitch, and the Phase 2 plan (between slices 5 and 6).
 2. **Quiet checkout.** No slice session running in this checkout, Caleb's reserialized `project.pbxproj` either committed or discarded (`git checkout -- RecipeCodex.xcodeproj/project.pbxproj`; it is content-identical to HEAD), his `Docs/Design` work left alone. The coordinator does the rename, not a slice: the project file and entitlements are outside any slice's remit.
 3. **Tier 1 first, one commit**: display name, strings, docs, then the GitHub rename and the remote URL. Build both simulators; the only behaviour change is the name on the Home Screen, in permission prompts and in copy.
 4. **Tier 2 second, one commit series**, only if Caleb wants the identifiers clean: bundle ids and entitlements, `RecipeStore` constants, Spotlight domain, the project/target/folder renames. Then: `swift test` in every package (RecipeModel's constants are not a schema change; its 19 tests must still pass), `xcodebuild build` for both simulators from a fresh derived-data folder, delete the old app from both simulators and both devices, install the new one on both devices (`xcrun devicectl device install app`), confirm iCloud sync on the devices (the new container; simulators are signed out), the share extension saving a web recipe into the new shared store, the Tonight widget reading it, and Scan Cookbook with Gjelina end to end as the smoke test. Re-add the fixture photos to the simulators only if the new install cannot see them (Photos is per simulator, not per app, so they stay).
