@@ -21,10 +21,6 @@ struct RecipeDetailView: View {
     /// Multiplier for recipes that give no servings.
     @State private var batchIndex = RecipeDetailView.batchSteps.firstIndex(of: .one)!
     @State private var isScaling = false
-    /// Lines checked off for mise en place (03 §3.3), by `Ingredient.id`. Transient like the scale:
-    /// never stored, kept through scaling and Units, and gone when the detail is left. Cook mode
-    /// (Phase 3) and the shopping list (Phase 4) keep their own.
-    @State private var checkedIngredients: Set<UUID> = []
     /// More → Units; transient like the scale (04 §5.1 Detail units).
     @State private var units: UnitChoice = .preferred
     @Query(sort: [SortDescriptor(\UserProfile.createdAt)]) private var profiles: [UserProfile]
@@ -420,31 +416,11 @@ struct RecipeDetailView: View {
                 }
                 .disabled(!isScaled(version))
             }
-            if hasCheckedIngredients(version) {
-                Divider()
-                Button("Clear Checks", systemImage: "checklist.unchecked") {
-                    checkedIngredients = []
-                    isScaling = false
-                }
-            }
         }
         .padding(20)
         .frame(minWidth: 280, idealWidth: 320)
         .animation(.default, value: servings)
         .animation(.default, value: batchIndex)
-    }
-
-    /// Whether a line of this version is checked; an edit makes new lines, which start unchecked.
-    private func hasCheckedIngredients(_ version: RecipeVersion) -> Bool {
-        version.sortedIngredients.contains { checkedIngredients.contains($0.id) }
-    }
-
-    private func checkBinding(for ingredient: Ingredient) -> Binding<Bool> {
-        Binding {
-            checkedIngredients.contains(ingredient.id)
-        } set: { isChecked in
-            if isChecked { checkedIngredients.insert(ingredient.id) } else { checkedIngredients.remove(ingredient.id) }
-        }
     }
 
     private func scaleFootnote(for version: RecipeVersion) -> String {
@@ -511,7 +487,7 @@ struct RecipeDetailView: View {
                             .accessibilityAddTraits(.isHeader)
                     }
                     ForEach(group.ingredients) { ingredient in
-                        IngredientLine(ingredient: ingredient, factor: factor, units: units, preferred: preferredSystem, temperatureScale: shownTemperatureScale, isChecked: checkBinding(for: ingredient))
+                        IngredientLine(ingredient: ingredient, factor: factor, units: units, preferred: preferredSystem, temperatureScale: shownTemperatureScale)
                     }
                 }
             }
@@ -708,9 +684,9 @@ enum UnitChoice: String, CaseIterable, Identifiable {
 /// One ingredient, scaled and converted: the amount bold, the item in the primary color, and the
 /// preparation, note and "(optional)" in the secondary color at the same size and weight
 /// (04 §5.1 Ingredient lines). A temperature in the words ("oil, heated to 350°F") is a pill in the
-/// shown unit, as in steps. A leading check, where a bullet would be, marks the line done for mise
-/// en place (03 §3.3): a tap anywhere on the line toggles it, and a checked line reads secondary.
-/// VoiceOver reads it as a toggle. Long-press shows the line as written.
+/// shown unit, as in steps. The line is text, with no check before it (04 §5.1 "Ingredient
+/// check-off", ux-notes row 99): gathering belongs to the shopping list and cook mode. Long-press
+/// shows the line as written.
 private struct IngredientLine: View {
     let ingredient: Ingredient
     let factor: Rational
@@ -719,10 +695,9 @@ private struct IngredientLine: View {
     let preferred: MeasurementSystem
     /// The unit temperatures are shown in; nil keeps them as written.
     let temperatureScale: TemperatureScale?
-    @Binding var isChecked: Bool
 
     var body: some View {
-        Toggle(isOn: $isChecked) {
+        Group {
             if hasTemperatures {
                 // The renderer draws the capsules; it takes the place of the numeric transition.
                 line
@@ -732,10 +707,8 @@ private struct IngredientLine: View {
                     .contentTransition(.numericText())
             }
         }
-        .toggleStyle(IngredientCheckStyle())
         .fixedSize(horizontal: false, vertical: true)
         .animation(.default, value: amount)
-        .animation(.default, value: isChecked)
         .contextMenu {
             Section("As Written") {
                 Label(ingredient.rawText, systemImage: "text.quote")
@@ -804,35 +777,6 @@ private struct IngredientLine: View {
         }
         if ingredient.isOptional { text += " (optional)" }
         return text.isEmpty ? nil : Text.withTemperaturePills(text, scale: temperatureScale)
-    }
-}
-
-/// The ingredient line's check: an empty circle, filled with a checkmark in the tint once the line
-/// is done, on the line's first baseline. Its width never changes, so neither does the hugging
-/// column's; a tap anywhere on the line toggles it.
-private struct IngredientCheckStyle: ToggleStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
-            IngredientCheck(isOn: configuration.isOn)
-            configuration.label
-                .foregroundStyle(configuration.isOn ? .secondary : .primary)
-        }
-        .contentShape(.rect)
-        .onTapGesture { configuration.isOn.toggle() }
-    }
-}
-
-private struct IngredientCheck: View {
-    let isOn: Bool
-    /// The circle's width at the body size, scaled with it.
-    @ScaledMetric(relativeTo: .body) private var width: CGFloat = 22
-
-    var body: some View {
-        Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
-            .foregroundStyle(isOn ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
-            .contentTransition(.symbolEffect(.replace))
-            .frame(width: width)
-            .accessibilityHidden(true)
     }
 }
 
