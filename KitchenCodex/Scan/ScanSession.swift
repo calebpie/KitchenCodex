@@ -100,6 +100,10 @@ final class ScanSession: PageCaptureSink {
     private(set) var position = 0
     private(set) var review: ScanReviewModel?
     private(set) var saved: [SavedRecipe] = []
+    /// Reference reading saved from a page (a glossary, a chapter, a technique).
+    private(set) var savedReferences: [Reference] = []
+    /// Suppliers saved from a Sources page.
+    private(set) var savedSources = 0
     private(set) var keptPages = 0
     private(set) var discardedPages = 0
     /// The book a barcode among the photos, or one scanned at the camera's start, named.
@@ -598,6 +602,35 @@ final class ScanSession: PageCaptureSink {
         if let fresh = try? await reader.value.first {
             readings[position] = fresh
         }
+        await advance()
+    }
+
+    /// Reference reading (02 §4.2): the page's glossary, chapter or technique saved as a Reference
+    /// on `book` with its page scan, linked to the recipes that point at it.
+    func saveReference(on book: Book) async {
+        guard let review, let imported = reading?.reference else { return }
+        isSaving = true
+        let reference = await ReferenceSaving.save(imported, model: review, book: book, images: images, reviewed: false, in: modelContext)
+        savedReferences.append(reference)
+        isSaving = false
+        position += 1
+        await advance()
+    }
+
+    /// The book's Sources page (02 Flow C step 8): its suppliers to Pantry → Sources, the page
+    /// kept as a page scan, and the page's pointers off the to-scan list (ux-notes row 103).
+    func saveSources(on book: Book) async {
+        guard let review, let reading else { return }
+        isSaving = true
+        await ScanSaving.keepPageScan(review, kind: .sources, book: book, images: images, in: modelContext)
+        let saved = SourceSaving.save(SourcesPageReader.read(reading), book: book, in: modelContext)
+        BookScanStore.shared.updateState(for: book) { state in
+            CrossReferenceLinking.captureSourcesPage(pages: [reading.pageNumber].compactMap(\.self), in: book, state: &state, context: modelContext)
+        }
+        savedSources += saved.count
+        keptPages += 1
+        isSaving = false
+        position += 1
         await advance()
     }
 

@@ -5,9 +5,11 @@ import SwiftUI
 /// A cookbook (03 §3.7), pushed over the shelf: cover, title, author, year and ISBN; the
 /// completeness ring and "47 of 112 captured, 3 need review" once there is a punchlist, the review
 /// queue a tap away; **Continue Scanning** (or Build the Recipe List while there is no list);
-/// Sections · Index · Missing over the punchlist, a listed entry offering Scan Now at its page.
-/// More holds Edit Book Info, Edit Recipe List and Delete Cookbook; Export List and Scan Sources
-/// Page arrive with their slices.
+/// Sections · Index · Missing over the punchlist, a listed entry offering Scan Now at its page, an
+/// entry captured as reference reading opening its page, and the book's chapters and techniques
+/// listed under Reading beside its recipes (04 §5.1 "References home"). More holds Edit Book
+/// Info, Edit Recipe List, Scan Sources Page (02 Flow C step 8) and Delete Cookbook; Export List
+/// arrives with its slice.
 struct BookDetailView: View {
     let book: Book
 
@@ -32,6 +34,8 @@ struct BookDetailView: View {
     @State private var isEditingList = false
     @State private var isReviewing = false
     @State private var offeredEntry: BookEntry?
+    /// More → Scan Sources Page: the one-off scan, expecting the Sources page.
+    @State private var isScanningSources = false
 
     struct ScanStart: Identifiable {
         let id = UUID()
@@ -101,6 +105,26 @@ struct BookDetailView: View {
             }
 
             punchlistContent(total: progress.total)
+
+            let reading = (book.references ?? []).sorted { ($0.source?.firstPage ?? $0.bookEntry?.page ?? .max, $0.title) < ($1.source?.firstPage ?? $1.bookEntry?.page ?? .max, $1.title) }
+            if !reading.isEmpty {
+                Section("Reading") {
+                    ForEach(reading) { reference in
+                        NavigationLink(value: LibraryRoute.reference(reference.persistentModelID)) {
+                            HStack(spacing: 10) {
+                                Image(systemName: "text.book.closed")
+                                    .foregroundStyle(.secondary)
+                                    .accessibilityHidden(true)
+                                Text(reference.title.isEmpty ? "Reference" : reference.title)
+                                Spacer(minLength: 8)
+                                Text(referencePages(reference))
+                                    .foregroundStyle(.secondary)
+                                    .monospacedDigit()
+                            }
+                        }
+                    }
+                }
+            }
         }
         .listStyle(.insetGrouped)
         .onScrollGeometryChange(for: Bool.self) { geometry in
@@ -118,6 +142,7 @@ struct BookDetailView: View {
                         Button("Edit Recipe List", systemImage: "list.bullet.rectangle") { isEditingList = true }
                     }
                     Button(book.orderedSections.isEmpty ? "Build the Recipe List" : "Read More Contents Pages", systemImage: "list.number") { isBuildingList = true }
+                    Button("Scan Sources Page", systemImage: "storefront") { isScanningSources = true }
                     Divider()
                     Button("Delete Cookbook", systemImage: "trash", role: .destructive) {
                         isConfirmingDelete = true
@@ -161,6 +186,10 @@ struct BookDetailView: View {
         .sheet(isPresented: $isReviewing) {
             BookReviewQueueView(book: book)
         }
+        .sheet(isPresented: $isScanningSources) {
+            ScanPageView(book: book, expectsSources: true) { _ in }
+                .presentationSizing(.page)
+        }
         .fullScreenCover(item: $scanning) { start in
             BookScanView(book: book, startAt: start.entry)
         }
@@ -184,6 +213,13 @@ struct BookDetailView: View {
             modelContext.delete(book)
             try? modelContext.save()
         }
+    }
+
+    /// "p. 250", "pp. 250–253".
+    private func referencePages(_ reference: Reference) -> String {
+        if let first = reference.source?.firstPage, let last = reference.source?.lastPage, last != first { return "pp. \(first)–\(last)" }
+        if let page = reference.source?.firstPage ?? reference.bookEntry?.page { return "p. \(page)" }
+        return ""
     }
 
     /// Cover beside the title, author, year and ISBN.
@@ -311,6 +347,8 @@ private struct EntryRow: View {
     var body: some View {
         if let recipe = entry.recipe {
             NavigationLink(value: LibraryRoute.recipe(recipe.persistentModelID)) { PunchlistEntryLine(entry: entry) }
+        } else if let reference = entry.reference {
+            NavigationLink(value: LibraryRoute.reference(reference.persistentModelID)) { PunchlistEntryLine(entry: entry) }
         } else if showsScanNow {
             HStack {
                 PunchlistEntryLine(entry: entry)

@@ -25,6 +25,9 @@ struct CaptureItem: Identifiable, Equatable {
     /// A page shot again over a recipe the cook reviewed or edited (ux-notes row 93): the question,
     /// answered Keep Earlier · Keep New.
     var keepWhich: String?
+    /// A page continuing a recipe the cook reviewed or edited since (ux-notes row 100): the
+    /// question, answered Join · Keep Apart.
+    var joinWhich: String?
 }
 
 /// One text block of the last capture, for the iPad's running preview (03 §3.5, ux-notes row 87):
@@ -74,6 +77,8 @@ protocol PageCaptureSink: AnyObject, Observable {
     func setNeedsReview(_ on: Bool, for id: Int)
     /// Keep Earlier · Keep New for a page shot again (the book session).
     func resolveDuplicates(of id: Int, keepNew: Bool)
+    /// Join · Keep Apart for a page continuing a reviewed recipe (the book session).
+    func resolveJoin(of id: Int, join: Bool)
     /// The shelf's book with this ISBN.
     func shelfBook(isbn: String) -> Book?
 }
@@ -81,6 +86,7 @@ protocol PageCaptureSink: AnyObject, Observable {
 extension PageCaptureSink {
     func setNeedsReview(_ on: Bool, for id: Int) {}
     func resolveDuplicates(of id: Int, keepNew: Bool) {}
+    func resolveJoin(of id: Int, join: Bool) {}
 }
 
 /// Three captures in a row hazy and poorly read (ux-notes row 57): Clean the lens stays advisory
@@ -110,6 +116,8 @@ struct CaptureListSheet: View {
     var onSetNeedsReview: ((Int, Bool) -> Void)?
     /// Keep Earlier (false) · Keep New (true) for a page shot again.
     var onKeep: ((Int, Bool) -> Void)?
+    /// Join (true) · Keep Apart (false) for a page continuing a reviewed recipe (row 100).
+    var onJoin: ((Int, Bool) -> Void)?
 
     @Environment(\.dismiss) private var dismiss
 
@@ -122,7 +130,7 @@ struct CaptureListSheet: View {
                         .frame(maxWidth: .infinity)
                 }
                 ForEach(items) { item in
-                    CaptureRow(item: item) { onSetMode(item.id, $0) } onSetNeedsReview: { onSetNeedsReview?(item.id, $0) } onKeep: { onKeep?(item.id, $0) }
+                    CaptureRow(item: item) { onSetMode(item.id, $0) } onSetNeedsReview: { onSetNeedsReview?(item.id, $0) } onKeep: { onKeep?(item.id, $0) } onJoin: { onJoin?(item.id, $0) }
                 }
                 .onDelete { offsets in
                     for id in offsets.map({ items[$0].id }) { onDelete(id) }
@@ -146,6 +154,7 @@ private struct CaptureRow: View {
     var onSetMode: (CaptureMode) -> Void
     var onSetNeedsReview: (Bool) -> Void
     var onKeep: (Bool) -> Void
+    var onJoin: (Bool) -> Void
 
     @State private var thumbnail: UIImage?
 
@@ -191,6 +200,19 @@ private struct CaptureRow: View {
                     HStack(spacing: 12) {
                         Button("Keep Earlier") { onKeep(false) }
                         Button("Keep New") { onKeep(true) }
+                    }
+                    .buttonStyle(.bordered)
+                    .font(.subheadline)
+                }
+                if let question = item.joinWhich {
+                    // The page stays on its own until the cook answers (ux-notes row 100).
+                    Text(question)
+                        .font(.subheadline)
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                    HStack(spacing: 12) {
+                        Button("Join") { onJoin(true) }
+                        Button("Keep Apart") { onJoin(false) }
                     }
                     .buttonStyle(.bordered)
                     .font(.subheadline)

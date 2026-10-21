@@ -10,6 +10,8 @@ enum LibraryRoute: Hashable {
     case collections
     /// A book's detail (03 §3.7), pushed over the shelf as a recipe is over the grid.
     case book(PersistentIdentifier)
+    /// A reference's page, from a book's detail (04 §5.1 "References home").
+    case reference(PersistentIdentifier)
 }
 
 /// The library, with a view switch between the recipe collection and the cookbook shelf (03 §3.2, §3.7).
@@ -75,6 +77,7 @@ struct RecipesView: View {
     @Query(sort: [SortDescriptor(\Book.title, comparator: .localizedStandard)]) private var books: [Book]
     @Query(sort: CollectionActions.sortDescriptors) private var collections: [RecipeCollection]
     @Query(sort: [SortDescriptor(\Tag.name, comparator: .localizedStandard)]) private var tags: [Tag]
+    @Query private var references: [Reference]
 
     /// iPad, regular width: one wide column under a sidebar tab.
     private var isWide: Bool { sizeClass == .regular }
@@ -159,7 +162,10 @@ struct RecipesView: View {
             RecipeEditorView(recipe: nil)
         }
         .sheet(isPresented: $isImportingFromWeb, onDismiss: openImportedRecipe) {
-            WebImportView { recipe in importedRecipe = recipe }
+            WebImportView { recipe in importedRecipe = recipe } onSavedReference: { reference in
+                // An article lands in Pantry → References, which shows it.
+                router.openReference(id: reference.id)
+            }
         }
         .sheet(isPresented: $isImportingLibrary) {
             LibraryImportView()
@@ -298,6 +304,11 @@ struct RecipesView: View {
         case let .book(id):
             if let book = books.first(where: { $0.persistentModelID == id }) {
                 BookDetailView(book: book)
+                    .id(id)
+            }
+        case let .reference(id):
+            if let reference = references.first(where: { $0.persistentModelID == id }) {
+                ReferencePageView(reference: reference) { recipe in path.append(.recipe(recipe.persistentModelID)) }
                     .id(id)
             }
         }

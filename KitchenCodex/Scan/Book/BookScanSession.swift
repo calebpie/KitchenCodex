@@ -147,7 +147,7 @@ final class BookScanSession: PageCaptureSink {
 
     var capturedCount: Int { shownCaptures.count }
     var processedCount: Int { shownCaptures.count { $0.status != .pending } }
-    var needReviewCount: Int { book.reviewQueue.count }
+    var needReviewCount: Int { book.reviewQueue.count + ReferenceSaving.reviewQueue(for: book).count }
     var isReadingCaptures: Bool { state.captures.contains { $0.status == .pending } }
 
     /// The last capture this sitting, for its pane and the Needs Review toggle.
@@ -170,6 +170,7 @@ final class BookScanSession: PageCaptureSink {
         let owner = state.captures[index].joinedTo.flatMap { joined in state.captures.firstIndex { $0.id == joined } } ?? index
         if state.captures[owner].status == .processed {
             for recipe in recipes(of: state.captures[owner]) { recipe.currentVersion?.needsReview = on }
+            // A reference waits in the queue through the capture's own flag.
             state.captures[owner].queued = on
             try? context.save()
         }
@@ -207,8 +208,9 @@ final class BookScanSession: PageCaptureSink {
         shownCaptures.map { capture in
             CaptureItem(id: capture.id, url: url(of: capture), mode: capture.mode, note: capture.note,
                         detail: capture.status == .pending ? "Reading…" : capture.detail,
-                        needsReview: capture.mode == .recipe && !capture.recipes.isEmpty ? needsReview(capture) : nil,
-                        keepWhich: capture.duplicates.isEmpty ? nil : keepQuestion(capture))
+                        needsReview: capture.mode == .recipe && (!capture.recipes.isEmpty || !capture.references.isEmpty) ? needsReview(capture) : nil,
+                        keepWhich: capture.duplicates.isEmpty ? nil : keepQuestion(capture),
+                        joinWhich: capture.joinOffer.map { "This page continues “\($0.title)”, which was reviewed or edited since. Join it, reading the recipe again as a new version, or keep it apart?" })
         }
     }
 
@@ -288,17 +290,30 @@ final class BookScanSession: PageCaptureSink {
             state.captures[reset].joinedTo = nil
             state.captures[reset].photographPages = []
             state.captures[reset].duplicates = []
+            state.captures[reset].references = []
+            state.captures[reset].sources = []
+            state.captures[reset].joinOffer = nil
         }
     }
 
     /// Takes back what a processed capture saved: its recipes, the entries made for them because
-    /// the list lacked them (the Oct 21 review's finding 8), and their places on entries their
-    /// pointers put on the list.
+    /// the list lacked them (the Oct 21 review's finding 8), their places on entries their
+    /// pointers put on the list, and the references and suppliers read from it.
     private func undo(_ capture: BookScanState.StoredCapture) {
         let created = Set(capture.createdEntries)
         for recipe in recipes(of: capture) {
             if let entry = recipe.bookEntry { entry.status = .listed }
             context.delete(recipe)
+        }
+        for id in capture.references {
+            if let reference = try? context.fetch(FetchDescriptor<Reference>(predicate: #Predicate { $0.id == id })).first {
+                ReferenceSaving.delete(reference, in: context)
+            }
+        }
+        for id in capture.sources {
+            if let source = try? context.fetch(FetchDescriptor<Source>(predicate: #Predicate { $0.id == id })).first {
+                context.delete(source)
+            }
         }
         for entry in book.orderedEntries where created.contains(entry.id) && entry.reference == nil {
             context.delete(entry)
@@ -449,7 +464,7 @@ final class BookScanSession: PageCaptureSink {
         // A page that opens mid-recipe continues the page captured before it: that page and every
         // page already joined to it, in order, so a recipe over three pages keeps its middle. The
         // stitcher decides, as it will when the pages are refined together.
-        var keptApart: String?
+        var joinOffer: BookScanState.JoinOffer?
         if single.isContinuation, let previous = previousRecipeCapture(before: id) {
             let chain = [previous] + state.captures.filter { $0.joinedTo == previous.id }.sorted { $0.id < $1.id }
             // A page from an earlier sitting, or read before a relaunch, is read again from its file
@@ -457,8 +472,9 @@ final class BookScanSession: PageCaptureSink {
             let earlier = await readings(of: chain)
             let cooksWork = recipes(of: previous).first { !Self.isUntouched($0) }
             if let cooksWork {
-                // Joining would read the recipe again over what the cook did to it.
-                keptApart = cooksWork.title
+                // Joining would read the recipe again over what the cook did to it: the page saves
+                // on its own and the captures sheet asks Join · Keep Apart (ux-notes row 100).
+                joinOffer = BookScanState.JoinOffer(previous: previous.id, recipe: cooksWork.id, title: cooksWork.title)
             } else if earlier.count == chain.count, PageStitcher.stitch(earlier + [single]).count == 1 {
                 undo(previous)
                 owner = previous.id
@@ -552,10 +568,11 @@ final class BookScanSession: PageCaptureSink {
             capture.pageNumber = pages.first
             capture.photographPages = photographs
             capture.duplicates = duplicates
+            capture.joinOffer = joinOffer
             capture.detail = Self.savedLine(saved, skipped: model.recipes.first?.isSkipped == true && saved.isEmpty)
                 + (replaced == 0 ? "" : replaced == 1 ? " · replaced the earlier copy" : " · replaced the earlier copies")
                 + (duplicates.isEmpty ? "" : " · already captured")
-                + (keptApart.map { " · continues “\($0)”, which was reviewed or edited since: not joined" } ?? "")
+                + (joinOffer.map { " · continues “\($0.title)”, which was reviewed or edited since" } ?? "")
         }
         if owner != id { finish(id) { $0.detail = "Continues the page before" } }
 
@@ -592,14 +609,25 @@ final class BookScanSession: PageCaptureSink {
             && (recipe.versions?.count ?? 0) <= 1 && recipe.updatedAt.timeIntervalSince(recipe.createdAt) < 5
     }
 
-    /// `new` takes `earlier`'s place: its entry, its cover photos and cover, and the links that
-    /// name it as a component; `earlier` goes, and so does its place on the capture that saved it.
+    /// `new` takes `earlier`'s place: its entry, its cover photos and cover, the links that name
+    /// it as a component and the ones it holds as a parent (its Includes, ux-notes row 105), and
+    /// its related reading; `earlier` goes, and so does its place on the capture that saved it.
     private func replace(_ earlier: Recipe, with new: Recipe, on entry: BookEntry) {
         for image in earlier.images ?? [] where image.role == .photo {
             image.recipe = new
         }
         if new.coverImageData == nil { new.coverImageData = earlier.coverImageData }
         for link in earlier.linkedFrom ?? [] { link.subRecipe = new }
+        for link in earlier.links ?? [] {
+            if let component = link.subRecipe, (new.links ?? []).contains(where: { $0.role == link.role && $0.subRecipe == component }) {
+                context.delete(link)
+            } else {
+                link.parent = new
+            }
+        }
+        for reference in earlier.references ?? [] where !(new.references ?? []).contains(reference) {
+            new.references = (new.references ?? []) + [reference]
+        }
         for index in state.captures.indices where state.captures[index].recipes.contains(earlier.id) {
             state.captures[index].recipes.removeAll { $0 == earlier.id }
         }
@@ -610,21 +638,31 @@ final class BookScanSession: PageCaptureSink {
     }
 
     /// The captures sheet's answer: Keep New replaces the earlier recipes as an untouched one would
-    /// be; Keep Earlier deletes the new ones. Until then nothing is deleted.
+    /// be; Keep Earlier deletes the new ones. Until then nothing is deleted. The kept copy's
+    /// pointers are linked again either way (ux-notes row 105): the recipes pointing at its pages
+    /// link to it, and its own pointers to the pages the book holds.
     func resolveDuplicates(of id: Int, keepNew: Bool) {
         guard let index = state.captures.firstIndex(where: { $0.id == id }) else { return }
         let fetch = { (id: UUID) in try? self.context.fetch(FetchDescriptor<Recipe>(predicate: #Predicate { $0.id == id })).first }
+        var kept: [Recipe] = []
         for duplicate in state.captures[index].duplicates {
             guard let new = fetch(duplicate.new) else { continue }
             if keepNew {
                 if let earlier = fetch(duplicate.earlier), let entry = book.orderedEntries.first(where: { $0.id == duplicate.entry }) {
                     replace(earlier, with: new, on: entry)
                 }
+                kept.append(new)
             } else {
                 CrossReferenceLinking.forget(recipes: [new.id], in: book, state: &state, context: context)
                 context.delete(new)
                 if let current = state.captures.firstIndex(where: { $0.id == id }) { state.captures[current].recipes.removeAll { $0 == duplicate.new } }
+                if let earlier = fetch(duplicate.earlier) { kept.append(earlier) }
             }
+        }
+        for recipe in kept {
+            let pages = Array(CrossReferenceLinking.ownPages(of: recipe)).sorted()
+            CrossReferenceLinking.linkWaiting(to: recipe, pages: pages, in: book, state: &state, context: context)
+            CrossReferenceLinking.applySessionRule(CrossReferenceLinking.pointers(of: recipe), for: recipe, in: book, state: &state, context: context)
         }
         if let current = state.captures.firstIndex(where: { $0.id == id }) {
             state.captures[current].duplicates = []
@@ -633,6 +671,75 @@ final class BookScanSession: PageCaptureSink {
         }
         try? context.save()
         save()
+    }
+
+    // MARK: - A page continuing a reviewed recipe (ux-notes row 100)
+
+    /// The captures sheet's answer. Keep Apart leaves the page saved on its own. Join reads the
+    /// recipe again with this page: the page it continues and every page joined to it, read as
+    /// one with this one, and saved as a new version of each recipe the page before held (the
+    /// cook's review stays as history); this page's own recipes go, and it joins the page before.
+    func resolveJoin(of id: Int, join: Bool) {
+        guard let index = state.captures.firstIndex(where: { $0.id == id }), let offer = state.captures[index].joinOffer else { return }
+        state.captures[index].joinOffer = nil
+        let detail = state.captures[index].detail?.replacingOccurrences(of: ", which was reviewed or edited since", with: "") ?? ""
+        guard join else {
+            state.captures[index].detail = detail + ": kept apart"
+            save()
+            return
+        }
+        state.captures[index].detail = detail + ": joining…"
+        save()
+        Task { await self.join(id, offer: offer) }
+    }
+
+    private func join(_ id: Int, offer: BookScanState.JoinOffer) async {
+        guard let index = state.captures.firstIndex(where: { $0.id == id }),
+              let previous = state.captures.first(where: { $0.id == offer.previous }) else { return }
+        let chain = [previous] + state.captures.filter { $0.joinedTo == previous.id }.sorted { $0.id < $1.id }
+        let earlier = await readings(of: chain)
+        let own = await readings(of: [state.captures[index]])
+        guard earlier.count == chain.count, let single = own.first else { return }
+        let stitched = PageStitcher.stitch(earlier + [single])
+        guard stitched.count == 1, !isAbandoned else {
+            finish(id) { $0.detail = ($0.detail ?? "").replacingOccurrences(of: ": joining…", with: ": kept apart (the pages don't read as one)") }
+            return
+        }
+        // This page's own recipes go; the page before keeps its recipes, read again.
+        undo(state.captures[index])
+        if let current = state.captures.firstIndex(where: { $0.id == id }) {
+            state.captures[current].recipes = []
+            state.captures[current].createdEntries = []
+            state.captures[current].joinedTo = previous.id
+        }
+        let urls = chain.map(url(of:)) + [url(of: state.captures[index])]
+        refining = single.recipes.first?.title ?? ""
+        let reading = await Self.refine(stitched, urls: urls, with: pipeline).first ?? stitched[0]
+        refining = nil
+        guard !isAbandoned else { return }
+        let model = ScanReviewModel(reading: reading, urls: urls)
+        let existing = recipes(of: previous)
+        var saved: [Recipe] = []
+        for recipeIndex in model.recipes.indices {
+            if existing.indices.contains(recipeIndex) {
+                let recipe = existing[recipeIndex]
+                await ScanSaving.saveAgain(model, recipe: recipeIndex, into: recipe, book: book, images: images,
+                                           changeSummary: "Joined with \(ScanSaving.pagesText(book: nil, pages: single.pageNumbers.compactMap { $0 }).replacingOccurrences(of: "a photo", with: "the next page")), read again", in: context)
+                saved.append(recipe)
+            } else {
+                let recipe = await ScanSaving.saveNew(model, recipe: recipeIndex, book: book, reviewed: false, images: images, appliesPointers: false, in: context)
+                saved.append(recipe)
+            }
+        }
+        let pages = PunchlistMatcher.pages(read: reading.pageNumbers)
+        for (recipe, recipeIndex) in zip(saved, model.recipes.indices) {
+            CrossReferenceLinking.linkWaiting(to: recipe, pages: pages, in: book, state: &state, context: context)
+            CrossReferenceLinking.applySessionRule(reading.recipes[recipeIndex].crossReferences, for: recipe, in: book, state: &state, context: context)
+        }
+        try? context.save()
+        finish(previous.id) { $0.recipes = saved.map(\.id); $0.detail = Self.savedLine(saved, skipped: false) + " · read again with the next page" }
+        finish(id) { $0.detail = "Continues the page before · joined as a new version" }
+        Self.logger.info("Book session: capture \(id) joined capture \(offer.previous), \(saved.count) recipes read again")
     }
 
     // MARK: - Readings
@@ -687,13 +794,39 @@ final class BookScanSession: PageCaptureSink {
         finish(id) { $0.photo = attached.first?.id; $0.detail = "A cover for “\(recipe.title)”" }
     }
 
-    /// A page that is no recipe: a contents, index or Sources page or prose is kept on the book as a
-    /// page scan; a blank or unreadable one is let go.
+    /// A page that is no recipe: reference reading (a glossary, a chapter opener, a technique)
+    /// saves as a Reference with its page scan, linked to the recipes that point at it; a Sources
+    /// page fills Pantry → Sources and comes off the to-scan list (ux-notes row 103); a contents or
+    /// index page or other prose is kept on the book as a page scan; a blank or unreadable one is
+    /// let go.
     private func keep(_ id: Int, reading: PageReading) async {
         guard let capture = state.captures.first(where: { $0.id == id }) else { return }
+        let model = ScanReviewModel(reading: reading, urls: [url(of: capture)])
         switch reading.kind {
-        case .contents, .index, .sources, .prose:
-            let model = ScanReviewModel(reading: reading, urls: [url(of: capture)])
+        case .prose where reading.reference != nil:
+            let imported = reading.reference!
+            let reference = await ReferenceSaving.save(imported, model: model, book: book, images: images, reviewed: false, in: context)
+            let joined = imported.kind == .glossary && (reference.sections?.count ?? 0) > imported.sections.count
+            // A look is asked for when the cook flagged it, the print read poorly, or the page
+            // gave no title.
+            let wantsLook = capture.flagged ?? (reading.ocrConfidence < PageStructurer.lowOCR || imported.title.isEmpty)
+            finish(id) {
+                $0.pageNumber = reading.pageNumber
+                $0.references = [reference.id]
+                $0.queued = wantsLook
+                $0.detail = "Saved “\(reference.title)” as reference reading" + (joined ? " · joined the glossary" : "")
+            }
+        case .sources:
+            await ScanSaving.keepPageScan(model, kind: .sources, book: book, images: images, in: context)
+            let suppliers = SourcesPageReader.read(reading)
+            let saved = SourceSaving.save(suppliers, book: book, in: context)
+            CrossReferenceLinking.captureSourcesPage(pages: [reading.pageNumber].compactMap(\.self), in: book, state: &state, context: context)
+            finish(id) {
+                $0.pageNumber = reading.pageNumber
+                $0.sources = saved.map(\.id)
+                $0.detail = saved.isEmpty ? "A Sources page, kept with the book" : "A Sources page: \(saved.count == 1 ? "1 supplier" : "\(saved.count) suppliers") to Pantry"
+            }
+        case .contents, .index, .prose:
             await ScanSaving.keepPageScan(model, kind: reading.kind, book: book, images: images, in: context)
             finish(id) { $0.pageNumber = reading.pageNumber; $0.detail = "\(reading.kind.title), kept with the book" }
         default:

@@ -208,11 +208,25 @@ struct RootTabView: View {
         .environment(router)
         // The menu bar and keyboard shortcuts act on this window (KitchenCodexCommands).
         .focusedSceneValue(router)
-        // A recipe, or one of its ingredients, tapped in Spotlight (RecipeSpotlightIndexer) opens in Recipes.
+        // A recipe, or one of its ingredients, tapped in Spotlight (RecipeSpotlightIndexer) opens in
+        // Recipes; a reference in Pantry → References.
         .onContinueUserActivity(CSSearchableItemActionType) { activity in
-            guard let identifier = activity.userInfo?[CSSearchableItemActivityIdentifier] as? String,
-                  let id = RecipeSpotlightIndexer.recipeID(fromItemIdentifier: identifier) else { return }
-            router.openRecipe(id: id)
+            guard let identifier = activity.userInfo?[CSSearchableItemActivityIdentifier] as? String else { return }
+            if let id = RecipeSpotlightIndexer.referenceID(fromItemIdentifier: identifier) {
+                router.openReference(id: id)
+            } else if let id = RecipeSpotlightIndexer.recipeID(fromItemIdentifier: identifier) {
+                router.openRecipe(id: id)
+            }
+        }
+        // Open in app (ux-notes row 44): kitchencodex://recipe/<uuid> opens the recipe in Recipes,
+        // kitchencodex://reference/<uuid> the reference. The router lives here, not in the App.
+        .onOpenURL { url in
+            guard url.scheme?.lowercased() == "kitchencodex", let id = UUID(uuidString: url.lastPathComponent) else { return }
+            switch url.host()?.lowercased() {
+            case "recipe": router.openRecipe(id: id)
+            case "reference": router.openReference(id: id)
+            default: break
+            }
         }
     }
 

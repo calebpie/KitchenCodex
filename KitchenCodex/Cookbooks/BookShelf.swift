@@ -158,7 +158,7 @@ extension Book {
     /// still waiting for a look.
     var punchlistProgress: (captured: Int, total: Int, needReview: Int) {
         let entries = entries
-        return (entries.count { $0.status != .listed }, entries.count, (recipes ?? []).count(where: \.needsReview))
+        return (entries.count { $0.status != .listed }, entries.count, (recipes ?? []).count(where: \.needsReview) + ReferenceSaving.reviewQueue(for: self).count)
     }
 
     /// The first author's family name and given names ("López-Alt J. Kenji"), so the shelf sorts by

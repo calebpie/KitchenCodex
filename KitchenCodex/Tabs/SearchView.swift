@@ -33,7 +33,7 @@ enum SearchScope: String, CaseIterable, Identifiable {
         switch self {
         case .all: "Recipes, cookbooks, events…"
         case .recipes: "Recipes and ingredients"
-        case .pantry: "Staples, tools, bottles, sources"
+        case .pantry: "Staples, tools, bottles, sources, references"
         case .plan: "Events"
         }
     }
@@ -43,6 +43,8 @@ enum SearchScope: String, CaseIterable, Identifiable {
 enum SearchRoute: Hashable {
     case recipe(Recipe)
     case recipes(LibraryScope)
+    /// A reference's page (04 §5.1 "References home": Search covers them).
+    case reference(Reference)
 }
 
 /// The one place to find anything (03 §3.18): the system search tab, a scope under the field,
@@ -67,6 +69,7 @@ struct SearchView: View {
     @Query(sort: [SortDescriptor(\PantryItem.item, comparator: .localizedStandard)]) private var staples: [PantryItem]
     @Query(sort: [SortDescriptor(\Tool.name, comparator: .localizedStandard)]) private var tools: [Tool]
     @Query(sort: [SortDescriptor(\Event.date)]) private var events: [Event]
+    @Query(sort: [SortDescriptor(\Reference.title, comparator: .localizedStandard)]) private var references: [Reference]
 
     private var recents: [String] {
         recentText.split(separator: "\n").map(String.init)
@@ -96,6 +99,8 @@ struct SearchView: View {
                     RecipeResults(recipes: recipes.filter(scope.contains), layout: layout)
                         .navigationTitle(scope.title(books: books, collections: collections))
                         .navigationBarTitleDisplayMode(.inline)
+                case let .reference(reference):
+                    ReferencePageView(reference: reference) { recipe in path.append(.recipe(recipe)) }
                 }
             }
             .searchable(text: $query, prompt: router.searchScope.prompt)
@@ -177,12 +182,12 @@ struct SearchView: View {
                 }
             }
         case .pantry:
-            if sources.isEmpty, bottles.isEmpty {
+            if sources.isEmpty, bottles.isEmpty, references.isEmpty {
                 Scrolling {
                     ContentUnavailableView {
                         Label("Nothing in Pantry yet", systemImage: "cabinet")
                     } description: {
-                        Text("Sources and bottles you add in Pantry can be searched here.")
+                        Text("Sources, bottles and references you add in Pantry can be searched here.")
                     }
                 }
             } else {
@@ -201,6 +206,11 @@ struct SearchView: View {
                             ForEach(bottles) { bottle in
                                 Label(bottle.name, systemImage: "wineglass")
                             }
+                        }
+                    }
+                    if !references.isEmpty {
+                        Section("References") {
+                            ForEach(references) { reference in referenceRow(reference) }
                         }
                     }
                 }
@@ -340,7 +350,8 @@ struct SearchView: View {
         var tools: [Tool]
         var bottles: [BeverageItem]
         var sources: [Source]
-        var isEmpty: Bool { staples.isEmpty && tools.isEmpty && bottles.isEmpty && sources.isEmpty }
+        var references: [Reference]
+        var isEmpty: Bool { staples.isEmpty && tools.isEmpty && bottles.isEmpty && sources.isEmpty && references.isEmpty }
     }
 
     private var pantryMatches: PantryMatches {
@@ -348,8 +359,27 @@ struct SearchView: View {
             staples: staples.filter { SearchText.matches(query, in: [$0.item]) },
             tools: tools.filter { SearchText.matches(query, in: [$0.name, $0.type]) },
             bottles: bottles.filter { SearchText.matches(query, in: [$0.name, $0.producer, $0.style, $0.region]) },
-            sources: sources.filter { SearchText.matches(query, in: [$0.name, $0.carries]) }
+            sources: sources.filter { SearchText.matches(query, in: [$0.name, $0.carries]) },
+            // A reference by its title, author, book or the headings of its sections (a glossary's terms).
+            references: references.filter { SearchText.matches(query, in: [$0.title, $0.author, $0.book?.title ?? ""] + $0.sortedSections.map(\.heading)) }
         )
+    }
+
+    /// A reference's title and where it is from, opening its page.
+    private func referenceRow(_ reference: Reference) -> some View {
+        NavigationLink(value: SearchRoute.reference(reference)) {
+            Label {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(reference.title.isEmpty ? "Reference" : reference.title)
+                    Text("\(reference.kind.word) · \(reference.sourceLine)")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            } icon: {
+                Image(systemName: "text.book.closed")
+            }
+        }
     }
 
     /// Pantry results in the order of the Pantry hub.
@@ -366,6 +396,9 @@ struct SearchView: View {
         }
         if !matches.sources.isEmpty {
             Section("Sources") { ForEach(matches.sources) { Label($0.name, systemImage: "storefront") } }
+        }
+        if !matches.references.isEmpty {
+            Section("References") { ForEach(matches.references) { referenceRow($0) } }
         }
     }
 

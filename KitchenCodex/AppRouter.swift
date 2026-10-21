@@ -26,6 +26,8 @@ final class AppRouter {
     var selectedTab: AppTab = .recipes
     /// A recipe Recipes should open, by `Recipe.id`. Recipes clears it once it has.
     var requestedRecipeID: UUID?
+    /// A reference the References pane should open, by `Reference.id`; the pane clears it.
+    var requestedReferenceID: UUID?
     /// Search's scope, set to the tab the cook came from each time Search opens (04 §5.1 Search tab).
     var searchScope: SearchScope = .recipes
     /// The sidebar's New Collection (the Collections section's action) asks for a name.
@@ -40,6 +42,12 @@ final class AppRouter {
     func openRecipe(id: UUID) {
         selectedTab = .recipes
         requestedRecipeID = id
+    }
+
+    /// Spotlight, a link or a saved article: Pantry → References, with the reference open.
+    func openReference(id: UUID) {
+        selectedTab = .pantryPane(.references)
+        requestedReferenceID = id
     }
 
     /// File menu: from any tab. Another tab gives way to Recipes, whose page starts it.

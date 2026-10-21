@@ -3,8 +3,8 @@ import SwiftData
 import SwiftUI
 
 /// Everything you have to cook with (03 §3.17), as a hub (04 §5.1 Pantry hub): one row per pane,
-/// Staples · Tools · Cellar & Bar · Sources, each with the pane's purpose until it has content and
-/// a live summary after. On iPhone a row pushes its pane and Profile is the hub's toolbar button.
+/// Staples · Tools · Cellar & Bar · Sources · References (04 §5.1 "References home"), each with the
+/// pane's purpose until it has content and a live summary after. On iPhone a row pushes its pane and Profile is the hub's toolbar button.
 /// On iPad the panes are the system sidebar's Pantry section and Profile its bottom-bar button
 /// (RootTabView), and this tab's page stays the hub, whose rows select those sidebar tabs. There is
 /// no Kitchens pane: one implicit Home kitchen sits behind the panes and is never shown (04 §5.1
@@ -15,6 +15,7 @@ struct PantryView: View {
         case tools = "Tools"
         case cellarAndBar = "Cellar & Bar"
         case sources = "Sources"
+        case references = "References"
 
         var id: Self { self }
 
@@ -24,6 +25,7 @@ struct PantryView: View {
             case .tools: "oven"
             case .cellarAndBar: "wineglass"
             case .sources: "storefront"
+            case .references: "text.book.closed"
             }
         }
 
@@ -35,6 +37,7 @@ struct PantryView: View {
             case .tools: "Ovens, burners and pots, so the schedule plans around them."
             case .cellarAndBar: "Wine and spirits in the house, so pairings know what's here."
             case .sources: "Stores and suppliers; frequent ones become shopping stops."
+            case .references: "Technique chapters and articles, kept beside the recipes they inform."
             }
         }
     }
@@ -77,6 +80,12 @@ struct PantryView: View {
                     }
                 }
             }
+            // A reference asked for from outside (Spotlight, a link, a saved article): the
+            // References pane, which opens it.
+            .onChange(of: router.requestedReferenceID, initial: true) { _, id in
+                guard id != nil, path.last != .pane(.references) else { return }
+                path = [.pane(.references)]
+            }
         }
     }
 
@@ -97,13 +106,20 @@ struct PantryPaneView: View {
     let pane: PantryView.Pane
 
     var body: some View {
-        // Add (+) and More (⋯) arrive on each pane with its content (Phase 4).
-        ContentUnavailableView {
-            Label(pane.rawValue, systemImage: pane.symbol)
-        } description: {
-            Text(pane.emptyDescription)
+        switch pane {
+        case .references:
+            ReferencesPane()
+        case .sources:
+            SourcesPane()
+        default:
+            // Add (+) and More (⋯) arrive on each pane with its content (Phase 4).
+            ContentUnavailableView {
+                Label(pane.rawValue, systemImage: pane.symbol)
+            } description: {
+                Text(pane.emptyDescription)
+            }
+            .navigationTitle(pane.rawValue)
         }
-        .navigationTitle(pane.rawValue)
     }
 }
 
@@ -118,6 +134,7 @@ private struct PantryHubRows: View {
     @Query private var tools: [Tool]
     @Query private var bottles: [BeverageItem]
     @Query private var sources: [Source]
+    @Query private var references: [Reference]
 
     var body: some View {
         Section {
@@ -175,6 +192,13 @@ private struct PantryHubRows: View {
             return counted(bottles.reduce(0) { $0 + $1.bottles }, "bottle", "bottles")
         case .sources:
             return counted(sources.count, "source", "sources")
+        case .references:
+            // "4 chapters · 2 articles" (04 §5.1 "References home").
+            let parts = [ReferenceKind.chapter, .technique, .article, .clipping].compactMap { kind -> String? in
+                let count = references.count { $0.kind == kind }
+                return count == 0 ? nil : (count == 1 ? "1 \(kind.word.lowercased())" : "\(count) \(kind.plural)")
+            }
+            return parts.isEmpty ? nil : parts.joined(separator: " · ")
         }
     }
 

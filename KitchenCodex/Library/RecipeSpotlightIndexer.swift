@@ -10,18 +10,24 @@ import UniformTypeIdentifiers
 /// so "ssamjang" finds the recipes that use it. Tapping a result opens the app with
 /// `CSSearchableItemActionType`, which RootTabView hands to Recipes.
 ///
+/// References (a chapter, a glossary, an article) are indexed beside the recipes, by their title,
+/// author, book and the headings of their sections, and open in Pantry → References (slice 7).
+///
 /// The first sync after launch clears the app's items and indexes every recipe, which also drops
 /// recipes deleted on another device or by an extension. After that each save in the app reindexes
 /// only the recipes whose indexed content changed and removes deleted ones. No entitlement is needed.
 @MainActor
 final class RecipeSpotlightIndexer {
     static let domainIdentifier = "com.calebpietrafesa.KitchenCodex.recipe"
+    static let referenceDomainIdentifier = "com.calebpietrafesa.KitchenCodex.reference"
 
     private let container: ModelContainer
     private let index = CSSearchableIndex.default()
     private let logger = Logger(subsystem: "com.calebpietrafesa.KitchenCodex", category: "spotlight")
     /// What was last indexed for each recipe; empty until the first sync.
     private var indexed: [UUID: Fingerprint]?
+    /// What was last indexed for each reference.
+    private var indexedReferences: [UUID: ReferenceFingerprint] = [:]
     private var pending: Task<Void, Never>?
     private var saveObserver: (any NSObjectProtocol)?
 
@@ -69,9 +75,19 @@ final class RecipeSpotlightIndexer {
         }
         let removed = previous.keys.filter { current[$0] == nil }
 
+        let references = (try? container.mainContext.fetch(FetchDescriptor<Reference>())) ?? []
+        var currentReferences: [UUID: ReferenceFingerprint] = [:]
+        var changedReferences: [Reference] = []
+        for reference in references {
+            let fingerprint = ReferenceFingerprint(reference)
+            currentReferences[reference.id] = fingerprint
+            if indexedReferences[reference.id] != fingerprint { changedReferences.append(reference) }
+        }
+        let removedReferences = indexedReferences.keys.filter { currentReferences[$0] == nil }
+
         do {
             if isFirstSync {
-                // The app indexes nothing but recipes and their ingredients.
+                // The app indexes nothing but recipes, their ingredients and references.
                 try await index.deleteAllSearchableItems()
             } else {
                 // Removed recipes, and the ingredient items of changed ones (their lines may be fewer now).
@@ -81,6 +97,9 @@ final class RecipeSpotlightIndexer {
                 let stale = (removed + changed.map(\.id)).map(Self.ingredientDomain(for:))
                 if !stale.isEmpty {
                     try await index.deleteSearchableItems(withDomainIdentifiers: stale)
+                }
+                if !removedReferences.isEmpty {
+                    try await index.deleteSearchableItems(withIdentifiers: removedReferences.map(Self.referenceItemIdentifier))
                 }
             }
             // A batch at a time: a large library has thousands of ingredient items, each with a thumbnail.
@@ -93,11 +112,45 @@ final class RecipeSpotlightIndexer {
                 try await index.indexSearchableItems(items)
                 count += items.count
             }
+            if !changedReferences.isEmpty {
+                try await index.indexSearchableItems(changedReferences.map(Self.item(for:)))
+                count += changedReferences.count
+            }
             indexed = current
-            logger.info("Spotlight: indexed \(changed.count) recipes (\(count) items)\(isFirstSync ? " after clearing the index" : ", removed \(removed.count)")")
+            indexedReferences = currentReferences
+            logger.info("Spotlight: indexed \(changed.count) recipes and \(changedReferences.count) references (\(count) items)\(isFirstSync ? " after clearing the index" : ", removed \(removed.count + removedReferences.count)")")
         } catch {
             logger.error("Spotlight indexing failed: \(error.localizedDescription)")
         }
+    }
+
+    /// A reference's item identifier: "reference/" and its id, apart from the recipes'.
+    static func referenceItemIdentifier(_ id: UUID) -> String { "reference/\(id.uuidString)" }
+
+    /// The reference a tapped result names, or nil for a recipe's.
+    static func referenceID(fromItemIdentifier identifier: String) -> UUID? {
+        guard identifier.hasPrefix("reference/") else { return nil }
+        return UUID(uuidString: String(identifier.dropFirst("reference/".count)))
+    }
+
+    /// A reference's Spotlight item: its title shown, its source beneath, the headings of its
+    /// sections (a glossary's terms) and its body as keywords and text.
+    static func item(for reference: Reference) -> CSSearchableItem {
+        let attributes = CSSearchableItemAttributeSet(contentType: .text)
+        let title = reference.title.isEmpty ? "Reference" : reference.title
+        attributes.title = title
+        attributes.displayName = title
+        attributes.contentDescription = "\(reference.kind.word) · \(reference.sourceLine)"
+        let headings = reference.sortedSections.map(\.heading).filter { !$0.isEmpty }
+        attributes.alternateNames = headings
+        attributes.keywords = unique(headings + ingredientWords(headings) + [reference.author, reference.book?.title, reference.source?.siteName].compactMap(\.self))
+        attributes.textContent = ([title] + reference.sortedSections.map { "\($0.heading)\n\($0.body)" }).joined(separator: "\n")
+        if !reference.author.isEmpty { attributes.authorNames = [reference.author] }
+        if let url = reference.source?.url { attributes.url = url }
+        attributes.addedDate = reference.capturedAt
+        let item = CSSearchableItem(uniqueIdentifier: referenceItemIdentifier(reference.id), domainIdentifier: referenceDomainIdentifier, attributeSet: attributes)
+        item.expirationDate = .distantFuture
+        return item
     }
 
     /// Ingredient items live in a domain per recipe, so a recipe's can be replaced or removed at once.
@@ -214,6 +267,25 @@ final class RecipeSpotlightIndexer {
     static func unique(_ values: [String]) -> [String] {
         var seen: Set<String> = []
         return values.filter { seen.insert($0.lowercased()).inserted }
+    }
+
+    /// The indexed content of a reference.
+    private struct ReferenceFingerprint: Equatable {
+        let title: String
+        let kind: ReferenceKind
+        let author: String
+        let sections: [String]
+        let bodyLength: Int
+        let book: String?
+
+        init(_ reference: Reference) {
+            title = reference.title
+            kind = reference.kind
+            author = reference.author
+            sections = reference.sortedSections.map(\.heading)
+            bodyLength = reference.sortedSections.reduce(0) { $0 + $1.body.count }
+            book = reference.book?.title
+        }
     }
 
     /// The indexed content of a recipe, to tell whether it needs indexing again.

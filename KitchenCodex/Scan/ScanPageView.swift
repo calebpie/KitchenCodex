@@ -25,8 +25,13 @@ struct ScanPageView: View {
     @State private var hasOpenedCamera = false
     @State private var isCameraDenied = CameraAccess.isDenied
 
-    init(book: Book? = nil, onFinish: @escaping ([Recipe]) -> Void) {
+    /// Book detail → More → Scan Sources Page (02 Flow C step 8): the same flow, expecting the
+    /// book's Sources page, which fills Pantry → Sources.
+    var expectsSources = false
+
+    init(book: Book? = nil, expectsSources: Bool = false, onFinish: @escaping ([Recipe]) -> Void) {
         self.onFinish = onFinish
+        self.expectsSources = expectsSources
         _session = State(initialValue: ScanSession(book: book))
     }
 
@@ -48,7 +53,8 @@ struct ScanPageView: View {
         }
         .onChange(of: session.phase) { _, phase in
             // One recipe and nothing else: open it, as Import from Web does.
-            guard phase == .finished, session.saved.count == 1, session.keptPages + session.discardedPages == 0 else { return }
+            guard phase == .finished, session.saved.count == 1, session.keptPages + session.discardedPages == 0,
+                  session.savedReferences.isEmpty, session.savedSources == 0 else { return }
             finish(session.saved.map(\.recipe))
         }
         .onAppear { session.modelContext = modelContext }
@@ -84,9 +90,9 @@ struct ScanPageView: View {
         switch session.phase {
         case .whichBook: "Which Book?"
         case .reviewing: "Review Scan"
-        case .notRecipe: "Not a Recipe"
+        case .notRecipe: session.reading?.reference != nil ? "Reference Reading" : (session.reading?.kind == .sources ? "Sources Page" : "Not a Recipe")
         case .finished: "Saved"
-        default: "Scan Page"
+        default: expectsSources ? "Scan Sources Page" : "Scan Page"
         }
     }
 
@@ -155,7 +161,9 @@ struct ScanPageView: View {
                     choiceLabel("Files", detail: "Photos of pages saved as image files", systemImage: "folder")
                 }
             } footer: {
-                Text("A cookbook page or a recipe card. A recipe that runs over a page turn: choose both pages, in order. A photo of the book's barcode among them names the book.")
+                Text(expectsSources
+                     ? "The book's Sources or Resources page: each supplier on it, with its phone number, website and what it carries, goes to Pantry → Sources."
+                     : "A cookbook page or a recipe card. A recipe that runs over a page turn: choose both pages, in order. A photo of the book's barcode among them names the book.")
             }
         }
     }
@@ -424,13 +432,18 @@ private struct WhichBookView: View {
     }
 }
 
-/// A photo that is not a recipe says what it is, and keeps it on a book as a page scan (a contents
-/// page for the punchlist, a Sources page, a photo plate) or lets it go.
+/// A photo that is not a recipe says what it is: reference reading (a glossary, a chapter opener,
+/// a technique) offers Save as Reference (02 §4.2); a Sources page offers its suppliers to Pantry
+/// (02 Flow C step 8); any other (a contents page for the punchlist, a photo plate) is kept on a
+/// book as a page scan, or let go.
 private struct NotARecipeView: View {
     let session: ScanSession
 
     @Query(sort: [SortDescriptor(\Book.title, comparator: .localizedStandard)]) private var books: [Book]
     @State private var image: UIImage?
+
+    private var reference: ImportedReference? { session.reading?.reference }
+    private var suppliers: [ImportedSource] { session.reading.map(SourcesPageReader.read) ?? [] }
 
     var body: some View {
         let kind = session.reading?.kind ?? .unreadable
@@ -445,23 +458,49 @@ private struct NotARecipeView: View {
                         .accessibilityHidden(true)
                 }
                 ContentUnavailableView {
-                    Label(kind.title, systemImage: kind.systemImage)
+                    Label(heading(kind), systemImage: reference == nil ? kind.systemImage : "text.book.closed")
                 } description: {
-                    Text("This photo isn't a recipe. Keep it with its book as a page scan, or discard it.")
+                    Text(description(kind))
                 }
                 VStack(spacing: 12) {
+                    if let reference, let book = session.book {
+                        Button("Save as Reference in \(book.displayTitle)") {
+                            Task { await session.saveReference(on: book) }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .accessibilityHint("Saves “\(reference.title)” with its sections and this page.")
+                    } else if reference != nil, !books.isEmpty {
+                        Menu("Save as Reference in…") {
+                            ForEach(books) { book in
+                                Button(book.displayTitle) { Task { await session.saveReference(on: book) } }
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                    } else if kind == .sources, !suppliers.isEmpty, let book = session.book {
+                        Button(suppliers.count == 1 ? "Save 1 Supplier to Pantry" : "Save \(suppliers.count) Suppliers to Pantry") {
+                            Task { await session.saveSources(on: book) }
+                        }
+                        .buttonStyle(.borderedProminent)
+                    } else if kind == .sources, !suppliers.isEmpty, !books.isEmpty {
+                        Menu(suppliers.count == 1 ? "Save 1 Supplier to Pantry…" : "Save \(suppliers.count) Suppliers to Pantry…") {
+                            ForEach(books) { book in
+                                Button(book.displayTitle) { Task { await session.saveSources(on: book) } }
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
                     if let book = session.book {
                         Button("Keep as Page Scan in \(book.displayTitle)") {
                             Task { await session.keepPage(on: book) }
                         }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(reference == nil && (kind != .sources || suppliers.isEmpty) ? AnyPrimitiveButtonStyle(.borderedProminent) : AnyPrimitiveButtonStyle(.bordered))
                     } else if !books.isEmpty {
                         Menu("Keep as Page Scan…") {
                             ForEach(books) { book in
                                 Button(book.displayTitle) { Task { await session.keepPage(on: book) } }
                             }
                         }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(reference == nil && (kind != .sources || suppliers.isEmpty) ? AnyPrimitiveButtonStyle(.borderedProminent) : AnyPrimitiveButtonStyle(.bordered))
                     }
                     Button("Discard", role: .destructive) {
                         Task { await session.keepPage(on: nil) }
@@ -476,6 +515,43 @@ private struct NotARecipeView: View {
             guard let page = session.review?.pages.first else { return }
             image = await ScanImage.upright(page, maxPixelSize: 1_200).map(UIImage.init(cgImage:))
         }
+    }
+
+    /// "“Glossary”, 12 entries", "A Sources page", "A photo plate".
+    private func heading(_ kind: PageKind) -> String {
+        if let reference {
+            let count = reference.sections.count
+            let what = reference.kind == .glossary ? (count == 1 ? "1 entry" : "\(count) entries") : (count == 1 ? "1 section" : "\(count) sections")
+            return reference.title.isEmpty ? "Reference reading, \(what)" : "“\(reference.title)”, \(what)"
+        }
+        return kind.title
+    }
+
+    private func description(_ kind: PageKind) -> String {
+        if let reference {
+            switch reference.kind {
+            case .glossary: return "This page reads as a glossary. Saved as a reference, each entry opens from the recipes that point to it."
+            case .technique: return "This page reads as a technique, not a recipe. Saved as a reference, it is kept beside the recipes it informs."
+            default: return "This page reads as a chapter opener, not a recipe. Saved as a reference, it is kept beside the recipes it informs."
+            }
+        }
+        if kind == .sources, !suppliers.isEmpty {
+            return "This page lists suppliers: \(suppliers.prefix(3).map(\.name).joined(separator: ", "))\(suppliers.count > 3 ? " and more" : ""). Saved to Pantry → Sources, with the book as their origin."
+        }
+        return "This photo isn't a recipe. Keep it with its book as a page scan, or discard it."
+    }
+}
+
+/// A button style chosen at run time (prominent for the page's first action).
+private struct AnyPrimitiveButtonStyle: PrimitiveButtonStyle {
+    private let make: (Configuration) -> AnyView
+
+    init<S: PrimitiveButtonStyle>(_ style: S) {
+        make = { AnyView(style.makeBody(configuration: $0)) }
+    }
+
+    func makeBody(configuration: Configuration) -> some View {
+        make(configuration)
     }
 }
 
@@ -507,6 +583,21 @@ private struct ScanSummaryView: View {
                     }
                 }
             }
+            if !session.savedReferences.isEmpty || session.savedSources > 0 {
+                Section(session.savedReferences.count == 1 ? "1 Reference Saved" : "\(session.savedReferences.count) References Saved") {
+                    ForEach(session.savedReferences) { reference in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(reference.title.isEmpty ? "Reference" : reference.title)
+                            Text("\(reference.kind.word) · \(reference.sourceLine)")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    if session.savedSources > 0 {
+                        Label(session.savedSources == 1 ? "1 supplier to Pantry → Sources" : "\(session.savedSources) suppliers to Pantry → Sources", systemImage: "storefront")
+                    }
+                }
+            }
             if session.keptPages + session.discardedPages > 0 {
                 Section {
                     if session.keptPages > 0 {
@@ -517,7 +608,7 @@ private struct ScanSummaryView: View {
                     }
                 }
             }
-            if session.saved.isEmpty, session.keptPages == 0 {
+            if session.saved.isEmpty, session.keptPages == 0, session.savedReferences.isEmpty {
                 Section {
                     Text("Nothing was saved.")
                         .foregroundStyle(.secondary)

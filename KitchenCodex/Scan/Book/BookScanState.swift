@@ -72,6 +72,14 @@ struct BookScanState: Codable {
         /// Its recipes that are a page shot again over a recipe the cook reviewed or edited: both
         /// kept until the captures sheet's Keep Earlier · Keep New is answered (ux-notes row 93).
         var duplicates: [Duplicate] = []
+        /// The references saved from it (`Reference.id`): a glossary page, a chapter opener, a
+        /// technique (slice 7).
+        var references: [UUID] = []
+        /// The suppliers saved from it as the book's Sources page (`Source.id`).
+        var sources: [UUID] = []
+        /// A page continuing a recipe the cook reviewed or edited since (ux-notes row 100): saved
+        /// on its own until the captures sheet's Join · Keep Apart is answered.
+        var joinOffer: JoinOffer?
 
         init(id: Int, file: String, mode: CaptureMode, quality: Quality?, note: String) {
             self.id = id
@@ -101,7 +109,20 @@ struct BookScanState: Codable {
             sitting = try container.decodeIfPresent(Int.self, forKey: .sitting) ?? 0
             createdEntries = try container.decodeIfPresent([UUID].self, forKey: .createdEntries) ?? []
             duplicates = try container.decodeIfPresent([Duplicate].self, forKey: .duplicates) ?? []
+            references = try container.decodeIfPresent([UUID].self, forKey: .references) ?? []
+            sources = try container.decodeIfPresent([UUID].self, forKey: .sources) ?? []
+            joinOffer = try container.decodeIfPresent(JoinOffer.self, forKey: .joinOffer)
         }
+    }
+
+    /// A page that continues a recipe the cook reviewed or edited since it was saved (ux-notes
+    /// row 100): the capture it would join, the recipe, and its title for the question.
+    struct JoinOffer: Codable, Equatable {
+        /// The recipe capture before this page.
+        var previous: Int
+        /// The reviewed recipe (`Recipe.id`).
+        var recipe: UUID
+        var title: String
     }
 
     /// A recipe saved from a page already captured, beside the earlier one it would replace.

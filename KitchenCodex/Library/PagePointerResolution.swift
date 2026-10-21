@@ -6,7 +6,8 @@ import SwiftUI
 
 // Page pointers resolved at display time (04 §5.1 "Page pointers", ux-notes row 74): what a book
 // holds from a page, by book and page number, with no schema field. A recipe scanned from the
-// page, a Reference once slice 7 captures one, or nothing yet, which offers Scan page N.
+// page, a Reference captured from it (its entry opened when the pointer names one), or nothing
+// yet, which offers Scan Page N at the pill (ux-notes row 104).
 
 /// What a book holds from one page.
 enum PageHolding {
@@ -31,8 +32,7 @@ extension Book {
         return found
     }
 
-    /// References captured from `page` (slice 7): their entry's page, or the pages their source
-    /// spans.
+    /// References captured from `page`: their entry's page, or the pages their source spans.
     func references(onPage page: Int) -> [Reference] {
         (references ?? []).filter { reference in
             if reference.bookEntry?.page == page { return true }
@@ -59,48 +59,42 @@ extension Book {
     }
 }
 
-extension PagePointer {
-    /// The title a to-scan entry takes from the pointer: the name it gives, else the ingredient it
-    /// sits on ("Dashi (see page 17)"), else "Page 17".
-    func entryTitle(item: String? = nil) -> String {
-        if let target, !target.isEmpty { return target }
-        if let item = item?.trimmingCharacters(in: .whitespaces), !item.isEmpty {
-            return item.prefix(1).uppercased() + item.dropFirst()
+/// Scan Page N, offered where the book holds nothing from a pointer's page: what the pill shows,
+/// anchored at the pill (a step's) or the row (an ingredient line's), as the As Written popover is
+/// (ux-notes row 104).
+struct ScanOffer: Identifiable, Equatable {
+    let id = UUID()
+    let page: Int
+    /// The entry the scan adds or finds.
+    let title: String
+    let pointer: PagePointer
+    let bookTitle: String
+}
+
+/// "Nothing from page 73 yet", what scanning adds to the list, and Scan Page 73.
+struct ScanOfferPopover: View {
+    let offer: ScanOffer
+    var onScan: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Nothing from page \(offer.page) yet")
+                .font(.headline)
+            Text("\(offer.bookTitle) has nothing scanned from page \(offer.page). Scanning it adds “\(offer.title)” to the book's list if it isn't there.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Button("Scan Page \(offer.page)", systemImage: "camera.viewfinder", action: onScan)
+                .buttonStyle(.borderedProminent)
         }
-        return "Page \(pages.first ?? 0)"
+        .padding(16)
+        .frame(minWidth: 220, idealWidth: 300, maxWidth: 340, alignment: .leading)
     }
 }
 
-/// A Reference a pointer opened (slice 7 captures them): its title and sections, read-only.
-struct ReferencePageView: View {
+/// A Reference opened from a pill or Related reading: the term the pointer named opens its entry.
+struct OpenedReference: Identifiable {
+    let id = UUID()
     let reference: Reference
-
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            List {
-                if let book = reference.book {
-                    Section {
-                        Text(reference.bookEntry?.page.map { "\(book.displayTitle), p. \($0)" } ?? book.displayTitle)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                ForEach((reference.sections ?? []).sorted { $0.sortOrder < $1.sortOrder }) { section in
-                    Section(section.heading) {
-                        Text(section.body)
-                            .textSelection(.enabled)
-                    }
-                }
-            }
-            .navigationTitle(reference.title.isEmpty ? "Reference" : reference.title)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done", role: .confirm) { dismiss() }
-                        .keyboardShortcut(.cancelAction)
-                }
-            }
-        }
-    }
+    var term: String?
 }

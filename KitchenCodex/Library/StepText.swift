@@ -214,11 +214,17 @@ struct StepTextView: View {
     let scale: TemperatureScale?
     /// The thumbnail the text flows around, or nil for none.
     var exclusion: CGSize?
-    /// A tap on a page pointer's pill; nil leaves pointers as words (a recipe from no book).
-    var onPointer: ((PagePointer) -> Void)?
+    /// A tap on a page pointer's pill: what the book holds opens, or Scan Page N comes back to be
+    /// shown at the pill (ux-notes row 104); nil leaves pointers as words (a recipe from no book).
+    var onPointer: ((PagePointer) -> ScanOffer?)?
+    /// Scan Page N, tapped in the popover.
+    var onScan: ((ScanOffer) -> Void)?
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var tappedPill: TappedPill?
+    /// Scan Page N, anchored at the pill that was tapped.
+    @State private var offeredScan: ScanOffer?
+    @State private var offerRect: CGRect = .zero
 
     /// The pill a tap landed on, and where it sits in this view.
     struct TappedPill: Identifiable, Equatable {
@@ -232,14 +238,24 @@ struct StepTextView: View {
         let font = StepTextLayout.font(for: dynamicTypeSize)
         StepTextLayout(text: text, scale: scale, exclusion: exclusion, font: font, showsPointers: onPointer != nil) { pill in
             tappedPill = pill
-        } onTapPointer: { pointer in
-            onPointer?(pointer)
+        } onTapPointer: { pointer, rect in
+            if let offer = onPointer?(pointer) {
+                offerRect = rect
+                offeredScan = offer
+            }
         }
         // The step number sits on the first line's baseline.
         .alignmentGuide(.firstTextBaseline) { _ in font.ascender }
         .popover(item: $tappedPill, attachmentAnchor: .rect(.rect(tappedPill?.rect ?? .zero))) { pill in
             AsWrittenPopover(shown: pill.shown, original: pill.original)
                 .presentationCompactAdaptation(.popover)
+        }
+        .popover(item: $offeredScan, attachmentAnchor: .rect(.rect(offerRect))) { offer in
+            ScanOfferPopover(offer: offer) {
+                offeredScan = nil
+                onScan?(offer)
+            }
+            .presentationCompactAdaptation(.popover)
         }
     }
 }
@@ -282,7 +298,8 @@ private struct StepTextLayout: UIViewRepresentable {
     let font: UIFont
     let showsPointers: Bool
     let onTapPill: (StepTextView.TappedPill) -> Void
-    let onTapPointer: (PagePointer) -> Void
+    /// A pointer's pill tapped, with its capsule's rect in the view.
+    let onTapPointer: (PagePointer, CGRect) -> Void
 
     /// The body style at the environment's Dynamic Type size.
     static func font(for size: DynamicTypeSize) -> UIFont {
@@ -315,7 +332,7 @@ private struct StepTextLayout: UIViewRepresentable {
         view.onTapPill = { index, rect in
             guard pills.indices.contains(index) else { return }
             if case let .pointer(pointer) = pills[index].kind {
-                onTapPointer(pointer)
+                onTapPointer(pointer, rect)
             } else {
                 onTapPill(.init(id: index, shown: pills[index].shown, original: pills[index].original, rect: rect))
             }

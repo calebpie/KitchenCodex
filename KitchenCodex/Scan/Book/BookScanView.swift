@@ -323,7 +323,7 @@ private struct CaptureIntake: View {
             Task { await session.add(photos: items, mode: chosen) }
         }
         .sheet(isPresented: $isShowingCaptures) {
-            CaptureListSheet(items: session.captureItems) { session.removeCapture(id: $0) } onSetMode: { session.setMode($1, ofCapture: $0) } onSetNeedsReview: { session.setNeedsReview($1, for: $0) } onKeep: { session.resolveDuplicates(of: $0, keepNew: $1) }
+            CaptureListSheet(items: session.captureItems) { session.removeCapture(id: $0) } onSetMode: { session.setMode($1, ofCapture: $0) } onSetNeedsReview: { session.setNeedsReview($1, for: $0) } onKeep: { session.resolveDuplicates(of: $0, keepNew: $1) } onJoin: { session.resolveJoin(of: $0, join: $1) }
         }
     }
 }

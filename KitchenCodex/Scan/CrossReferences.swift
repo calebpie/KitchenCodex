@@ -133,13 +133,32 @@ enum CrossReferenceLinking {
         return entry
     }
 
-    /// A to-scan entry's title: the name the pointer gives, else the ingredient it sits on ("dashi
-    /// (see page 17)" → "Dashi"), else "Page 17".
+    /// A to-scan entry's title (ux-notes row 102): the name the pointer gives ("Dashi (see page
+    /// 17)" → "Dashi"), else the name inside its parentheses ("Yama-imo"), else the ingredient it
+    /// sits on without its size and count words ("Mountain yam"), else "Page 17".
     static func entryTitle(for reference: PageCrossReference, in recipe: Recipe, page: Int) -> String {
         if let target = reference.target, !target.isEmpty { return target }
         let line = recipe.currentVersion?.sortedIngredients.first { $0.rawText.localizedCaseInsensitiveContains(reference.phrase) }
-        let pointer = PagePointer(range: reference.phrase.startIndex..<reference.phrase.endIndex, text: reference.phrase, pages: [page], kind: reference.kind)
+        let pointer = PagePointers.find(in: reference.phrase).first
+            ?? PagePointer(range: reference.phrase.startIndex..<reference.phrase.endIndex, text: reference.phrase, pages: [page], kind: reference.kind)
         return pointer.entryTitle(item: line?.item)
+    }
+
+    /// The book's Sources page is captured (02 Flow C step 8, ux-notes row 103): the pointers to it
+    /// come off the list, an entry a pointer made goes, and one the contents listed is captured.
+    static func captureSourcesPage(pages: [Int], in book: Book, state: inout BookScanState, context: ModelContext) {
+        for index in state.pointerEntries.indices.reversed() {
+            let pointer = state.pointerEntries[index]
+            guard pointer.kind == PageCrossReference.Kind.sources.rawValue || pages.contains(pointer.page) && pointer.isReference else { continue }
+            if let entry = book.orderedEntries.first(where: { $0.id == pointer.entry }), entry.recipe == nil, entry.reference == nil {
+                if pointer.madeEntry { context.delete(entry) } else { entry.status = .captured }
+            }
+            state.pointerEntries.remove(at: index)
+        }
+        for entry in book.orderedEntries where pages.contains(entry.page ?? -1) && entry.recipe == nil && entry.reference == nil && entry.status == .listed {
+            entry.status = .captured
+        }
+        try? context.save()
     }
 
     /// Ignore: whatever the pointer made for this recipe goes (its link, its place on an entry it

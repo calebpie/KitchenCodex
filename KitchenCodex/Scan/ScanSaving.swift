@@ -293,6 +293,30 @@ enum ScanSaving {
         CrossReferenceLinking.apply(review.pointers, to: recipe, in: recipe.book, context: context)
     }
 
+    /// A recipe read again with another page joined to it (ux-notes row 100): the stitched reading
+    /// saved as a new version of `recipe`, the cook's version kept as history, its page scans
+    /// replaced by the joined pages', its pages and page number as the pages now say.
+    static func saveAgain(_ model: ScanReviewModel, recipe index: Int, into recipe: Recipe, book: Book?, images: PageImages, changeSummary: String, in context: ModelContext) async {
+        let review = model.recipes[index]
+        let pageNumbers = model.pages.compactMap(\.pageNumber)
+        let original = RecipeDraft(recipe: recipe)
+        var draft = RecipeDraft(imported: review.imported)
+        draft.title = recipe.title
+        draft.course = recipe.course
+        draft.changeSummary = changeSummary
+        draft.save(to: recipe, comparedWith: original, in: context)
+        if let headnote = review.imported.headnote, recipe.headnote.isEmpty { recipe.headnote = headnote }
+        for scan in recipe.pageScans { context.delete(scan) }
+        recipe.pageNumber = pageNumbers.first ?? recipe.pageNumber
+        recipe.extractionConfidence = review.confidence.combined
+        if let source = recipe.source {
+            source.firstPage = pageNumbers.min() ?? source.firstPage
+            source.lastPage = pageNumbers.count > 1 ? pageNumbers.max() : nil
+        }
+        await attachPageScans(model, recipe: index, to: recipe, book: book, images: images, in: context)
+        try? context.save()
+    }
+
     /// Keeps a page that is not a recipe (a contents, index or Sources page, a photo plate) on its
     /// book as a page scan, with its regions and no recipe.
     static func keepPageScan(_ model: ScanReviewModel, kind: PageKind, book: Book, images: PageImages, in context: ModelContext) async {
