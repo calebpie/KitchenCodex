@@ -571,6 +571,7 @@ struct RecipeDetailView: View {
             Text("Headnote")
                 .font(.headline)
         }
+        .disclosureGroupStyle(CompactDisclosureStyle())
     }
 
     private func notesSection(_ notes: String) -> some View {
@@ -615,6 +616,41 @@ struct RecipeDetailView: View {
             Text("Versions (\(recipe.versions?.count ?? 0))")
                 .font(.headline)
         }
+        .disclosureGroupStyle(CompactDisclosureStyle())
+    }
+}
+
+/// Headnote and Versions (04 §5.1 "Detail disclosures", ux-notes row 97): the chevron beside the
+/// label, and the two together the control, so on the wide detail the chevron never sits a screen
+/// from its label. The content opens below at the column's width.
+private struct CompactDisclosureStyle: DisclosureGroupStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                withAnimation(.snappy) { configuration.isExpanded.toggle() }
+            } label: {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    configuration.label
+                        .foregroundStyle(.primary)
+                    Image(systemName: "chevron.right")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.tint)
+                        .rotationEffect(.degrees(configuration.isExpanded ? 90 : 0))
+                        .accessibilityHidden(true)
+                }
+                .frame(minHeight: 44)
+                .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .accessibilityValue(configuration.isExpanded ? "Expanded" : "Collapsed")
+            .accessibilityHint(configuration.isExpanded ? "Hides it." : "Shows it.")
+            if configuration.isExpanded {
+                configuration.content
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .transition(.opacity)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
