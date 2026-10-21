@@ -30,7 +30,7 @@
 | **Google Books API key** (optional). Open Library is keyless and first; the key only adds a fallback for books Open Library lacks. | Slice 1 | Any time |
 | **Background processing** (ux-notes row 92): the "processing" background mode and a `BGTaskSchedulerPermittedIdentifiers` entry. **Authorized Oct 21, 2026**; the coordinator adds both with the Kitchen Codex rename, the identifier on the new bundle id. | Slice 6 registers the task | At the slice 5 → 6 boundary |
 | **Bouchon's index page**, photographed into `Pages/bouchon/` (row 96). | Slice 8 | Before slice 8 |
-| **"Open in app" URL type** (Phase 1 leftover, ux-notes row 44's neighbour): authorize the Info.plist URL type or leave it. | Slice 6 or 7, whichever touches the extension | Before that slice |
+| **"Open in app" URL type** (Phase 1 leftover, ux-notes row 44's neighbour): authorize the Info.plist URL type or leave it. **Authorized Oct 21, 2026**: the coordinator added `CFBundleURLTypes` (scheme `kitchencodex`, name `com.calebpietrafesa.KitchenCodex`) to `KitchenCodex/Info.plist`; slice 7 wires Open in app through `AppRouter`. | Slice 7 | Done Oct 21, 2026 |
 
 ## Slices
 
@@ -98,6 +98,7 @@ Each slice follows the Phase 1 pattern: a brief with groups and a verification l
 - **Reference capture**: the web importer offers "Save as reference" when a page has Article markup and no recipe; a scanned technique chapter saves as a `Reference` with sections; its source kept; linked to its book and to recipes; where References live per Caleb's decision (04 §5.2); Search covers them. A glossary page scans as a `Reference` whose sections are its entries, linked to the recipes whose pointers name it, so a pointer pill opens the entry (row 74).
 - **Sources page** (Flow C step 8): scan the book's Sources or Resources page once; each entry (name, phone, website, what they carry) becomes a `Source` linked to the book in Pantry → Sources; the pane shows them.
 - **Extension carry-over** (ux-notes row 44) and "Open in app" if authorized, since this slice touches the extension for the Article path.
+- **From slice 6's review** (ux-notes, decided Oct 21, 2026): a page continuing a recipe the cook reviewed or edited since asks Join · Keep Apart in the captures sheet (row 100); a page shot again keeps the links its earlier copy held as a parent and re-links the pointer entry's recipes to the kept copy (row 105); a pointer's to-scan entry is titled from the parenthetical name, else the item without its size and count words (row 102); Sources page pointers feed the Sources page flow (row 103).
 - Done when: one article and one chapter are References; the exit book's Sources page fills the pane.
 
 ### Slice 8 — Accuracy, cover selection, PDF import, and the exit
