@@ -97,7 +97,7 @@ public enum JSONLDRecipeParser {
     private static func recipe(from node: [String: Any], index: [String: [String: Any]], sourceURL: URL?) -> ImportedRecipe {
         let base = sourceURL ?? string(node["url"]).flatMap { URL(string: $0) }
         let ingredients = ImportText.ingredientList(strings(node["recipeIngredient"] ?? node["ingredients"]))
-        return ImportedRecipe(
+        var recipe = ImportedRecipe(
             title: ImportText.inline(string(node["name"]) ?? string(node["headline"]) ?? ""),
             ingredients: ingredients.lines,
             steps: instructions(node["recipeInstructions"], index: index, base: base),
@@ -115,6 +115,25 @@ public enum JSONLDRecipeParser {
             method: .jsonLD,
             confidence: 0.95
         )
+        recipe.stepGroups = sections(node["recipeInstructions"], index: index, base: base)
+        return recipe
+    }
+
+    /// The names of the method's `HowToSection`s, keyed by each section's first step as
+    /// `instructions` numbers them. Sections with no name, or a method that is one section, give none.
+    private static func sections(_ value: Any?, index: [String: [String: Any]], base: URL?) -> [Int: String] {
+        guard let elements = resolve(value, index: index) as? [Any] else { return [:] }
+        var groups: [Int: String] = [:]
+        var position = 0
+        for element in elements {
+            let object = resolve(element, index: index) as? [String: Any]
+            let isSection = object.map { strings($0["@type"]).contains { $0.caseInsensitiveCompare("HowToSection") == .orderedSame } } ?? false
+            if isSection, let name = string(object?["name"]).map(ImportText.inline), !name.isEmpty {
+                groups[position] = name
+            }
+            position += instructions(element, index: index, base: base).count
+        }
+        return groups.count >= 2 ? groups : [:]
     }
 
     // MARK: - Field coercion

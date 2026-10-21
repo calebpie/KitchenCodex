@@ -214,6 +214,8 @@ public struct WebRecipeImporter: Sendable {
         recipe.ingredients = ingredients.lines
         recipe.ingredientGroups = groups
         recipe.steps = steps
+        // The model's steps are its own; the page's sections no longer number them.
+        recipe.stepGroups = [:]
         recipe.movingAsidesToNotes()
         recipe.method = .model
         recipe.confidence = min(draft.confidence, 0.6)

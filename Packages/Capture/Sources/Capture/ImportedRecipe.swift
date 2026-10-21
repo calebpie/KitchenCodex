@@ -61,6 +61,10 @@ public struct ImportedRecipe: Sendable, Equatable {
     public var categories: [String] = []
     /// Group headings ("For the dressing") keyed by the index of the first ingredient in the group.
     public var ingredientGroups: [Int: String]
+    /// Section names a source gives its method ("Make the dressing"), keyed by the index of the
+    /// section's first step: JSON-LD `HowToSection`s with a name. The steps stay as written; this is
+    /// what "Split into N recipes" pairs with the ingredient groups (`ComponentSplit`).
+    public var stepGroups: [Int: String] = [:]
     public var method: ImportMethod?
     /// 0…1. JSON-LD is high, the page-text reading low; below `reviewThreshold` the recipe needs a look.
     public var confidence: Double
@@ -141,6 +145,14 @@ public struct ImportedRecipe: Sendable, Equatable {
     public mutating func movingAsidesToNotes() {
         let asides = steps.filter { Self.isAside($0.text) }
         guard !asides.isEmpty, asides.count < steps.count else { return }
+        // A section keeps its name at its first step left.
+        var kept = 0
+        var groups: [Int: String] = [:]
+        for (index, step) in steps.enumerated() {
+            if let name = stepGroups[index] { groups[kept] = groups[kept] ?? name }
+            if !Self.isAside(step.text) { kept += 1 }
+        }
+        stepGroups = groups.filter { $0.key < kept }
         steps.removeAll { Self.isAside($0.text) }
         notes += asides.map(\.text).filter { !notes.contains($0) }
     }

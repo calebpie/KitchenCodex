@@ -37,6 +37,11 @@ enum PageCrossReferences {
             guard !alreadyFound, let page = Int(match.output.1) else { continue }
             found.append(PageCrossReference(kind: context ?? .technique, phrase: String(text[match.range]), pages: [page]))
         }
+        // "Aioli (recipe follows)", "2 cups Pickled Shallots (recipe below)": a component printed
+        // on this page or the next, with no page number; the name before it says which.
+        for match in text.matches(of: /(?i)\(\s*(?:the\s+)?recipes?\s+(?:follows?|below|opposite|on\s+the\s+(?:following|next|facing)\s+page)\s*\)/) {
+            found.append(PageCrossReference(kind: .recipe, phrase: String(text[match.range]), pages: [], target: Self.target(before: match.range.lowerBound, in: text)))
+        }
         _ = lower
         return found
     }
