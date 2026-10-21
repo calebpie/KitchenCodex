@@ -6,6 +6,19 @@
 	<array>
 		<string>com.calebpietrafesa.KitchenCodex.bookscan</string>
 	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.calebpietrafesa.KitchenCodex</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>kitchencodex</string>
+			</array>
+		</dict>
+	</array>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>
