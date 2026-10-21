@@ -151,7 +151,12 @@ struct BookScanView: View {
 
     private func closeButton(_ session: BookScanSession) -> some View {
         Button("Close", systemImage: "xmark") {
-            if session.needReviewCount > 0 { isConfirmingClose = true } else { dismiss() }
+            // Asks only when this sitting added to the queue; what waited before waits in the book.
+            if session.needReviewCount > 0, session.shownCaptures.contains(where: { session.needsReview($0) }) {
+                isConfirmingClose = true
+            } else {
+                dismiss()
+            }
         }
         .labelStyle(.iconOnly)
         .font(.title3)
