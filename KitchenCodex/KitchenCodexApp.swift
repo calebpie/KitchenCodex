@@ -45,6 +45,8 @@ struct KitchenCodexApp: App {
         }
         spotlight = RecipeSpotlightIndexer(container: container)
         _sync = State(initialValue: SyncMonitor(store: store))
+        // Before launch finishes, as BGTaskScheduler requires (ux-notes row 92).
+        BookScanBackground.register(container: container)
     }
 
     var body: some Scene {
@@ -58,6 +60,13 @@ struct KitchenCodexApp: App {
                     spotlight.start()
                     // A whole-book session's captures left waiting at the last quit are read now.
                     BookScanStore.shared.resume(in: container.mainContext)
+                    #if DEBUG
+                    // The background task's path, which the Simulator can't launch.
+                    if ProcessInfo.processInfo.arguments.contains("-KitchenCodexDrainBookScans") {
+                        let expires = ProcessInfo.processInfo.arguments.contains("-KitchenCodexExpireBookScans")
+                        BookScanBackground.runWithoutSystemTask(container: container, expiresAfter: expires ? 2 : nil)
+                    }
+                    #endif
                 }
         }
         .modelContainer(container)
@@ -67,6 +76,8 @@ struct KitchenCodexApp: App {
             // Recipes saved by the Share Extension, or synced from another device, arrive while the
             // app is away; index them when it comes back.
             if phase == .active { spotlight.scheduleSync() }
+            // Captures still waiting are read in the background (ux-notes row 92).
+            if phase == .background { BookScanBackground.submitIfNeeded() }
         }
     }
 }

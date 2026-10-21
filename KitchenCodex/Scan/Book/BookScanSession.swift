@@ -18,9 +18,8 @@ import SwiftUI
 /// Needs Review and a reading of low confidence also go to the review queue.
 ///
 /// The queue is the state in the book's scan folder (`BookScanState`): Close pauses with nothing
-/// lost, captures still reading finish, and a relaunch resumes them (`BookScanStore.resume`). A
-/// background task could drive the same `drain()` later; none is registered (no `BGProcessingTask`
-/// without the processing background mode).
+/// lost, captures still reading finish, a relaunch resumes them (`BookScanStore.resume`), and the
+/// background task drains them while the app is away (`BookScanBackground`, ux-notes row 92).
 @MainActor
 @Observable
 final class BookScanSession: PageCaptureSink {
@@ -352,8 +351,20 @@ final class BookScanSession: PageCaptureSink {
         worker = Task { await drain() }
     }
 
-    /// Reads and saves every waiting capture in capture order. What a background task would call.
-    /// Stops when its task is cancelled (the book was deleted).
+    /// Runs the queue to its end: the worker already reading, or a new one. The background task's
+    /// way in, so a drain never runs beside another.
+    func runQueue() async {
+        kick()
+        await worker?.value
+    }
+
+    /// The background task's time is up: the worker stops after the capture in hand.
+    func stopWorker() {
+        worker?.cancel()
+    }
+
+    /// Reads and saves every waiting capture in capture order. Stops when its task is cancelled (the
+    /// book was deleted, or the background task's time ran out).
     func drain() async {
         while !Task.isCancelled, let next = state.captures.filter({ $0.status == .pending }).map(\.id).min() {
             await process(next)
@@ -377,6 +388,8 @@ final class BookScanSession: PageCaptureSink {
         let read = try? await Self.read(url, quality: capture.quality?.reading, with: pipeline)
         // The book was deleted while it was read: nothing is saved for it.
         guard !isAbandoned else { return }
+        // Stopped mid-read (the background task's time ran out): it waits for the next chance.
+        if read == nil, Task.isCancelled { return }
         guard let reading = read else {
             finish(id) { $0.status = .failed; $0.detail = "Couldn't be read" }
             return
@@ -724,6 +737,20 @@ final class BookScanStore {
             guard let book = try? context.fetch(FetchDescriptor<Book>(predicate: #Predicate { $0.id == id })).first else { continue }
             session(for: book, context: context).kick()
         }
+    }
+
+    /// The background task (ux-notes row 92): every book with captures waiting drained in turn.
+    func drainAll(in context: ModelContext) async {
+        resume(in: context)
+        for id in BookScanState.booksWithPendingCaptures() {
+            guard !Task.isCancelled, let session = sessions[id] else { continue }
+            await session.runQueue()
+        }
+    }
+
+    /// The background task's time is up.
+    func stopWorkers() {
+        for session in sessions.values { session.stopWorker() }
     }
 
     /// The book is being deleted: its session stops, and its captures and state go with it.
