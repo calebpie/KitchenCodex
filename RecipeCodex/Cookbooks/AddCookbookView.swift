@@ -15,6 +15,10 @@ import UniformTypeIdentifiers
 struct AddCookbookView: View {
     /// An ISBN already read (a barcode among a scan's pages): looked up as the sheet opens.
     var isbn: String? = nil
+    var title = "Add Cookbook"
+    /// Scan Cookbook's first step (04 §5.1 "Add Cookbook"): the sheet stays open for the next step,
+    /// and a barcode for a book already on the shelf goes straight to it, with no lookup.
+    var continuesToScanning = false
     /// The new book, or the one already on the shelf with that ISBN; the shelf opens it once the
     /// sheet has gone.
     var onAdd: (Book) -> Void
@@ -70,7 +74,7 @@ struct AddCookbookView: View {
                     barcodeForm
                 }
             }
-            .navigationTitle("Add Cookbook")
+            .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -276,6 +280,10 @@ struct AddCookbookView: View {
     nonisolated private static let logger = Logger(subsystem: "com.calebpietrafesa.RecipeCodex", category: "books")
 
     private func lookUp(_ isbn: String) {
+        if continuesToScanning, let shelved = books.first(where: { $0.isbn == isbn }) {
+            finish(shelved)
+            return
+        }
         work?.cancel()
         phase = .looking(isbn)
         work = Task { [lookup] in
@@ -326,7 +334,7 @@ struct AddCookbookView: View {
 
     private func finish(_ book: Book) {
         onAdd(book)
-        dismiss()
+        if !continuesToScanning { dismiss() }
     }
 }
 

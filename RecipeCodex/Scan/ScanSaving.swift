@@ -231,6 +231,8 @@ enum ScanSaving {
         await attachStepPhotos(model, recipe: index, to: recipe, images: images, in: context)
         recipe.markReviewed(in: context)
         recipe.source?.reviewedAt = .now
+        // Its punchlist entry is reviewed (02 Flow C step 7).
+        if let entry = recipe.bookEntry { entry.status = .reviewed }
         if let book = recipe.book, !review.layoutSignature.isEmpty, !book.reviewedLayouts.contains(review.layoutSignature) {
             book.reviewedLayouts.append(review.layoutSignature)
         }
@@ -268,8 +270,10 @@ enum ScanSaving {
 
     /// Photo-mode captures (04 §5.1 "Printed photos", ux-notes row 62): each kept on the recipe as a
     /// cover candidate, and the first made the cover when the recipe has none. No question asked.
-    static func attachCoverCandidates(_ urls: [URL], to recipe: Recipe, in context: ModelContext) async {
-        guard !urls.isEmpty else { return }
+    @discardableResult
+    static func attachCoverCandidates(_ urls: [URL], to recipe: Recipe, in context: ModelContext) async -> [RecipeImage] {
+        guard !urls.isEmpty else { return [] }
+        var attached: [RecipeImage] = []
         for url in urls {
             guard let file = try? Data(contentsOf: url),
                   let photo = await ImageProcessing.jpeg(from: file, maxPixelSize: 2_400, quality: 0.85) else { continue }
@@ -282,8 +286,10 @@ enum ScanSaving {
             } else {
                 image.caption = RecipeDraft.coverCandidateCaption
             }
+            attached.append(image)
         }
         try? context.save()
+        return attached
     }
 
     /// Printed photos the cook made step photos, cropped from the page and attached to their steps.

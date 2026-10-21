@@ -47,10 +47,11 @@ struct RecipesView: View {
     @State private var isAddingRecipe = false
     @State private var isImportingFromWeb = false
     @State private var isImportingLibrary = false
-    @State private var isAddingCookbook = false
-    /// Add → Scan Page (02 Flow B): From Photo and Files until the camera arrives (slice 4).
+    /// Add → Scan Cookbook (02 Flow C): the barcode, the recipe list, the whole-book session.
+    @State private var isScanningCookbook = false
+    /// Add → Scan Page (02 Flow B): the camera on a device, From Photo and Files.
     @State private var isScanningPage = false
-    /// Set by Add Cookbook; its detail opens once the sheet has gone.
+    /// Set by Scan Cookbook; its detail opens once the sheet has gone.
     @State private var addedBook: Book?
     /// What is pushed over the grid. One path for both widths, so an open recipe stays open when
     /// an iPad window changes width.
@@ -163,8 +164,10 @@ struct RecipesView: View {
         .sheet(isPresented: $isImportingLibrary) {
             LibraryImportView()
         }
-        .sheet(isPresented: $isAddingCookbook, onDismiss: openAddedBook) {
-            AddCookbookView { book in addedBook = book }
+        .sheet(isPresented: $isScanningCookbook, onDismiss: openAddedBook) {
+            ScanCookbookView { book in addedBook = book }
+                // iPad: the recipe list and its corrections want the room.
+                .presentationSizing(.page)
         }
         .sheet(isPresented: $isScanningPage, onDismiss: openImportedRecipe) {
             // One recipe saved opens it; several leave the library to show them.
@@ -251,11 +254,12 @@ struct RecipesView: View {
 
     /// Starts what the File menu asked for, unless one of this page's sheets is already up.
     private func start(_ request: LibraryRequest) {
-        guard !isAddingRecipe, !isImportingFromWeb, !isImportingLibrary, !isAddingCookbook, !isScanningPage, !isShowingFilter else { return }
+        guard !isAddingRecipe, !isImportingFromWeb, !isImportingLibrary, !isScanningCookbook, !isScanningPage, !isShowingFilter else { return }
         switch request {
         case .enterManually: isAddingRecipe = true
         case .importFromWeb: isImportingFromWeb = true
         case .scanPage: isScanningPage = true
+        case .scanCookbook: isScanningCookbook = true
         case .importLibrary: isImportingLibrary = true
         }
     }
@@ -343,7 +347,7 @@ struct RecipesView: View {
             } description: {
                 Text("Cookbooks you add will be listed here with their recipes.")
             } actions: {
-                Button("Add Cookbook") { isAddingCookbook = true }
+                Button("Scan Cookbook") { isScanningCookbook = true }
             }
         } else {
             ContentUnavailableView {
@@ -497,8 +501,8 @@ struct RecipesView: View {
                 }
             }
         } else {
-            // The Cookbooks view (03 §3.7): the same Add menu, with Add Cookbook where Scan Cookbook
-            // goes in slice 5. More appears once the shelf has something to sort.
+            // The Cookbooks view (03 §3.7): the same Add menu. More appears once the shelf has
+            // something to sort.
             ToolbarItem(placement: .primaryAction) {
                 addMenu
             }
@@ -521,9 +525,9 @@ struct RecipesView: View {
         }
     }
 
-    /// Add (+), the same on Recipes and Cookbooks (04 §5.1 Add menu, ux-notes row 51): the ways in,
-    /// never the outcome; methods that haven't shipped are hidden. Add Cookbook stays on the
-    /// Cookbooks view until Scan Cookbook takes its place (slice 5).
+    /// Add (+), identical on Recipes and Cookbooks (04 §5.1 Add menu, ux-notes rows 51 and 90): the
+    /// ways in, never the outcome; methods that haven't shipped are hidden. Add Cookbook is Scan
+    /// Cookbook's first step (04 §5.1 "Add Cookbook").
     private var addMenu: some View {
         Menu {
             // ⌘N is File → New Recipe, from any tab (RecipeCodexCommands).
@@ -536,8 +540,8 @@ struct RecipesView: View {
             Button("Scan Page", systemImage: "doc.viewfinder") {
                 isScanningPage = true
             }
-            if activeView == .books {
-                Button("Add Cookbook", systemImage: "barcode") { isAddingCookbook = true }
+            Button("Scan Cookbook", systemImage: "books.vertical") {
+                isScanningCookbook = true
             }
             Divider()
             Button("Import from Paprika or Mela…", systemImage: "tray.and.arrow.down") {
@@ -574,7 +578,7 @@ struct RecipesView: View {
         router.delete(collection, in: modelContext)
     }
 
-    /// The book Add Cookbook added or found on the shelf, pushed over the shelf.
+    /// The book Scan Cookbook added or found on the shelf, pushed over the shelf.
     private func openAddedBook() {
         guard let book = addedBook else { return }
         addedBook = nil

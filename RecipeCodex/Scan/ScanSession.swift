@@ -131,6 +131,8 @@ final class ScanSession: PageCaptureSink {
     private var reviewStarted: ContinuousClock.Instant?
     private var work: Task<Void, Never>?
     private let images = ScanSaving.PageImages()
+    /// The punchlist entries of the reading under way, for a book that has a list.
+    private var entryMatch: PunchlistLinking.Match?
 
     private static let logger = Logger(subsystem: "com.calebpietrafesa.RecipeCodex", category: "scan")
 
@@ -515,10 +517,15 @@ final class ScanSession: PageCaptureSink {
             }
             let reasons = ScanGate.reasons(for: reading, book: book)
             let model = ScanReviewModel(reading: reading, urls: urls)
-            let course = Self.lastCourse(of: book)
+            // A book with a punchlist: each recipe's entry, and its chapter's course (ux-notes row
+            // 73); otherwise the book's last course.
+            entryMatch = book.map { book in
+                PunchlistLinking.match(titles: model.recipes.map { $0.title?.text ?? "" }, pages: reading.pageNumbers.compactMap(\.self),
+                                       in: book, current: nil, courses: BookScanStore.shared.courseChoices(for: book), createsMissing: false, context: modelContext)
+            }
             for index in model.recipes.indices {
                 model.recipes[index].reasons = reasons[index]
-                model.recipes[index].course = course
+                model.recipes[index].course = entryMatch?.courses[index] ?? Self.lastCourse(of: book)
             }
             // The first photo opening mid-recipe continues a page that wasn't scanned: shown, but
             // skipped unless the cook includes it.
@@ -537,6 +544,7 @@ final class ScanSession: PageCaptureSink {
             for index in model.recipes.indices {
                 let recipe = await ScanSaving.saveNew(model, recipe: index, book: book, reviewed: false, images: images, in: modelContext)
                 await ScanSaving.attachCoverCandidates(candidates(forRecipe: index), to: recipe, in: modelContext)
+                PunchlistLinking.link(recipe, to: entryMatch?.entries[index], reviewed: false)
                 saved.append(SavedRecipe(recipe: recipe, reviewed: false))
             }
             isSaving = false
@@ -547,7 +555,8 @@ final class ScanSession: PageCaptureSink {
     }
 
     /// The course last chosen for a book: its latest recipe's that has one (ux-notes row 73). A
-    /// book is scanned chapter by chapter, so a recipe saved straight takes it too.
+    /// book is scanned chapter by chapter, so a recipe saved straight takes it too. A book with a
+    /// punchlist takes its chapter's course instead (`PunchlistLinking`).
     static func lastCourse(of book: Book?) -> String? {
         (book?.recipes ?? []).filter { $0.course != nil }.max { $0.createdAt < $1.createdAt }?.course
     }
@@ -559,6 +568,7 @@ final class ScanSession: PageCaptureSink {
         for index in review.recipes.indices where !review.recipes[index].isSkipped {
             let recipe = await ScanSaving.saveNew(review, recipe: index, book: book, reviewed: true, images: images, in: modelContext)
             await ScanSaving.attachCoverCandidates(candidates(forRecipe: index), to: recipe, in: modelContext)
+            PunchlistLinking.link(recipe, to: entryMatch?.entries[index], reviewed: true)
             saved.append(SavedRecipe(recipe: recipe, reviewed: true))
         }
         isSaving = false

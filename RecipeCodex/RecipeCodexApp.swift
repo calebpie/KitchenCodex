@@ -56,6 +56,8 @@ struct RecipeCodexApp: App {
                     // Before indexing, so Spotlight sees the re-read items.
                     IngredientReread.runOnce(in: container.mainContext)
                     spotlight.start()
+                    // A whole-book session's captures left waiting at the last quit are read now.
+                    BookScanStore.shared.resume(in: container.mainContext)
                 }
         }
         .modelContainer(container)

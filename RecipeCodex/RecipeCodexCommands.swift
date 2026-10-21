@@ -36,6 +36,8 @@ struct RecipeCodexCommands: Commands {
                 .disabled(router == nil)
             Button("Scan Page…") { router?.request(.scanPage) }
                 .disabled(router == nil)
+            Button("Scan Cookbook…") { router?.request(.scanCookbook) }
+                .disabled(router == nil)
             Button("Import from Paprika or Mela…") { router?.request(.importLibrary) }
                 .disabled(router == nil)
         }

@@ -3,9 +3,11 @@ import SwiftData
 import SwiftUI
 
 /// A cookbook (03 §3.7), pushed over the shelf: cover, title, author, year and ISBN; the
-/// completeness ring; Sections · Index · Missing over the punchlist, which stays empty until the
-/// contents pages are read (Phase 2 slice 5). More holds Edit Book Info and Delete Cookbook;
-/// Continue Scanning, Export List and Scan Sources Page arrive with their slices.
+/// completeness ring and "47 of 112 captured, 3 need review" once there is a punchlist, the review
+/// queue a tap away; **Continue Scanning** (or Build the Recipe List while there is no list);
+/// Sections · Index · Missing over the punchlist, a listed entry offering Scan Now at its page.
+/// More holds Edit Book Info, Edit Recipe List and Delete Cookbook; Export List and Scan Sources
+/// Page arrive with their slices.
 struct BookDetailView: View {
     let book: Book
 
@@ -24,6 +26,17 @@ struct BookDetailView: View {
     @State private var isConfirmingDelete = false
     @State private var isDeleting = false
     @State private var showsNavigationTitle = false
+    /// The whole-book session, opened at an entry by Scan Now.
+    @State private var scanning: ScanStart?
+    @State private var isBuildingList = false
+    @State private var isEditingList = false
+    @State private var isReviewing = false
+    @State private var offeredEntry: BookEntry?
+
+    struct ScanStart: Identifiable {
+        let id = UUID()
+        var entry: BookEntry?
+    }
 
     var body: some View {
         let progress = book.punchlistProgress
@@ -39,6 +52,42 @@ struct BookDetailView: View {
             if progress.total > 0 {
                 Section {
                     CompletenessRow(captured: progress.captured, total: progress.total, needReview: progress.needReview)
+                    if progress.needReview > 0 {
+                        Button(progress.needReview == 1 ? "Review 1 Recipe" : "Review \(progress.needReview) Recipes", systemImage: "rectangle.and.text.magnifyingglass") {
+                            isReviewing = true
+                        }
+                    }
+                }
+            }
+
+            // The primary action (03 §3.7): Continue Scanning once there is a list.
+            Section {
+                if progress.total > 0 {
+                    Button {
+                        scanning = ScanStart()
+                    } label: {
+                        Label(progress.captured == 0 ? "Start Scanning" : "Continue Scanning", systemImage: "camera.viewfinder")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+                } else {
+                    Button {
+                        isBuildingList = true
+                    } label: {
+                        Label("Build the Recipe List", systemImage: "list.number")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+                }
+            } footer: {
+                if progress.total == 0 {
+                    Text("Photograph or choose the contents pages; their recipes and pages become the list you scan from.")
                 }
             }
 
@@ -65,6 +114,10 @@ struct BookDetailView: View {
             ToolbarItem(placement: .primaryAction) {
                 Menu {
                     Button("Edit Book Info", systemImage: "pencil") { isEditing = true }
+                    if !book.orderedSections.isEmpty {
+                        Button("Edit Recipe List", systemImage: "list.bullet.rectangle") { isEditingList = true }
+                    }
+                    Button(book.orderedSections.isEmpty ? "Build the Recipe List" : "Read More Contents Pages", systemImage: "list.number") { isBuildingList = true }
                     Divider()
                     Button("Delete Cookbook", systemImage: "trash", role: .destructive) {
                         isConfirmingDelete = true
@@ -86,6 +139,39 @@ struct BookDetailView: View {
         .sheet(isPresented: $isEditing) {
             BookInfoEditor(book: book)
         }
+        .sheet(isPresented: $isBuildingList) {
+            NavigationStack {
+                BuildRecipeListView(book: book) {
+                    isBuildingList = false
+                    isEditingList = true
+                }
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button(role: .cancel) { isBuildingList = false }
+                            .keyboardShortcut(.cancelAction)
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $isEditingList) {
+            NavigationStack {
+                PunchlistEditorView(book: book) { isEditingList = false }
+            }
+        }
+        .sheet(isPresented: $isReviewing) {
+            BookReviewQueueView(book: book)
+        }
+        .fullScreenCover(item: $scanning) { start in
+            BookScanView(book: book, startAt: start.entry)
+        }
+        .confirmationDialog(offeredEntry.map { "“\($0.displayTitle)”" } ?? "", isPresented: Binding { offeredEntry != nil } set: { if !$0 { offeredEntry = nil } }, titleVisibility: .visible) {
+            if let entry = offeredEntry {
+                Button(entry.page.map { "Scan Now, p. \($0)" } ?? "Scan Now") { scanning = ScanStart(entry: entry) }
+            }
+        } message: {
+            Text("Not captured yet.")
+        }
+        .onAppear { book.reconcilePunchlist() }
         .onDisappear {
             // Delete after the pop so the view never renders a deleted model. The book's recipes
             // stay, their link to it cleared (`Book.recipes` nullifies).
@@ -142,10 +228,10 @@ struct BookDetailView: View {
         } else {
             switch punchlist {
             case .sections:
-                ForEach((book.sections ?? []).sorted { $0.sortOrder < $1.sortOrder }) { section in
-                    let entries = (section.entries ?? []).sorted { $0.sortOrder < $1.sortOrder }
+                ForEach(book.orderedSections) { section in
+                    let entries = section.orderedEntries
                     Section {
-                        ForEach(entries) { EntryRow(entry: $0) }
+                        ForEach(entries) { EntryRow(entry: $0) { offeredEntry = $0 } }
                     } header: {
                         HStack {
                             Text(section.title.isEmpty ? "Untitled Section" : section.title)
@@ -156,17 +242,20 @@ struct BookDetailView: View {
                 }
             case .index:
                 Section {
-                    ForEach(book.entries.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }) { EntryRow(entry: $0) }
+                    ForEach(book.entries.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }) { EntryRow(entry: $0) { offeredEntry = $0 } }
                 }
             case .missing:
-                let missing = book.entries.filter { $0.status == .listed }.sorted { ($0.page ?? .max) < ($1.page ?? .max) }
+                // By page, entries on one page in the list's order.
+                let missing = book.orderedEntries.filter { $0.status == .listed }.sorted { ($0.page ?? .max) < ($1.page ?? .max) }
                 Section {
                     if missing.isEmpty {
                         Text("Every listed recipe is captured")
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity)
                     } else {
-                        ForEach(missing) { EntryRow(entry: $0) }
+                        ForEach(missing) { entry in
+                            EntryRow(entry: entry, showsScanNow: true) { scanning = ScanStart(entry: $0) }
+                        }
                     }
                 }
             }
@@ -207,30 +296,27 @@ private struct CompletenessRow: View {
     }
 }
 
-/// One punchlist entry: its title, page and whether it is captured. A captured entry opens its recipe.
+/// One punchlist entry: its title, page and status. A captured entry opens its recipe; a listed one
+/// offers Scan Now at its page (03 §3.7), at once in the Missing list.
 private struct EntryRow: View {
     let entry: BookEntry
+    var showsScanNow = false
+    var onScan: (BookEntry) -> Void
 
     var body: some View {
         if let recipe = entry.recipe {
-            NavigationLink(value: LibraryRoute.recipe(recipe.persistentModelID)) { label }
-        } else {
-            label
-        }
-    }
-
-    private var label: some View {
-        HStack {
-            Image(systemName: entry.status == .listed ? "circle" : "checkmark.circle.fill")
-                .foregroundStyle(entry.status == .listed ? AnyShapeStyle(.secondary) : AnyShapeStyle(.tint))
-                .accessibilityLabel(entry.status == .listed ? "Not captured" : "Captured")
-            Text(entry.title.isEmpty ? "Untitled Recipe" : entry.title)
-            Spacer()
-            if let page = entry.page {
-                Text("p. \(page)")
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
+            NavigationLink(value: LibraryRoute.recipe(recipe.persistentModelID)) { PunchlistEntryLine(entry: entry) }
+        } else if showsScanNow {
+            HStack {
+                PunchlistEntryLine(entry: entry)
+                Button("Scan Now") { onScan(entry) }
+                    .buttonStyle(.bordered)
+                    .accessibilityLabel("Scan \(entry.displayTitle) now")
             }
+        } else {
+            Button { onScan(entry) } label: { PunchlistEntryLine(entry: entry) }
+                .buttonStyle(.plain)
+                .accessibilityHint("Offers to scan it now.")
         }
     }
 }
