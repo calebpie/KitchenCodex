@@ -129,9 +129,12 @@ final class BookScanSession: PageCaptureSink {
         state.captures.filter { $0.sitting == state.sitting }.max { $0.id < $1.id }
     }
 
-    /// Whether the last capture's recipes are in the review queue.
+    /// Whether the last capture's recipes are in the review queue. A page joined to the one before
+    /// has its recipes on that capture, so its answer is that capture's.
     func needsReview(_ capture: BookScanState.StoredCapture) -> Bool {
-        capture.flagged ?? capture.queued
+        if let flagged = capture.flagged { return flagged }
+        let owner = capture.joinedTo.flatMap { id in state.captures.first { $0.id == id } } ?? capture
+        return owner.flagged ?? owner.queued
     }
 
     /// The Needs Review toggle (03 §3.8): the capture's recipes join or leave the review queue.
@@ -204,10 +207,9 @@ final class BookScanSession: PageCaptureSink {
         guard let index = state.captures.firstIndex(where: { $0.id == id }) else { return }
         let capture = state.captures[index]
         undo(capture)
-        for joined in state.captures.indices where state.captures[joined].joinedTo == id {
-            state.captures[joined].joinedTo = nil
-            state.captures[joined].status = .pending
-        }
+        // Pages joined to it are read again on their own; the page it joined is read again
+        // without it, with the other pages joined to that one.
+        resetToPending(index)
         if let owner = capture.joinedTo, let ownerIndex = state.captures.firstIndex(where: { $0.id == owner }) {
             undo(state.captures[ownerIndex])
             resetToPending(ownerIndex)
@@ -236,14 +238,20 @@ final class BookScanSession: PageCaptureSink {
         kick()
     }
 
+    /// A capture to be read again, and with it every page joined to it: a page that continued it
+    /// was saved into its recipe, which is gone, so that page is read again too and joins again
+    /// once the first is saved.
     private func resetToPending(_ index: Int) {
-        state.captures[index].status = .pending
-        state.captures[index].recipes = []
-        state.captures[index].photo = nil
-        state.captures[index].detail = nil
-        state.captures[index].queued = false
-        state.captures[index].joinedTo = nil
-        state.captures[index].photographPages = []
+        let id = state.captures[index].id
+        for reset in state.captures.indices where reset == index || state.captures[reset].joinedTo == id {
+            state.captures[reset].status = .pending
+            state.captures[reset].recipes = []
+            state.captures[reset].photo = nil
+            state.captures[reset].detail = nil
+            state.captures[reset].queued = false
+            state.captures[reset].joinedTo = nil
+            state.captures[reset].photographPages = []
+        }
     }
 
     /// Takes back what a processed capture saved.
@@ -369,14 +377,19 @@ final class BookScanSession: PageCaptureSink {
         var owner = id
         var urls = [url(of: state.captures[index])]
         var parts = [single]
-        // A page that opens mid-recipe continues the page captured before it.
-        if single.isContinuation, let previous = previousRecipeCapture(before: id), let earlier = readings[previous.id],
-           PageStitcher.canContinue(earlier, with: single) {
-            undo(previous)
-            owner = previous.id
-            urls.insert(url(of: previous), at: 0)
-            parts.insert(earlier, at: 0)
-            state.captures[index].joinedTo = previous.id
+        // A page that opens mid-recipe continues the page captured before it: that page and every
+        // page already joined to it, in order, so a recipe over three pages keeps its middle. The
+        // stitcher decides, as it will when the pages are refined together.
+        if single.isContinuation, let previous = previousRecipeCapture(before: id) {
+            let chain = [previous] + state.captures.filter { $0.joinedTo == previous.id }.sorted { $0.id < $1.id }
+            let earlier = chain.compactMap { readings[$0.id] }
+            if earlier.count == chain.count, PageStitcher.stitch(earlier + [single]).count == 1 {
+                undo(previous)
+                owner = previous.id
+                urls = chain.map(url(of:)) + urls
+                parts = earlier + parts
+                state.captures[index].joinedTo = previous.id
+            }
         }
         if parts.contains(where: { $0.recipes.contains(where: PagePipeline.wantsModel) }) {
             refining = single.recipes.first?.title ?? ""
@@ -385,6 +398,9 @@ final class BookScanSession: PageCaptureSink {
         refining = nil
         guard let ownerIndex = state.captures.firstIndex(where: { $0.id == owner }) else { return }
         let ownerCapture = state.captures[ownerIndex]
+        // Needs Review as the cook set it on this capture (the last capture's pane shows this one,
+        // joined or not), else on the page it joined.
+        let flagged = state.captures.first { $0.id == id }?.flagged ?? ownerCapture.flagged
 
         let model = ScanReviewModel(reading: reading, urls: urls)
         // A first recipe that continues a page nobody captured: nothing to join it to.
@@ -413,7 +429,9 @@ final class BookScanSession: PageCaptureSink {
             let reasons = read.reviewReasons(bookHasRecipes: hasRecipes, reviewedLayouts: layouts)
             model.recipes[recipeIndex].reasons = reasons
             model.recipes[recipeIndex].course = match.courses[recipeIndex]
-            let wantsLook = ownerCapture.flagged ?? (!reasons.isEmpty || read.title.isEmpty)
+            // A recipe saved again over a page join that was in the queue stays there: the book's
+            // first recipe and its layout were counted when it was first saved.
+            let wantsLook = flagged ?? (!reasons.isEmpty || read.title.isEmpty || ownerCapture.queued)
             let recipe = await ScanSaving.saveNew(model, recipe: recipeIndex, book: book, reviewed: false, images: images, in: context)
             recipe.currentVersion?.needsReview = wantsLook
             if PunchlistLinking.link(recipe, to: entry, reviewed: false), let entry {
