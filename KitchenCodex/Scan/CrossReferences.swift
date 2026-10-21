@@ -34,7 +34,12 @@ enum CrossReferenceLinking {
     /// that page is reference reading, and the entry already listed there.
     struct Reading {
         var page: Int?
+        /// The recipe Link offers first: the page's one recipe, the one the pointer names, else the
+        /// first of several.
         var suggested: Recipe?
+        /// The suggestion is the page's only recipe or the one the pointer names, so a link can be
+        /// made without asking.
+        var isPlain = false
         var isReference: Bool
         var listed: BookEntry?
     }
@@ -68,16 +73,16 @@ enum CrossReferenceLinking {
                 (book.recipes ?? []).filter { $0 != recipe }.max { PunchlistMatcher.similarity($0.title, target) < PunchlistMatcher.similarity($1.title, target) }
                     .flatMap { PunchlistMatcher.similarity($0.title, target) >= 0.6 ? $0 : nil }
             }
-            return Reading(page: ownPages(of: recipe).max(), suggested: named, isReference: false, listed: nil)
+            return Reading(page: ownPages(of: recipe).max(), suggested: named, isPlain: named != nil, isReference: false, listed: nil)
         }
         let onPage = book.recipes(onPage: page).filter { $0 != recipe }
-        let suggested = onPage.count == 1 ? onPage[0] : reference.target.flatMap { target in
+        let named = onPage.count == 1 ? onPage[0] : reference.target.flatMap { target in
             onPage.max { PunchlistMatcher.similarity($0.title, target) < PunchlistMatcher.similarity($1.title, target) }
                 .flatMap { PunchlistMatcher.similarity($0.title, target) >= 0.5 ? $0 : nil }
-        } ?? onPage.first
+        }
         let isReference = reference.kind != .recipe || !isRecipePage(page, in: book, state: state)
         let listed = book.orderedEntries.first { $0.page == page && $0.recipe == nil && $0.reference == nil }
-        return Reading(page: page, suggested: suggested, isReference: isReference, listed: listed)
+        return Reading(page: page, suggested: named ?? onPage.first, isPlain: named != nil, isReference: isReference, listed: listed)
     }
 
     /// The page holds a recipe: one is captured from it, a page scan of it read as one, or the
@@ -185,7 +190,7 @@ enum CrossReferenceLinking {
     /// The link the page makes plain: its one recipe (or the one the pointer names).
     static func linkIfOne(_ reference: PageCrossReference, from recipe: Recipe, in book: Book, state: BookScanState?, context: ModelContext) {
         let reading = read(reference, from: recipe, in: book, state: state)
-        guard !reading.isReference || reference.kind == .recipe, let component = reading.suggested else { return }
+        guard reading.isPlain, let component = reading.suggested else { return }
         link(recipe, to: component, phrase: reference.phrase, in: context)
     }
 
@@ -196,7 +201,7 @@ enum CrossReferenceLinking {
     static func applySessionRule(_ references: [PageCrossReference], for recipe: Recipe, in book: Book, state: inout BookScanState, context: ModelContext) {
         for reference in pointers(in: references) {
             let reading = read(reference, from: recipe, in: book, state: state)
-            if let component = reading.suggested {
+            if reading.isPlain, let component = reading.suggested {
                 link(recipe, to: component, phrase: reference.phrase, in: context)
             } else if !reference.pages.isEmpty, let page = reading.page, book.recipes(onPage: page).filter({ $0 != recipe }).isEmpty {
                 addToList(reference, from: recipe, in: book, state: &state, context: context)
