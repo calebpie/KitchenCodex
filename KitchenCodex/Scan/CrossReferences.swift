@@ -164,6 +164,17 @@ enum CrossReferenceLinking {
         }
     }
 
+    /// Recipes deleted from the library point nowhere: they leave the pointer entries, and an entry
+    /// a pointer made goes with its last pointing recipe while nothing was captured for it. Run when
+    /// the book's detail or session opens, as `reconcilePunchlist` is.
+    static func prune(in book: Book, state: inout BookScanState, context: ModelContext) {
+        let alive = Set((book.recipes ?? []).filter { !$0.isDeleted }.map(\.id))
+        let gone = Set(state.pointerEntries.flatMap(\.recipes)).subtracting(alive)
+        guard !gone.isEmpty else { return }
+        forget(recipes: gone, in: book, state: &state, context: context)
+        try? context.save()
+    }
+
     /// What review's cards say, applied once the recipe is saved: Link, Add, Ignore; a pointer left
     /// undecided links only where its page holds exactly one recipe.
     static func apply(_ pointers: [ReviewPointer], to recipe: Recipe, in book: Book?, context: ModelContext) {

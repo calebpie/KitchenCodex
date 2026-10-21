@@ -171,7 +171,10 @@ struct BookDetailView: View {
         } message: {
             Text("Not captured yet.")
         }
-        .onAppear { book.reconcilePunchlist() }
+        .onAppear {
+            book.reconcilePunchlist()
+            BookScanStore.shared.updateState(for: book) { CrossReferenceLinking.prune(in: book, state: &$0, context: modelContext) }
+        }
         .onDisappear {
             // Delete after the pop so the view never renders a deleted model. The book's recipes
             // stay, their link to it cleared (`Book.recipes` nullifies).

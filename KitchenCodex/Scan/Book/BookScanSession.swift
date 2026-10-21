@@ -78,6 +78,7 @@ final class BookScanSession: PageCaptureSink {
     /// entry), the queue started.
     func open(at entry: BookEntry? = nil) {
         book.reconcilePunchlist()
+        CrossReferenceLinking.prune(in: book, state: &state, context: context)
         if !isOpen {
             state.sitting += 1
             let sitting = state.sitting
