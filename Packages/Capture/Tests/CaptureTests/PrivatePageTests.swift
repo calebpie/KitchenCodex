@@ -100,6 +100,11 @@ struct PrivatePageTests {
                     #expect(reading?.files.first != name, "\(entry.testDescription): not stitched to the page before \(hint)")
                 case "contents", "index", "sources", "photo":
                     #expect(single.kind.rawValue == entry.kind, "\(entry.testDescription): read as \(single.kind.rawValue) \(hint)")
+                    if let expected = entry.contents {
+                        let contents = ContentsReader.read(single)
+                        let counts = PageFixtures.ContentsCounts(sections: contents.sections.count, entries: contents.entries.count, paged: contents.pagedEntryCount)
+                        #expect(counts == expected, "\(entry.testDescription): contents read \(counts.sections)/\(counts.entries)/\(counts.paged) (sections/entries/paged), manifest \(expected.sections)/\(expected.entries)/\(expected.paged) \(hint)")
+                    }
                 case "bad-capture":
                     #expect(gate != PageQuality.sharp.rawValue, "\(entry.testDescription): a bad capture read Sharp")
                 default:
@@ -107,6 +112,12 @@ struct PrivatePageTests {
                 }
             }
 
+            // The punchlist the contents pages build, contents before index (02 Flow C step 3).
+            let contentsPages = readings.filter { $0.kind == .contents }.map(ContentsReader.read)
+            let indexPages = readings.filter { $0.kind == .index }.map(ContentsReader.read)
+            if !contentsPages.isEmpty || !indexPages.isEmpty {
+                bookReport.contents = ContentsReader.combine(contentsPages, indexPages: indexPages)
+            }
             bookReport.readings = stitched
             bookReport.singles = readings
             bookReport.reviews = reviews
@@ -224,7 +235,7 @@ struct PageManifestTests {
         let entries = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [[String: Any]])
         #expect(!entries.isEmpty)
         #expect(PageFixtures.manifest.count == entries.count, "every entry decodes")
-        let allowed: Set<String> = ["slug", "isbn", "file", "kind", "gate", "page", "recipes", "settled", "note"]
+        let allowed: Set<String> = ["slug", "isbn", "file", "kind", "gate", "page", "recipes", "contents", "settled", "note"]
         let kinds: Set<String> = ["recipe", "spread-start", "spread-middle", "spread-end", "contents", "index", "sources", "photo", "bad-capture", "other"]
         let gates = Set(PageQuality.allCases.map(\.rawValue))
         for entry in entries {
@@ -236,6 +247,7 @@ struct PageManifestTests {
             #expect(entry.file.range(of: #"^[A-Za-z0-9_-]+\.(HEIC|heic|JPG|jpg|jpeg|png)$"#, options: .regularExpression) != nil)
             #expect(kinds.contains(entry.kind))
             #expect(gates.contains(entry.gate))
+            #expect(entry.contents == nil || entry.kind == "contents" || entry.kind == "index", "contents counts belong to contents and index pages")
             // A note describes the capture ("ISBN barcode", "haze over the upper left"), never the page's words.
             #expect((entry.note?.count ?? 0) <= 160)
         }

@@ -58,6 +58,14 @@ enum PageFixtures {
         var steps: Int
     }
 
+    /// What a contents page reads as (`ContentsReader`): its chapters, its entries, and the entries
+    /// with a page number. Counts only, never a title.
+    struct ContentsCounts: Codable, Sendable, Equatable {
+        var sections: Int
+        var entries: Int
+        var paged: Int
+    }
+
     /// One photo: what it is and what it should read as. No page text.
     struct Entry: Codable, Sendable, CustomTestStringConvertible {
         var slug: String
@@ -73,6 +81,8 @@ enum PageFixtures {
         /// For a recipe page or a spread's first page: each recipe's ingredient and step counts as
         /// read (a spread's are the stitched recipe's).
         var recipes: [RecipeCounts]?
+        /// For a contents page: what its punchlist reading counts.
+        var contents: ContentsCounts?
         /// False where the counts are the reading's and could not be checked against the page.
         var settled: Bool
         var note: String?

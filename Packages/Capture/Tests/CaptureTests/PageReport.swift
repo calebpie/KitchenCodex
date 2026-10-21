@@ -15,6 +15,8 @@ struct PageReport {
         /// Review reasons per stitched reading (by its first file), per recipe.
         var reviews: [String: [[ReviewReason]]] = [:]
         var modelNotes: [String] = []
+        /// The punchlist read off the book's contents pages.
+        var contents: BookContents?
     }
 
     var usesModel: Bool
@@ -102,6 +104,24 @@ struct PageReport {
             }
             out.append("")
         }
+
+        // Contents.
+        out.append("## Contents pages")
+        out.append("")
+        out.append("Each book's contents photos read and combined in capture order (`ContentsReader`), as Build the Recipe List reads them.")
+        for book in books {
+            guard let contents = book.contents else { continue }
+            out.append("")
+            out.append("### \(book.slug): \(contents.sections.count) chapters, \(contents.entries.count) entries, \(contents.pagedEntryCount) with a page\(contents.isOverview ? " (chapters only)" : "")")
+            for section in contents.sections {
+                out.append("")
+                out.append("- **\(section.title.isEmpty ? "(untitled)" : section.title)**\(section.page.map { ", p. \($0)" } ?? "") · course \(ChapterCourse.course(forChapter: section.title) ?? "none")")
+                for entry in section.entries {
+                    out.append("  - \(entry.title)\(entry.page.map { ", p. \($0)" } ?? ", no page")")
+                }
+            }
+        }
+        out.append("")
 
         // Pages.
         out.append("## Pages")

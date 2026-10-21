@@ -38,6 +38,38 @@ struct PageStructuringTests {
         #expect(draft.title == "From text")
     }
 
+    /// A structurer that only reads recipes says so when asked for a contents page, so Capture keeps
+    /// its own reading.
+    @Test func contentsAreUnsupportedByDefault() async {
+        await #expect(throws: ModelUnavailabilityError(reason: .notConfigured)) {
+            try await TextOnly().structureContents(pageText: Self.contentsText)
+        }
+    }
+
+    /// A made-up contents page as the recognizer reads it, columns in reading order.
+    static let contentsText = """
+        CONTENTS
+        INTRODUCTION 9
+        SOUPS 14
+        Weeknight Leek Soup 16
+        Chilled Cucumber Soup with
+        Dill & Yogurt 18
+        SALADS 22
+        Shaved Fennel Salad 24
+        Warm Lentil Salad 27
+        """
+
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["RECIPE_CODEX_PAGE_MODEL"] == "1" && OnDevicePageStructurer().isAvailable,
+                   "Set RECIPE_CODEX_PAGE_MODEL=1 on a host with Apple Intelligence to run the model"),
+          .timeLimit(.minutes(2)))
+    func readsAContentsPageWithTheModel() async throws {
+        let draft = try await OnDevicePageStructurer().structureContents(pageText: Self.contentsText)
+        let entries = draft.sections.flatMap(\.entries)
+        #expect(entries.count >= 3)
+        #expect(entries.contains { $0.page == 24 })
+        #expect(draft.sections.contains { $0.title.localizedCaseInsensitiveContains("salad") })
+    }
+
     @Test func availabilityIsAnAnswerNotACrash() {
         let structurer = OnDevicePageStructurer()
         switch ModelAvailability.onDevice() {
