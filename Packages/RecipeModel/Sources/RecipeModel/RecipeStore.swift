@@ -4,9 +4,9 @@ import SwiftData
 /// Builds the app's `ModelContainer`. The app, Share Extension and Widget extension all call this
 /// so they open the same store in the shared App Group container.
 public enum RecipeStore {
-    public static let appGroupIdentifier = "group.com.calebpietrafesa.RecipeCodex"
-    public static let cloudKitContainerIdentifier = "iCloud.com.calebpietrafesa.RecipeCodex"
-    public static let storeFileName = "RecipeCodex.store"
+    public static let appGroupIdentifier = "group.com.calebpietrafesa.KitchenCodex"
+    public static let cloudKitContainerIdentifier = "iCloud.com.calebpietrafesa.KitchenCodex"
+    public static let storeFileName = "KitchenCodex.store"
 
     public static var schema: Schema {
         Schema(versionedSchema: RecipeSchemaV1.self)

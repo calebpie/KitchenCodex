@@ -243,7 +243,7 @@ public struct BookLookup: Sendable {
     /// Why a lookup failed, in the app's log (category "books"); the sheet shows only the kind.
     static func log(_ message: String) {
         #if canImport(os)
-        Logger(subsystem: "com.calebpietrafesa.RecipeCodex", category: "books").error("\(message, privacy: .public)")
+        Logger(subsystem: "com.calebpietrafesa.KitchenCodex", category: "books").error("\(message, privacy: .public)")
         #endif
     }
 
@@ -272,7 +272,7 @@ public struct BookLookup: Sendable {
         { (url: URL) async throws(BookLookupError) -> Data? in
             var request = URLRequest(url: url, timeoutInterval: 15)
             // Open Library asks apps to name themselves.
-            request.setValue("RecipeCodex/1.0 (iOS; book lookup)", forHTTPHeaderField: "User-Agent")
+            request.setValue("KitchenCodex/1.0 (iOS; book lookup)", forHTTPHeaderField: "User-Agent")
             let data: Data
             let response: URLResponse
             do {

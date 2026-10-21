@@ -145,7 +145,7 @@ Roughly seven months part-time to the full proposal, with a usable library at si
 | Kitchen theme | A toggle (cook mode More and Pantry → Profile), never automatic. |
 | Wine pairings | Live on the menu, per course, with a non-alcoholic alternative; bottles from Cellar & Bar. |
 | Heavy-reasoning model | Apple's Private Cloud Compute model by default; Claude available as a setting (Pantry → Profile → Intelligence). Extraction and classification stay on device. |
-| Bundle ID | `com.calebpietrafesa.RecipeCodex` kept; extensions `.Share` and `.Widgets`; iCloud container `iCloud.com.calebpietrafesa.RecipeCodex`; App Group `group.com.calebpietrafesa.RecipeCodex`. |
+| Bundle ID | `com.calebpietrafesa.KitchenCodex` kept; extensions `.Share` and `.Widgets`; iCloud container `iCloud.com.calebpietrafesa.KitchenCodex`; App Group `group.com.calebpietrafesa.KitchenCodex`. |
 | Portal registration | Xcode automatic signing with Caleb's Apple account; identifiers registered from a signed device build (see phase0-notes). |
 | GitHub | Public repository. Scanned cookbook pages and any other copyrighted fixtures stay out of it. |
 | Capture device | iPhone 17 Pro for capture quality; iPad for review and the scanning session UI. Both supported. |
