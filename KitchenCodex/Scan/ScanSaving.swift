@@ -67,6 +67,17 @@ enum ScanImage {
 }
 
 extension ScanReviewModel {
+    /// A copy with recipe `index` replaced, for saving one part of a split: the pages and regions
+    /// are the same, the review on screen untouched.
+    func replacing(_ index: Int, with recipe: ReviewRecipe) -> ScanReviewModel {
+        var recipes = recipes
+        recipes[index] = recipe
+        let copy = ScanReviewModel(pages: pages, regions: regions, recipes: recipes)
+        copy.current = index
+        copy.storedCover = storedCover
+        return copy
+    }
+
     /// The regions of `page` as `RecipeImage.regions` keeps them for recipe `index`: its own and
     /// the page's furniture, not the other recipe's, each with the item it became.
     func scanRegions(page: Int, recipe index: Int) -> ScanRegions {
@@ -164,15 +175,36 @@ enum ScanSaving {
     /// confidence (`reasons` beyond the book's first recipe and a new layout). Its cross-reference
     /// cards' answers are applied unless `appliesPointers` is false (the book session applies its
     /// own rule once a capture's recipes are all saved).
+    ///
+    /// A recipe the cook split in review (04 §5.1 "Sub-recipes on one page") saves as its parent,
+    /// which keeps the page scans, and its components, linked from it; the parent is returned.
     @discardableResult
     static func saveNew(_ model: ScanReviewModel, recipe index: Int, book: Book?, reviewed: Bool, images: PageImages, appliesPointers: Bool = true, in context: ModelContext) async -> Recipe {
+        guard let split = RecipeSplitting.split(model.recipes[index]) else {
+            return await saveOne(model, recipe: index, book: book, reviewed: reviewed, images: images, appliesPointers: appliesPointers, in: context)
+        }
+        let parent = await saveOne(model.replacing(index, with: split.parent), recipe: index, book: book, reviewed: reviewed, images: images, appliesPointers: appliesPointers, in: context)
+        var components: [Recipe] = []
+        for component in split.components {
+            let saved = await saveOne(model.replacing(index, with: component), recipe: index, book: book, reviewed: reviewed, images: images,
+                                      attachesPages: false, appliesPointers: appliesPointers, changeSummary: "Split from “\(parent.title)”", in: context)
+            components.append(saved)
+        }
+        RecipeSplitting.link(parent, to: components, in: context)
+        return parent
+    }
+
+    /// One recipe of the review saved: with the page scans and their regions unless
+    /// `attachesPages` is false (a component split off a parent that has them).
+    private static func saveOne(_ model: ScanReviewModel, recipe index: Int, book: Book?, reviewed: Bool, images: PageImages, attachesPages: Bool = true,
+                                appliesPointers: Bool, changeSummary: String? = nil, in context: ModelContext) async -> Recipe {
         let review = model.recipes[index]
         let pageNumbers = model.pages.compactMap(\.pageNumber)
         var imported = review.imported
         imported.author = book?.author.isEmpty == false ? book?.author : nil
         var draft = RecipeDraft(imported: imported)
         draft.course = review.course
-        draft.changeSummary = "Scanned from \(pagesText(book: book, pages: pageNumbers))" + (reviewed ? "" : " · Accepted automatically")
+        draft.changeSummary = changeSummary ?? ("Scanned from \(pagesText(book: book, pages: pageNumbers))" + (reviewed ? "" : " · Accepted automatically"))
         if let cover = review.cover, let photo = await coverPhoto(region: cover, in: model, images: images) {
             draft.photo = photo
         }
@@ -192,9 +224,11 @@ enum ScanSaving {
             version.reviewReasons = review.reasons.map(\.rawValue)
             version.needsReview = !reviewed && review.reasons.contains { !ScanGate.forcing.contains($0) }
         }
-        await attachPageScans(model, recipe: index, to: recipe, book: book, images: images, in: context)
+        if attachesPages {
+            await attachPageScans(model, recipe: index, to: recipe, book: book, images: images, in: context)
+        }
         await attachStepPhotos(model, recipe: index, to: recipe, images: images, in: context)
-        if reviewed, let book, !review.layoutSignature.isEmpty, !book.reviewedLayouts.contains(review.layoutSignature) {
+        if reviewed, attachesPages, let book, !review.layoutSignature.isEmpty, !book.reviewedLayouts.contains(review.layoutSignature) {
             book.reviewedLayouts.append(review.layoutSignature)
         }
         try? context.save()
@@ -207,7 +241,21 @@ enum ScanSaving {
     /// Saves a review of a recipe already in the library (detail → More → Review Scan): a new
     /// version when the content changed, the regions as the cook left them, step photos and the
     /// cover as assigned, and the review recorded.
+    ///
+    /// Split in review, the recipe keeps the parent's items and its components are saved beside it,
+    /// linked from it.
     static func saveReview(_ model: ScanReviewModel, of recipe: Recipe, images: PageImages, in context: ModelContext) async {
+        if let split = RecipeSplitting.split(model.recipes[model.current]) {
+            let index = model.current
+            await saveReview(model.replacing(index, with: split.parent), of: recipe, images: images, in: context)
+            var components: [Recipe] = []
+            for component in split.components {
+                components.append(await saveOne(model.replacing(index, with: component), recipe: index, book: recipe.book, reviewed: true, images: images,
+                                                attachesPages: false, appliesPointers: true, changeSummary: "Split from “\(recipe.title)”", in: context))
+            }
+            RecipeSplitting.link(recipe, to: components, in: context)
+            return
+        }
         let index = model.current
         let review = model.recipes[index]
         let original = RecipeDraft(recipe: recipe)

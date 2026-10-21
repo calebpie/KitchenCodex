@@ -48,6 +48,9 @@ struct WebImportView: View {
     @FocusState private var addressFocused: Bool
     /// When the current import started, for the timing in the log (02 Flow A: 2 to 6 seconds).
     @State private var importStarted: ContinuousClock.Instant?
+    /// Split into N recipes, once the cook confirmed it (04 §5.1 "Sub-recipes on one page").
+    @State private var split: SplitChoice?
+    @State private var isSplitting = false
 
     private static let logger = Logger(subsystem: "com.calebpietrafesa.KitchenCodex", category: "import")
 
@@ -176,6 +179,22 @@ struct WebImportView: View {
                         .foregroundStyle(.secondary)
                         .accessibilityLabel("Apple Intelligence is reading the ingredients. The page reading is shown until it finishes.")
                     }
+                }
+            }
+
+            // Its ingredient groups and step groups line up: offered, never done unasked.
+            if let plan = RecipeSplitting.plan(for: draft, imported: imported) {
+                Section {
+                    SplitOfferRow(plan: plan, split: split) {
+                        isSplitting = true
+                    } onCancel: {
+                        split = nil
+                    }
+                    .sheet(isPresented: $isSplitting) {
+                        SplitSheet(title: draft.title.trimmed.isEmpty ? "This recipe" : draft.title, plan: plan, initial: split) { split = $0 }
+                    }
+                } footer: {
+                    Text("This page's ingredient groups and steps line up as separate recipes.")
                 }
             }
 
@@ -378,6 +397,7 @@ struct WebImportView: View {
         logTiming("preview shown", for: result)
         imported = result
         draft = RecipeDraft(imported: result)
+        split = nil
         coverPreview = nil
         phase = .preview
         guard result.imageURL != nil else { return }
@@ -421,7 +441,8 @@ struct WebImportView: View {
         // Saving keeps what the preview shows; a model still reading is no longer needed.
         modelWork?.cancel()
         modelWork = nil
-        let recipe = draft.saveImport(imported, in: modelContext)
+        let recipe = split.flatMap { RecipeSplitting.saveImport(draft, imported: imported, choice: $0, in: modelContext) }
+            ?? draft.saveImport(imported, in: modelContext)
         onSaved(recipe)
         dismiss()
     }

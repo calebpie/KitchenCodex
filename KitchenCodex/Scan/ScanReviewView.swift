@@ -36,6 +36,7 @@ struct ScanReviewView: View {
     @FocusState private var editingFocus: ReviewItem.ID?
     @State private var popoverRegion: Int?
     @State private var isConfirmingRescan = false
+    @State private var isSplitting = false
 
     private var isWide: Bool { width >= 700 }
     private static let dividerHeight: CGFloat = 22
@@ -362,6 +363,24 @@ struct ScanReviewView: View {
                 }
             }
 
+            // Split into N recipes (04 §5.1 "Sub-recipes on one page"): offered when the groups
+            // line up, done on Save once confirmed.
+            if !model.recipe.isSkipped, let plan = RecipeSplitting.plan(for: model.recipe) {
+                Section {
+                    SplitOfferRow(plan: plan, split: model.recipe.split) {
+                        isSplitting = true
+                    } onCancel: {
+                        withAnimation { model.setSplit(nil) }
+                    }
+                    .sheet(isPresented: $isSplitting) {
+                        SplitSheet(title: model.recipe.displayTitle, plan: plan, initial: model.recipe.split) { choice in
+                            withAnimation { model.setSplit(choice) }
+                        }
+                    }
+                } footer: {
+                    Text("Its ingredient groups and steps line up as components.")
+                }
+            }
             Section("Title") {
                 if let title = model.recipe.title {
                     itemRow(title, font: .headline)

@@ -27,10 +27,11 @@ struct ComponentSplitTests {
         #expect(plan.parts.map(\.title) == ["Lamb", "Quick-Pickled Shallots", "Pickled Radishes"])
         #expect(plan.parts.map(\.steps) == [[0], [2, 3, 4], [1]])
         #expect(plan.parts.map(\.ingredients) == [[0, 1, 2, 3], [4, 5, 6], [7, 8, 9]])
-        #expect(plan.parts.map(\.isComponent) == [true, true, true])
+        // The lamb is the dish the title names; the pickles it comes with are components.
+        #expect(plan.parts.map(\.isComponent) == [false, true, true])
         // "To serve" has no label; its lines stay with the parent.
         #expect(plan.parent(choosing: [1, 2]) == (ingredients: [0, 1, 2, 3, 10, 11], steps: [0]))
-        #expect(plan.defaultRecipeCount == 4)
+        #expect(plan.defaultRecipeCount == 3)
     }
 
     @Test func aServingLabelClosesTheRunBeforeIt() throws {

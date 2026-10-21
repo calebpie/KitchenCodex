@@ -108,6 +108,7 @@ public enum ComponentSplit {
         var parts: [Part] = []
         var seen = Set<String>()
         var hasMain = false
+        let dish = words(String(title.split(separator: /(?i)\s+(?:with|in|on|over)\s+/, maxSplits: 1).first ?? Substring(title)))
         for (r, run) in runs.enumerated() {
             guard let name = run.name, let start = starts[r] else { continue }
             let end = boundaries.filter { $0 > start }.min() ?? steps.count
@@ -115,9 +116,10 @@ public enum ComponentSplit {
             // Serving and assembly stay with the parent, and so does the dish itself and a group that
             // carries on a component before it ("Checking the Ragu" after "Making the Ragu").
             let isServing = !run.words.isDisjoint(with: servingWords)
-            // The first group the title names is the dish ("Fish" in "Fish with Salsa Verde"); a
-            // later one is what it comes with.
-            let isMain = !hasMain && PunchlistMatcher.similarity(componentTitle(name), title) >= 0.5
+            // The first group the title names before "with" is the dish ("Fish" in "Fish with Salsa
+            // Verde", "Relish" in "Beet and Lemon Relish"); one it names after is what the dish
+            // comes with.
+            let isMain = !hasMain && !substance.isEmpty && substance.isSubset(of: dish)
             hasMain = hasMain || isMain
             let continues = !substance.isEmpty && substance.isSubset(of: seen)
             seen.formUnion(substance)

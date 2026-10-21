@@ -561,7 +561,8 @@ struct RecipeDetailView: View {
             // Scaling lengthens the header; it stacks rather than widen the column.
             .layoutValue(key: SetsColumnWidth.self, value: false)
             if version.sortedIngredients.isEmpty {
-                Text("No ingredients yet.").foregroundStyle(.secondary)
+                // A parent whose components took every line (Split into N recipes).
+                Text(components.isEmpty ? "No ingredients yet." : "In the recipes it includes, below.").foregroundStyle(.secondary)
             }
             ForEach(Self.ingredientGroups(version.sortedIngredients), id: \.offset) { group in
                 VStack(alignment: .leading, spacing: 12) {
@@ -598,7 +599,7 @@ struct RecipeDetailView: View {
         VStack(alignment: .leading, spacing: 16) {
             SectionTitle("Steps")
             if version.sortedSteps.isEmpty {
-                Text("No steps yet.").foregroundStyle(.secondary)
+                Text(components.isEmpty ? "No steps yet." : "In the recipes it includes, below.").foregroundStyle(.secondary)
             }
             ForEach(Array(version.sortedSteps.enumerated()), id: \.element.id) { index, step in
                 stepRow(step, number: index + 1)
