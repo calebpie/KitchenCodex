@@ -4,25 +4,29 @@ import Observation
 import RecipeModel
 import UIKit
 
-/// The camera's state (03 §3.5): the live outline and quality pill, the capture mode, flash and
+/// The camera's state (03 §3.5): the live outline and quality pill, the capture mode, the torch and
 /// auto-capture, the captured pages, and the barcode seen at the start. Each capture is measured by
-/// the gate, cleaned (`PageCleanup`) and handed to the scan session's queue, which reads it while
-/// the cook carries on.
+/// the gate, cleaned (`PageCleanup`) and handed to its sink (Scan Page's session or the whole-book
+/// session), whose queue reads it while the cook carries on.
 @MainActor
 @Observable
 final class PageCameraModel {
     struct Thumbnail: Identifiable {
         let id: Int
         let image: UIImage
-        let mode: ScanSession.CaptureMode
+        var mode: CaptureMode
     }
 
-    let session: ScanSession
+    let session: any PageCaptureSink
     let controller = CameraController()
 
-    /// Recipe · Photo, sticky for the camera session: it stays until switched (ux-notes row 62).
-    var mode = ScanSession.CaptureMode.recipe
-    var flash = false
+    /// Recipe · Photo (ux-notes rows 62 and 82): Recipe is the resting mode, and a Photo capture is
+    /// one capture, the switch going back to Recipe after it.
+    var mode = CaptureMode.recipe
+    /// The torch, off by default (ux-notes row 85): lit continuously while on.
+    var flash = false {
+        didSet { if flash != oldValue { controller.setTorch(flash) } }
+    }
     /// Capture whenever a page is held steady in view. Remembered between sessions.
     var autoCapture: Bool {
         didSet { UserDefaults.standard.set(autoCapture, forKey: Self.autoCaptureKey) }
@@ -46,7 +50,6 @@ final class PageCameraModel {
     /// The book the barcode at the start named, or the ISBN of a new one.
     private(set) var scannedTitle: String?
 
-    private var nextIndex = 0
     private var addChain: Task<Void, Never>?
     private var isAssessing = false
     private var rotation: AVCaptureDevice.RotationCoordinator?
@@ -67,7 +70,7 @@ final class PageCameraModel {
     /// A page smaller than this share of the frame is not taken automatically.
     static let autoCaptureArea = 0.2
 
-    init(session: ScanSession) {
+    init(session: any PageCaptureSink) {
         self.session = session
         autoCapture = UserDefaults.standard.object(forKey: Self.autoCaptureKey) as? Bool ?? false
     }
@@ -89,6 +92,8 @@ final class PageCameraModel {
         do {
             try await controller.start()
             isRunning = true
+            if !session.namesBookByBarcode { controller.setReadsBarcodes(false) }
+            if flash { controller.setTorch(true) }
             if let previewLayer { attach(previewLayer) }
         } catch {
             failure = "The camera couldn't start. Close and try again, or choose photos instead."
@@ -172,7 +177,7 @@ final class PageCameraModel {
 
     /// The barcode shown before the first page names the book (ux-notes row 65).
     private func handleISBN(_ isbn: String) {
-        guard thumbnails.isEmpty, preparing == 0, session.scannedISBN != isbn else { return }
+        guard session.namesBookByBarcode, thumbnails.isEmpty, preparing == 0, session.scannedISBN != isbn else { return }
         session.scannedISBN = isbn
         if let book = session.shelfBook(isbn: isbn) {
             scannedTitle = book.displayTitle
@@ -200,15 +205,16 @@ final class PageCameraModel {
         capturedQuad = lastQuad ?? outline
         pageChanged = false
         shutterCount += 1
-        let index = nextIndex
-        nextIndex += 1
+        let index = session.reserveCaptureID()
         preparing += 1
-        let mode = mode, flash = flash
+        let mode = mode
+        // Photo is one capture (ux-notes row 82).
+        if mode == .photo { self.mode = .recipe }
         let angle = rotation?.videoRotationAngleForHorizonLevelCapture ?? 90
         let folder = session.captureFolder()
         let controller = controller
         let work = Task { () -> Prepared? in
-            guard let data = try? await controller.capture(flash: flash, angle: angle) else { return nil }
+            guard let data = try? await controller.capture(angle: angle) else { return nil }
             return await Self.prepare(data, mode: mode, folder: folder, index: index)
         }
         // Into the queue in capture order, whichever cleanup finishes first.
@@ -222,13 +228,27 @@ final class PageCameraModel {
                 return
             }
             thumbnails.append(Thumbnail(id: index, image: UIImage(cgImage: prepared.thumbnail), mode: mode))
-            session.addCapture(at: prepared.url, mode: mode, quality: prepared.quality)
             let label = mode == .photo ? "Photo" : "Page"
-            captureNote = prepared.quality.map { "\(label) \(thumbnails.count) · \($0.quality.label)" } ?? "\(label) \(thumbnails.count)"
-            let note = captureNote
+            let note = prepared.quality.map { "\(label) \(thumbnails.count) · \($0.quality.label)" } ?? "\(label) \(thumbnails.count)"
+            session.addCapture(id: index, at: prepared.url, mode: mode, quality: prepared.quality, note: note)
+            captureNote = note
             try? await Task.sleep(for: .seconds(2))
             if captureNote == note { captureNote = nil }
         }
+    }
+
+    // MARK: - The captures sheet
+
+    /// Deletes a capture from the stack, the queue and the scan (ux-notes row 83).
+    func removeCapture(id: Int) {
+        thumbnails.removeAll { $0.id == id }
+        session.removeCapture(id: id)
+    }
+
+    /// A capture made a recipe page or a photo after the fact.
+    func setMode(_ mode: CaptureMode, ofCapture id: Int) {
+        if let index = thumbnails.firstIndex(where: { $0.id == id }) { thumbnails[index].mode = mode }
+        session.setMode(mode, ofCapture: id)
     }
 
     struct Prepared: Sendable {
@@ -241,7 +261,7 @@ final class PageCameraModel {
     /// it (sharpening would flatter a soft photo), the page found and cleaned, written as the file
     /// the pipeline reads and the page scan is stored from. The original photo is not kept.
     @concurrent
-    nonisolated static func prepare(_ data: Data, mode: ScanSession.CaptureMode, folder: URL, index: Int) async -> Prepared? {
+    nonisolated static func prepare(_ data: Data, mode: CaptureMode, folder: URL, index: Int) async -> Prepared? {
         guard let image = try? PageImage.load(data: data) else { return nil }
         let quality = mode == .recipe ? await PageQualityGate().assess(image) : nil
         let page = await PageCleanup.detectPage(in: image)

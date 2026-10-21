@@ -36,7 +36,7 @@ enum ScanGate {
 /// it need not.
 @MainActor
 @Observable
-final class ScanSession {
+final class ScanSession: PageCaptureSink {
     enum Phase: Equatable {
         case choosing
         case loading
@@ -69,19 +69,17 @@ final class ScanSession {
         var isbn: String?
     }
 
-    /// What a camera capture is (04 §5.1 "Printed photos", ux-notes row 62): a recipe page to read,
-    /// or a photo (a plate, the finished dish) for a recipe read in the session.
-    enum CaptureMode: String {
-        case recipe, photo
-    }
-
     /// One page from the camera: the cleaned page on disk, the gate's reading of the photo before
-    /// cleanup, and its own reading once the queue gets to it.
+    /// cleanup, and its own reading once the queue gets to it. A capture deleted from the captures
+    /// sheet stays in place, marked, so the queue's positions hold.
     struct CameraCapture {
+        let id: Int
         let url: URL
-        let mode: CaptureMode
+        var mode: CaptureMode
         let quality: PageQualityReading?
+        let note: String
         var reading: PageReading?
+        var isDeleted = false
     }
 
     /// What one saved recipe was, for the summary.
@@ -112,14 +110,16 @@ final class ScanSession {
 
     // The camera's run.
     private(set) var captures: [CameraCapture] = []
-    /// The last recipe capture's text in reading order, for the iPad's running preview (03 §3.5).
-    private(set) var lastCaptureText: String?
+    /// The last recipe capture's text blocks in reading order, for the iPad's running preview
+    /// (03 §3.5, ux-notes row 87).
+    private(set) var lastCapturePreview: [CapturePreviewBlock] = []
     /// Whether the queue is still reading a capture.
     private(set) var isReadingCaptures = false
     /// Three captures in a row hazy and poorly read: the camera asks to clean the lens (ux-notes
     /// row 57). Reset once asked.
     var asksToCleanLens = false
-    private var hazyRun = 0
+    private var lens = LensWatch()
+    private var nextCaptureID = 0
     private var captureQueue: Task<Void, Never>?
     /// Photo-mode captures by the recipe they go with: (reading, recipe on it).
     private var coverCandidates: [[Int]: [URL]] = [:]
@@ -297,12 +297,55 @@ final class ScanSession {
         return folder
     }
 
+    // MARK: - The camera's sink
+
+    var namesBookByBarcode: Bool { startingBook == nil }
+
+    func reserveCaptureID() -> Int {
+        defer { nextCaptureID += 1 }
+        return nextCaptureID
+    }
+
+    var captureItems: [CaptureItem] {
+        captures.filter { !$0.isDeleted }.map { capture in
+            CaptureItem(id: capture.id, url: capture.url, mode: capture.mode, note: capture.note, detail: Self.detail(of: capture))
+        }
+    }
+
+    /// What a capture read as, for the captures sheet.
+    private static func detail(of capture: CameraCapture) -> String? {
+        guard let reading = capture.reading else { return "Reading…" }
+        if capture.mode == .photo { return reading.pageNumber.map { "A photo for a recipe, p. \($0)" } ?? "A photo for a recipe" }
+        guard reading.kind == .recipe else { return "Not a recipe: \(reading.kind.title.lowercased())" }
+        let titles = reading.recipes.map(\.title).filter { !$0.isEmpty }
+        let page = reading.pageNumber.map { " · p. \($0)" } ?? ""
+        if let first = titles.first { return (titles.count > 1 ? "“\(first)” and \(titles.count - 1) more" : "“\(first)”") + page }
+        return reading.isContinuation ? "Continues the page before" + page : "A recipe" + page
+    }
+
+    /// Deleted from the captures sheet: out of the queue and the scan (ux-notes row 83).
+    func removeCapture(id: Int) {
+        guard let index = captures.firstIndex(where: { $0.id == id }) else { return }
+        captures[index].isDeleted = true
+        try? FileManager.default.removeItem(at: captures[index].url)
+        progress.removeAll { $0.id == index }
+        if captures.allSatisfy(\.isDeleted) { lastCapturePreview = [] }
+    }
+
+    /// A capture made a recipe page or a photo after the fact: it is read either way, so only what
+    /// Done does with it changes.
+    func setMode(_ mode: CaptureMode, ofCapture id: Int) {
+        guard let index = captures.firstIndex(where: { $0.id == id }) else { return }
+        captures[index].mode = mode
+        update(index) { $0.isPhoto = mode == .photo }
+    }
+
     /// A page from the camera, read at once in capture order behind the ones before it, so the
     /// processing sheet has little left when the cook taps Done. A Photo capture is read only for
     /// its page number.
-    func addCapture(at url: URL, mode: CaptureMode, quality: PageQualityReading?) {
+    func addCapture(id: Int, at url: URL, mode: CaptureMode, quality: PageQualityReading?, note: String) {
         let index = captures.count
-        captures.append(CameraCapture(url: url, mode: mode, quality: quality))
+        captures.append(CameraCapture(id: id, url: url, mode: mode, quality: quality, note: note))
         var page = PageProgress(id: index)
         page.isPhoto = mode == .photo
         progress.append(page)
@@ -317,7 +360,7 @@ final class ScanSession {
             for await stage in stream { apply(stage) }
             let reading = try? await reader.value
             captures[index].reading = reading
-            if let reading, mode == .recipe { noteCapture(reading, quality: quality) }
+            if let reading, captures[index].mode == .recipe, !captures[index].isDeleted { noteCapture(reading, quality: quality) }
             if index == captures.count - 1 { isReadingCaptures = false }
         }
     }
@@ -331,13 +374,8 @@ final class ScanSession {
     /// The iPad's preview, and the run of hazy captures: Clean the lens stays advisory until three
     /// captures in a row both score Apple's smudge threshold and read poorly (ux-notes row 57).
     private func noteCapture(_ reading: PageReading, quality: PageQualityReading?) {
-        lastCaptureText = reading.blocks.filter { $0.kind != .photo && $0.role != .ignore && $0.role != .furniture }.map(\.text).joined(separator: "\n\n")
-        let hazy = (quality?.smudge ?? 0) >= PageQualityGate().smudgeThreshold && reading.ocrConfidence < PageStructurer.lowOCR
-        hazyRun = hazy ? hazyRun + 1 : 0
-        if hazyRun >= 3 {
-            hazyRun = 0
-            asksToCleanLens = true
-        }
+        lastCapturePreview = reading.previewBlocks
+        if lens.note(reading, quality: quality) { asksToCleanLens = true }
     }
 
     /// The barcode scanned live at the camera's start.
@@ -350,18 +388,30 @@ final class ScanSession {
         for capture in captures { try? FileManager.default.removeItem(at: capture.url) }
         captures = []
         progress = []
-        lastCaptureText = nil
+        lastCapturePreview = []
         isReadingCaptures = false
         scannedISBN = nil
-        hazyRun = 0
+        lens.reset()
     }
 
     /// The camera's Done: the rest of the queue read, the recipe pages stitched and refined, the
     /// Photo captures matched to their recipes, then the book and the queue as for chosen photos.
     func finishCapturing() async {
-        guard !captures.isEmpty else { return }
+        guard captures.contains(where: { !$0.isDeleted }) else { return }
         phase = .processing
         await captureQueue?.value
+        captures.removeAll(where: \.isDeleted)
+        progress = captures.indices.map { index in
+            var page = PageProgress(id: index, step: .done)
+            page.isPhoto = captures[index].mode == .photo
+            if let reading = captures[index].reading {
+                page.kind = reading.kind
+                page.recipes = reading.recipes.count
+                page.ingredients = reading.recipes.reduce(0) { $0 + $1.ingredients.count }
+                page.steps = reading.recipes.reduce(0) { $0 + $1.steps.count }
+            }
+            return page
+        }
         urls = captures.map(\.url)
         let pages = captures.filter { $0.mode == .recipe }.compactMap(\.reading)
         let pipeline = pipeline
@@ -440,8 +490,8 @@ final class ScanSession {
     }
 
     private func update(_ page: Int, _ change: (inout PageProgress) -> Void) {
-        guard progress.indices.contains(page) else { return }
-        change(&progress[page])
+        guard let index = progress.firstIndex(where: { $0.id == page }) else { return }
+        change(&progress[index])
     }
 
     // MARK: - Which book?

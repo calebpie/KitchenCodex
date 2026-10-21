@@ -171,11 +171,24 @@ nonisolated final class CameraController: NSObject, @unchecked Sendable {
         }
     }
 
+    /// Flash as a continuous torch (04 §5.1 "Camera controls", ux-notes row 85): lit while the cook
+    /// has it on, so glare on a glossy page shows in the preview before the capture; no flash is
+    /// fired on capture. A stopped session puts the torch out, so the camera sets it again on start.
+    func setTorch(_ on: Bool) {
+        sessionQueue.async { [self] in
+            guard let device, device.hasTorch, (try? device.lockForConfiguration()) != nil else { return }
+            defer { device.unlockForConfiguration() }
+            let mode: AVCaptureDevice.TorchMode = on ? .on : .off
+            if device.isTorchModeSupported(mode), device.torchMode != mode { device.torchMode = mode }
+        }
+    }
+
     // MARK: - Capturing
 
     /// One photo, HEIC where the phone takes it, with its orientation in its metadata: `angle` is
-    /// the rotation coordinator's horizon-level capture angle.
-    func capture(flash: Bool, angle: CGFloat) async throws -> Data {
+    /// the rotation coordinator's horizon-level capture angle. Never with the flash: the torch, when
+    /// the cook turned it on, is the light.
+    func capture(angle: CGFloat) async throws -> Data {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Data, Error>) in
             sessionQueue.async { [self] in
                 let settings = photoOutput.availablePhotoCodecTypes.contains(.hevc)
@@ -183,8 +196,7 @@ nonisolated final class CameraController: NSObject, @unchecked Sendable {
                     : AVCapturePhotoSettings()
                 settings.maxPhotoDimensions = photoOutput.maxPhotoDimensions
                 settings.photoQualityPrioritization = .quality
-                let mode: AVCaptureDevice.FlashMode = flash ? .on : .off
-                if photoOutput.supportedFlashModes.contains(mode) { settings.flashMode = mode }
+                if photoOutput.supportedFlashModes.contains(.off) { settings.flashMode = .off }
                 if let connection = photoOutput.connection(with: .video), connection.isVideoRotationAngleSupported(angle) {
                     connection.videoRotationAngle = angle
                 }
