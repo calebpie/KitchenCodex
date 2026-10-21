@@ -135,6 +135,20 @@ struct ContentsReaderTests {
         #expect(combined.entries.count == 5)
     }
 
+    /// The iOS Simulator's recognizer can read one printed heading as two pieces side by side.
+    @Test func piecesOfOnePrintedLineAreOneLine() {
+        let contents = ContentsReader.read(Self.page([
+            Self.line("SOU", x: 0.14, y: 0.20, size: 0.022),
+            Self.line("PS & STEWS 10", x: 0.19, y: 0.20, size: 0.022),
+            Self.line("Leek Soup 12", x: 0.14, y: 0.24),
+            Self.line("Onion Soup 13", x: 0.14, y: 0.26),
+            Self.line("Bean Soup 14", x: 0.14, y: 0.28),
+        ]))
+        #expect(contents.sections.map(\.title) == ["Sou Ps & Stews"])
+        #expect(contents.sections.map(\.page) == [10])
+        #expect(contents.entries.count == 3)
+    }
+
     @Test func readsAnIndexPage() {
         let contents = ContentsReader.read(Self.page([
             Self.line("Leek soup, 16, 42", x: 0.1, y: 0.2),

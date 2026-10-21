@@ -72,6 +72,7 @@ public enum ContentsReader {
         if reading.kind == .index { return readIndex(reading) }
         var lines = contentLines(of: reading)
         guard !lines.isEmpty else { return BookContents() }
+        joinFragments(&lines)
         pairNumbers(&lines)
         let entrySize = Self.entrySize(lines)
         let columns = Self.columns(lines.filter { !$0.isNumberOnly })
@@ -220,6 +221,36 @@ public enum ContentsReader {
         var title = text.replacingOccurrences(of: #"[.·•…_]{2,}"#, with: " ", options: .regularExpression)
         title = title.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
         return title.trimmingCharacters(in: CharacterSet.whitespaces.union(CharacterSet(charactersIn: ".·•…_-–—|,:;")))
+    }
+
+    /// A printed line the recognizer read as two pieces side by side ("COI" and "IMENTS & PICKLES
+    /// 42", as the iOS Simulator reads one heading) is one line again: pieces level with each other
+    /// and close across, the left one without a page number, the right one not starting where a
+    /// column of other lines starts. Page numbers set alone stay apart for `pairNumbers`.
+    static func joinFragments(_ lines: inout [Line]) {
+        var changed = true
+        while changed {
+            changed = false
+            outer: for left in lines.indices where !lines[left].isNumberOnly && lines[left].page == nil {
+                for right in lines.indices where right != left && !lines[right].isNumberOnly {
+                    let a = lines[left].rect, b = lines[right].rect
+                    let gap = b.minX - a.maxX
+                    let size = max(lines[left].size, lines[right].size)
+                    guard a.verticalOverlap(with: b) >= 0.5, gap > -size, gap < size * 2.5, a.minX < b.minX else { continue }
+                    // A line starting where a column of others starts is the next column's, not a piece.
+                    let aligned = lines.indices.count { $0 != left && $0 != right && abs(lines[$0].rect.minX - b.minX) < 0.015 }
+                    guard aligned < 2 else { continue }
+                    lines[left].text += " " + lines[right].text
+                    lines[left].rect = a.union(b)
+                    lines[left].size = size
+                    lines[left].page = lines[right].page
+                    lines[left].isMended = lines[right].isMended
+                    lines.remove(at: right)
+                    changed = true
+                    break outer
+                }
+            }
+        }
     }
 
     /// Page numbers set in their own column go with the title on their line: the nearest title to
@@ -486,6 +517,7 @@ public enum ContentsReader {
     /// own column put back at the end of their titles.
     static func modelText(of reading: PageReading) -> String {
         var lines = contentLines(of: reading)
+        joinFragments(&lines)
         pairNumbers(&lines)
         return columns(lines.filter { !$0.isNumberOnly }).flatMap { $0 }
             .map { line in line.page.map { "\(line.text) \($0)" } ?? line.text }
