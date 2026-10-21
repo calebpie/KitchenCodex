@@ -92,6 +92,12 @@ enum PageFixtures {
 
     static let manifestName = "private-pages"
 
+    /// Whether the manifest lists the book at all. A book folder with no entries yet (photos
+    /// delivered for a later slice) is left out of the strict checks and named in the report.
+    static func isInManifest(_ book: Book) -> Bool {
+        manifest.contains { $0.slug == book.slug }
+    }
+
     static let manifest: [Entry] = {
         guard let url = Bundle.module.url(forResource: manifestName, withExtension: "json", subdirectory: "Fixtures"),
               let data = try? Data(contentsOf: url) else { return [] }

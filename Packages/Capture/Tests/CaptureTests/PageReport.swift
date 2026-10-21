@@ -22,6 +22,8 @@ struct PageReport {
     var usesModel: Bool
     var books: [Book] = []
     var blurred: [PrivatePageTests.BlurCheck] = []
+    /// Book folders the manifest doesn't list yet, with their photo counts: not read.
+    var unlisted: [(slug: String, photos: Int)] = []
 
     func write(to url: URL) throws {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -55,6 +57,10 @@ struct PageReport {
             out.append("| \(book.slug) | \(book.isbn ?? "—") | \(book.photos) (1 barcode) | \(recipePages) | \(recipes) | \(stitched.isEmpty ? "—" : stitched.joined(separator: ", ")) | \(kinds.joined(separator: ", ")) | \(forced) | \(other) | \(Self.format(Self.median(times))) | \(Self.format(times.max() ?? 0)) |")
         }
         out.append("")
+        for book in unlisted {
+            out.append("- \(book.slug): not yet in the manifest: \(book.photos) photos (not read).")
+        }
+        if !unlisted.isEmpty { out.append("") }
         let sorted = allTimes.sorted()
         out.append("Timing over \(sorted.count) photos (gate, read and structure; full-size HEIC on this Mac): median \(Self.format(Self.median(sorted))) s, mean \(Self.format(sorted.reduce(0, +) / Double(max(1, sorted.count)))) s, slowest \(Self.format(sorted.last ?? 0)) s; the first photo read (\(Self.format(books.first?.singles.first?.durations.first?.seconds ?? 0)) s) includes loading Vision's models.")
         out.append("")
