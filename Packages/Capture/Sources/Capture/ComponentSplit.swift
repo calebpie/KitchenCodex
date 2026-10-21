@@ -8,8 +8,8 @@ import Foundation
 ///
 /// Step groups are the steps a source opens with a label ("For the piperade:", "Pickle the daikon:",
 /// "To make the besciamella, …"), the sections a page names (JSON-LD `HowToSection`), and, where a
-/// group has neither, the first later step that names its ingredient ("Hold an artichoke stem…"
-/// under Baby Artichokes). A label printed under every group ("TO COMPLETE:") marks no boundary. A
+/// group has neither, the first later step that names its ingredient ("Trim the leeks…" under
+/// Baby Leeks). A label printed under every group ("TO FINISH:") marks no boundary. A
 /// serving or assembly group ("To serve", "Assembling the Lasagne") stays with the parent unless the
 /// cook picks it.
 public enum ComponentSplit {
@@ -165,7 +165,7 @@ public enum ComponentSplit {
     }
 
     /// The label a step opens with: "For the piperade: Heat…" → "For the piperade", "To make the
-    /// besciamella, heat…" → "To make the besciamella", "TO COMPLETE: Gently…" → "TO COMPLETE".
+    /// besciamella, heat…" → "To make the besciamella", "TO FINISH: Warm…" → "TO FINISH".
     static func label(of step: String) -> String? {
         let text = step.trimmingCharacters(in: .whitespaces)
         if let colon = text.firstIndex(of: ":") {
@@ -181,8 +181,8 @@ public enum ComponentSplit {
         return nil
     }
 
-    /// "For the onion and jalapeño pickle" → "Onion and Jalapeño Pickle"; "BABY ARTICHOKES" → "Baby
-    /// Artichokes"; "Making the Green Pasta Dough" → "Green Pasta Dough".
+    /// "For the onion and jalapeño pickle" → "Onion and Jalapeño Pickle"; "BABY LEEKS" → "Baby
+    /// Leeks"; "Making the Green Pasta Dough" → "Green Pasta Dough".
     public static func componentTitle(_ group: String) -> String {
         var text = group.trimmingCharacters(in: CharacterSet.whitespaces.union(CharacterSet(charactersIn: ":")))
         text = text.replacing(/(?i)^(?:for\s+(?:the\s+)?|to\s+\w+\s+(?:the\s+)?|\w+ing\s+the\s+|make\s+(?:the\s+)?|prepare\s+(?:the\s+)?)/, with: "")

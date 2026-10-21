@@ -122,15 +122,15 @@ struct ComponentSplitTests {
         // Groups no step names or starts.
         #expect(ComponentSplit.plan(title: "Cake", ingredientGroups: Self.groups([("Dry", 3), ("Wet", 3)]), steps: ["Heat the oven.", "Mix it all and bake."]) == nil)
         // One group that would run to the end, leaving the parent its lines and no steps.
-        #expect(ComponentSplit.plan(title: "Chilled Pea Soup", ingredientGroups: Self.groups([("Soup base", 3), (nil, 4)]),
-                                    steps: ["First make the soup base.", "Strain it.", "Add the peas.", "Serve cold."]) == nil)
+        #expect(ComponentSplit.plan(title: "Lentil Soup", ingredientGroups: Self.groups([("Stock", 3), (nil, 4)]),
+                                    steps: ["Begin with the stock.", "Strain it.", "Add the lentils.", "Simmer until soft."]) == nil)
         // Only serving groups line up.
         #expect(ComponentSplit.plan(title: "Tacos", ingredientGroups: Self.groups([(nil, 4), ("To serve", 3)]), steps: ["Cook the filling.", "To serve: Warm the tortillas."]) == nil)
     }
 
     @Test func titlesComponentsFromTheirHeadings() {
         #expect(ComponentSplit.componentTitle("For the onion and jalapeño pickle") == "Onion and Jalapeño Pickle")
-        #expect(ComponentSplit.componentTitle("BABY ARTICHOKES") == "Baby Artichokes")
+        #expect(ComponentSplit.componentTitle("BABY LEEKS") == "Baby Leeks")
         #expect(ComponentSplit.componentTitle("Making the Green Pasta Dough") == "Green Pasta Dough")
         #expect(ComponentSplit.componentTitle("To make the dressing:") == "Dressing")
         #expect(ComponentSplit.componentTitle("Vinaigrette") == "Vinaigrette")
