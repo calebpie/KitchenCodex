@@ -73,17 +73,21 @@ final class BookScanSession: PageCaptureSink {
 
     // MARK: - Opening and pausing
 
-    /// Opens a sitting: earlier sittings' finished captures let go, the current item set (Scan now
-    /// passes its entry), the queue started.
+    /// Opens a sitting: earlier sittings' finished captures let go but for the last recipe capture
+    /// (and the pages joined to it), so this sitting's first page can continue it, and the photos
+    /// still waiting for a recipe (ux-notes row 98); the current item set (Scan now passes its
+    /// entry), the queue started.
     func open(at entry: BookEntry? = nil) {
         book.reconcilePunchlist()
         if !isOpen {
             state.sitting += 1
             let sitting = state.sitting
-            for capture in state.captures where capture.status != .pending && capture.sitting < sitting {
+            let carried = carriedCaptures()
+            for capture in state.captures where capture.status != .pending && capture.sitting < sitting && !carried.contains(capture.id) {
                 try? FileManager.default.removeItem(at: url(of: capture))
             }
-            state.captures.removeAll { $0.status != .pending && $0.sitting < sitting }
+            state.captures.removeAll { $0.status != .pending && $0.sitting < sitting && !carried.contains($0.id) }
+            // Readings are read again from the files when a page needs them (`readings(of:)`).
             readings = [:]
             lastCapturePreview = []
             lens.reset()
@@ -96,6 +100,17 @@ final class BookScanSession: PageCaptureSink {
         }
         save()
         kick()
+    }
+
+    /// What a new sitting keeps from the ones before: the last recipe capture with recipes and the
+    /// pages joined to it, and every photo still waiting for its recipe.
+    private func carriedCaptures() -> Set<Int> {
+        var kept = Set(state.captures.filter { $0.detail == Self.waitingDetail && $0.photo == nil }.map(\.id))
+        if let last = previousRecipeCapture(before: .max) {
+            kept.insert(last.id)
+            kept.formUnion(state.captures.filter { $0.joinedTo == last.id }.map(\.id))
+        }
+        return kept
     }
 
     /// Close: nothing is lost. Captures still reading finish in the queue.
@@ -192,12 +207,22 @@ final class BookScanSession: PageCaptureSink {
         shownCaptures.map { capture in
             CaptureItem(id: capture.id, url: url(of: capture), mode: capture.mode, note: capture.note,
                         detail: capture.status == .pending ? "Reading…" : capture.detail,
-                        needsReview: capture.mode == .recipe && !capture.recipes.isEmpty ? needsReview(capture) : nil)
+                        needsReview: capture.mode == .recipe && !capture.recipes.isEmpty ? needsReview(capture) : nil,
+                        keepWhich: capture.duplicates.isEmpty ? nil : keepQuestion(capture))
         }
     }
 
     func addCapture(id: Int, at url: URL, mode: CaptureMode, quality: PageQualityReading?, note: String) {
         addCapture(id: id, at: url, mode: mode, quality: quality, note: note, entry: state.currentEntry)
+    }
+
+    /// "“Leek Soup” is already captured, and was reviewed or edited since. Keep which?"
+    private func keepQuestion(_ capture: BookScanState.StoredCapture) -> String {
+        let titles = capture.duplicates.map(\.earlier).compactMap { earlier in
+            try? context.fetch(FetchDescriptor<Recipe>(predicate: #Predicate { $0.id == earlier })).first?.title
+        }
+        let named = titles.count == 1 ? "“\(titles[0])” is" : "These recipes are"
+        return "\(named) already captured and was reviewed or edited since. Keep which?"
     }
 
     private func addCapture(id: Int, at url: URL, mode: CaptureMode, quality: PageQualityReading?, note: String, entry: UUID?) {
@@ -262,6 +287,7 @@ final class BookScanSession: PageCaptureSink {
             state.captures[reset].queued = false
             state.captures[reset].joinedTo = nil
             state.captures[reset].photographPages = []
+            state.captures[reset].duplicates = []
         }
     }
 
@@ -409,15 +435,24 @@ final class BookScanSession: PageCaptureSink {
         // A page that opens mid-recipe continues the page captured before it: that page and every
         // page already joined to it, in order, so a recipe over three pages keeps its middle. The
         // stitcher decides, as it will when the pages are refined together.
+        var keptApart: String?
         if single.isContinuation, let previous = previousRecipeCapture(before: id) {
             let chain = [previous] + state.captures.filter { $0.joinedTo == previous.id }.sorted { $0.id < $1.id }
-            let earlier = chain.compactMap { readings[$0.id] }
-            if earlier.count == chain.count, PageStitcher.stitch(earlier + [single]).count == 1 {
+            // A page from an earlier sitting, or read before a relaunch, is read again from its file
+            // (ux-notes row 98).
+            let earlier = await readings(of: chain)
+            let cooksWork = recipes(of: previous).first { !Self.isUntouched($0) }
+            if let cooksWork {
+                // Joining would read the recipe again over what the cook did to it.
+                keptApart = cooksWork.title
+            } else if earlier.count == chain.count, PageStitcher.stitch(earlier + [single]).count == 1 {
                 undo(previous)
                 owner = previous.id
                 urls = chain.map(url(of:)) + urls
                 parts = earlier + parts
                 state.captures[index].joinedTo = previous.id
+                // An owner carried from an earlier sitting shows in this one again.
+                if let ownerIndex = state.captures.firstIndex(where: { $0.id == previous.id }) { state.captures[ownerIndex].sitting = state.sitting }
             }
         }
         if parts.contains(where: { $0.recipes.contains(where: PagePipeline.wantsModel) }) {
@@ -445,7 +480,8 @@ final class BookScanSession: PageCaptureSink {
         var layouts = Set(book.reviewedLayouts + state.layouts)
         var saved: [Recipe] = []
         var linked: [BookEntry] = []
-        var again: [String] = []
+        var replaced = 0
+        var duplicates: [BookScanState.Duplicate] = []
         var queued = false
         for recipeIndex in model.recipes.indices where !model.recipes[recipeIndex].isSkipped {
             let entry = match.entries[recipeIndex]
@@ -465,9 +501,16 @@ final class BookScanSession: PageCaptureSink {
             recipe.currentVersion?.needsReview = wantsLook
             if PunchlistLinking.link(recipe, to: entry, reviewed: false), let entry {
                 linked.append(entry)
-            } else if entry != nil {
-                // A page shot again: saved, nothing lost, the list left as it is.
-                again.append(recipe.title)
+            } else if let entry, let earlier = entry.recipe, earlier != recipe {
+                // A page shot again (ux-notes row 93): it replaces a recipe the cook hasn't reviewed
+                // or edited since it was saved; otherwise both stay until the captures sheet asks.
+                if Self.isUntouched(earlier) {
+                    replace(earlier, with: recipe, on: entry)
+                    linked.append(entry)
+                    replaced += 1
+                } else {
+                    duplicates.append(BookScanState.Duplicate(new: recipe.id, earlier: earlier.id, entry: entry.id))
+                }
             }
             hasRecipes = true
             if !read.layoutSignature.isEmpty, !layouts.contains(read.layoutSignature) {
@@ -494,8 +537,11 @@ final class BookScanSession: PageCaptureSink {
             capture.queued = queued
             capture.pageNumber = pages.first
             capture.photographPages = photographs
+            capture.duplicates = duplicates
             capture.detail = Self.savedLine(saved, skipped: model.recipes.first?.isSkipped == true && saved.isEmpty)
-                + (again.isEmpty ? "" : " · already captured, saved again")
+                + (replaced == 0 ? "" : replaced == 1 ? " · replaced the earlier copy" : " · replaced the earlier copies")
+                + (duplicates.isEmpty ? "" : " · already captured")
+                + (keptApart.map { " · continues “\($0)”, which was reviewed or edited since: not joined" } ?? "")
         }
         if owner != id { finish(id) { $0.detail = "Continues the page before" } }
 
@@ -520,6 +566,76 @@ final class BookScanSession: PageCaptureSink {
             }
         }
         Self.logger.info("Book session: capture \(id) saved \(saved.count) recipes, \(matched.count) on the list\(queued ? ", queued for review" : "")")
+    }
+
+    // MARK: - A page shot again (ux-notes row 93)
+
+    /// Neither reviewed nor edited since the scan saved it, by what the library records: no review
+    /// (Review Scan, the queue, Looks Right), one version, and no change after its save (an edit, a
+    /// past cook added).
+    static func isUntouched(_ recipe: Recipe) -> Bool {
+        recipe.source?.reviewedAt == nil && recipe.bookEntry?.status != .reviewed
+            && (recipe.versions?.count ?? 0) <= 1 && recipe.updatedAt.timeIntervalSince(recipe.createdAt) < 5
+    }
+
+    /// `new` takes `earlier`'s place: its entry, its cover photos and cover, and the links that
+    /// name it as a component; `earlier` goes, and so does its place on the capture that saved it.
+    private func replace(_ earlier: Recipe, with new: Recipe, on entry: BookEntry) {
+        for image in earlier.images ?? [] where image.role == .photo {
+            image.recipe = new
+        }
+        if new.coverImageData == nil { new.coverImageData = earlier.coverImageData }
+        for link in earlier.linkedFrom ?? [] { link.subRecipe = new }
+        for index in state.captures.indices where state.captures[index].recipes.contains(earlier.id) {
+            state.captures[index].recipes.removeAll { $0 == earlier.id }
+        }
+        CrossReferenceLinking.forget(recipes: [earlier.id], in: book, state: &state, context: context)
+        earlier.bookEntry = nil
+        context.delete(earlier)
+        PunchlistLinking.link(new, to: entry, reviewed: false)
+    }
+
+    /// The captures sheet's answer: Keep New replaces the earlier recipes as an untouched one would
+    /// be; Keep Earlier deletes the new ones. Until then nothing is deleted.
+    func resolveDuplicates(of id: Int, keepNew: Bool) {
+        guard let index = state.captures.firstIndex(where: { $0.id == id }) else { return }
+        let fetch = { (id: UUID) in try? self.context.fetch(FetchDescriptor<Recipe>(predicate: #Predicate { $0.id == id })).first }
+        for duplicate in state.captures[index].duplicates {
+            guard let new = fetch(duplicate.new) else { continue }
+            if keepNew {
+                if let earlier = fetch(duplicate.earlier), let entry = book.orderedEntries.first(where: { $0.id == duplicate.entry }) {
+                    replace(earlier, with: new, on: entry)
+                }
+            } else {
+                CrossReferenceLinking.forget(recipes: [new.id], in: book, state: &state, context: context)
+                context.delete(new)
+                if let current = state.captures.firstIndex(where: { $0.id == id }) { state.captures[current].recipes.removeAll { $0 == duplicate.new } }
+            }
+        }
+        if let current = state.captures.firstIndex(where: { $0.id == id }) {
+            state.captures[current].duplicates = []
+            let detail = state.captures[current].detail?.replacingOccurrences(of: " · already captured", with: "") ?? ""
+            state.captures[current].detail = detail + (keepNew ? " · replaced the earlier copy" : " · kept the earlier copy")
+        }
+        try? context.save()
+        save()
+    }
+
+    // MARK: - Readings
+
+    /// The readings of `captures`, read again from their files where this sitting never had them
+    /// (an earlier sitting's last page, or one read before a relaunch).
+    private func readings(of captures: [BookScanState.StoredCapture]) async -> [PageReading] {
+        var found: [PageReading] = []
+        for capture in captures {
+            if let reading = readings[capture.id] {
+                found.append(reading)
+            } else if let reading = try? await Self.read(url(of: capture), quality: capture.quality?.reading, with: pipeline) {
+                readings[capture.id] = reading
+                found.append(reading)
+            }
+        }
+        return found
     }
 
     /// "Saved “Leek Soup” and “Bean Soup”", "Saved “Leek Soup” (not on the list)".
