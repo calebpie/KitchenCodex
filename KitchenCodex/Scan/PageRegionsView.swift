@@ -61,7 +61,9 @@ struct PageRegionsView<Popover: View>: View {
                 GeometryReader { geometry in
                     let size = geometry.size
                     ZStack(alignment: .topLeading) {
-                        ForEach(regions) { region in
+                        // Larger regions first, so a small one inside another (a bold label in its
+                        // paragraph's box) sits on top and takes its own taps.
+                        ForEach(regions.sorted { $0.rect.width * $0.rect.height > $1.rect.width * $1.rect.height }) { region in
                             regionView(region, in: size)
                         }
                         if lasso.count > 1 {
@@ -75,6 +77,13 @@ struct PageRegionsView<Popover: View>: View {
                         }
                     }
                     .contentShape(.rect)
+                    // One tap for the page: the smallest region under the finger, so a label inside
+                    // its paragraph's box is reachable (Combine's two pieces of a note, row 88).
+                    // Alongside the page's double tap to zoom, which an exclusive tap here would
+                    // swallow.
+                    .simultaneousGesture(SpatialTapGesture().onEnded { value in
+                        if let onTap, let region = region(at: value.location, in: size) { onTap(region) }
+                    })
                     .gesture(lassoGesture(in: size), isEnabled: onLasso != nil)
                     .onContinuousHover { phase in
                         // Pencil hover (and the pointer) previews a region's text on iPad.
@@ -136,12 +145,12 @@ struct PageRegionsView<Popover: View>: View {
         }
         .frame(width: frame.width, height: frame.height)
         .opacity(isDimmed(region) ? 0.25 : 1)
-        .contentShape(.rect)
-        .onTapGesture { onTap?(region) }
-        .allowsHitTesting(onTap != nil && role != .furniture)
+        // Taps are the page's (above); the region only shows.
+        .allowsHitTesting(false)
         .accessibilityElement()
         .accessibilityLabel(accessibilityLabel(region, role: role))
         .accessibilityAddTraits(onTap == nil ? [] : .isButton)
+        .accessibilityAction { onTap?(region) }
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .accessibilityHidden(role == .furniture)
         .popover(isPresented: popoverBinding(for: region.id)) {
@@ -177,8 +186,10 @@ struct PageRegionsView<Popover: View>: View {
             .allowsHitTesting(false)
     }
 
+    /// The smallest region under `point`, as the taps find it.
     private func region(at point: CGPoint, in size: CGSize) -> ReviewRegion? {
-        regions.last { frame(of: $0, in: size).contains(point) && role($0) != .furniture }
+        regions.filter { frame(of: $0, in: size).contains(point) && role($0) != .furniture }
+            .min { $0.rect.width * $0.rect.height < $1.rect.width * $1.rect.height }
     }
 
     /// The area a closed stroke encloses (the shoelace formula).

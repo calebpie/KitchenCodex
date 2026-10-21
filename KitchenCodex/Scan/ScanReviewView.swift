@@ -37,6 +37,9 @@ struct ScanReviewView: View {
     @State private var popoverRegion: Int?
     @State private var isConfirmingRescan = false
     @State private var isSplitting = false
+    /// Select More: taps on the page add regions to the selection, for Combine or to assign them
+    /// together (the lasso's counterpart where there is no lasso).
+    @State private var isSelectingMore = false
 
     private var isWide: Bool { width >= 700 }
     private static let dividerHeight: CGFloat = 22
@@ -167,8 +170,8 @@ struct ScanReviewView: View {
                     selected: Set([model.selectedRegion].compactMap(\.self) + model.lassoed),
                     flashing: model.flashing,
                     onTap: tap,
-                    onLasso: isWide ? { regions in lasso(regions) } : nil,
-                    popoverRegion: isWide ? $popoverRegion : nil
+                    onLasso: isWide && !isSelectingMore ? { regions in lasso(regions) } : nil,
+                    popoverRegion: isWide && !isSelectingMore ? $popoverRegion : nil
                 ) { _ in
                     assignControls
                         .padding()
@@ -178,7 +181,7 @@ struct ScanReviewView: View {
             }
             .background(.background.secondary)
             .overlay(alignment: .bottom) {
-                if !isWide, model.selectedRegion != nil {
+                if (!isWide || isSelectingMore), model.selectedRegion != nil {
                     assignControls
                         .padding(14)
                         .glassEffect(in: .rect(cornerRadius: 22))
@@ -218,6 +221,17 @@ struct ScanReviewView: View {
 
     private func tap(_ region: ReviewRegion) {
         editingFocus = nil
+        if isSelectingMore {
+            // Select More: the tap adds the region to the selection, or takes it out.
+            if model.lassoed.contains(region.id) {
+                model.lassoed.removeAll { $0 == region.id }
+            } else {
+                model.lassoed.append(region.id)
+            }
+            model.selectedRegion = model.lassoed.first
+            if model.lassoed.isEmpty { isSelectingMore = false }
+            return
+        }
         model.lassoed = []
         if region.recipe != nil, region.recipe != model.current, model.recipes.indices.contains(region.recipe!) {
             // A tap on the other recipe's region shows that recipe.
@@ -247,29 +261,66 @@ struct ScanReviewView: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
                 Spacer(minLength: 8)
+                if !photos, !isSelectingMore {
+                    Button("Select More") {
+                        model.lassoed = ids
+                        popoverRegion = nil
+                        isSelectingMore = true
+                    }
+                    .font(.subheadline)
+                    .buttonStyle(.borderless)
+                    .accessibilityHint("Then tap other regions to combine them or assign them together.")
+                }
                 Button("Done", systemImage: "xmark") {
                     model.selectedRegion = nil
                     model.lassoed = []
                     popoverRegion = nil
+                    isSelectingMore = false
                 }
                 .labelStyle(.iconOnly)
                 .buttonStyle(.borderless)
             }
+            if isSelectingMore {
+                Text("Tap more regions on the page to add them.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             let choices = photos ? RegionRole.photoChoices : RegionRole.textChoices
-            if isWide {
+            if isWide, !isSelectingMore {
                 // The popover has the height: every choice at once.
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 92), spacing: 8)], alignment: .leading, spacing: 8) {
+                    if model.canCombine(ids) { combineButton(ids) }
                     ForEach(choices) { role in choice(role, ids: ids, current: current) }
                 }
             } else {
                 ScrollView(.horizontal) {
                     HStack(spacing: 8) {
+                        if model.canCombine(ids) { combineButton(ids) }
                         ForEach(choices) { role in choice(role, ids: ids, current: current) }
                     }
                 }
                 .scrollIndicators(.hidden)
             }
         }
+    }
+
+    /// Combine (ux-notes row 88): the selected regions become one, in reading order.
+    private func combineButton(_ ids: [Int]) -> some View {
+        Button {
+            withAnimation { model.combine(ids) }
+            popoverRegion = nil
+            isSelectingMore = false
+        } label: {
+            Label("Combine", systemImage: "rectangle.compress.vertical")
+                .font(.subheadline.weight(.semibold))
+                .padding(.horizontal, 12)
+                .frame(minHeight: 36)
+                .foregroundStyle(.white)
+                .background(Color.accentColor, in: .capsule)
+                .contentShape(.capsule)
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Makes the selected regions one region, their text joined as the page prints it.")
     }
 
     @ViewBuilder
@@ -280,6 +331,7 @@ struct ScanReviewView: View {
             roleButton(role, isCurrent: current == role || (role == .ingredient && current == .ingredientGroup)) {
                 withAnimation { model.assign(ids, to: role) }
                 popoverRegion = nil
+                isSelectingMore = false
             }
         }
     }

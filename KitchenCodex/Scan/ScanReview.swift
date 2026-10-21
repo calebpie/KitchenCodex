@@ -298,6 +298,42 @@ final class ScanReviewModel {
         recipes[current] = recipe
     }
 
+    // MARK: - Combining
+
+    /// Whether `ids` can be combined: two or more text regions on one page.
+    func canCombine(_ ids: [Int]) -> Bool {
+        let chosen = ids.compactMap(region)
+        return chosen.count >= 2 && !chosen.contains(where: \.isPhoto) && Set(chosen.map(\.page)).count == 1
+    }
+
+    /// Combine (03 §3.6, ux-notes row 88): two or more regions become one, their text joined in
+    /// reading order as the page prints it (`PageRegionText.combined`), the role the first had. What
+    /// the regions fed goes and the one region feeds that role again: a label and the note beside it
+    /// become one note, a step a shadow broke one step. Undo takes it back.
+    func combine(_ ids: [Int]) {
+        guard canCombine(ids) else { return }
+        checkpoint()
+        let chosen = ids.compactMap(region).sorted { $0.id < $1.id }
+        let first = chosen[0]
+        let joined = PageRegionText.combined(chosen.map { (PageRect(x: $0.rect.minX, y: $0.rect.minY, width: $0.rect.width, height: $0.rect.height), $0.lines) })
+        for region in chosen { removeEverywhere(region.id) }
+        let combined = ReviewRegion(
+            id: first.id, page: first.page, kind: first.kind, role: first.role,
+            rect: CGRect(x: joined.rect.minX, y: joined.rect.minY, width: joined.rect.width, height: joined.rect.height),
+            lines: joined.lines, confidence: chosen.map(\.confidence).reduce(0, +) / Double(chosen.count),
+            recipe: first.recipe ?? chosen.first { $0.recipe != nil }?.recipe
+        )
+        let others = Set(chosen.dropFirst().map(\.id))
+        regions.removeAll { others.contains($0.id) }
+        if let index = regions.firstIndex(where: { $0.id == first.id }) { regions[index] = combined }
+        if let role = first.role, [.title, .yield, .ingredient, .ingredientGroup, .step, .headnote, .note].contains(role) {
+            if let recipe = combined.recipe, recipes.indices.contains(recipe) { current = recipe }
+            apply(first.id, role: role, step: nil)
+        }
+        selectedRegion = nil
+        lassoed = []
+    }
+
     private func insert(_ item: ReviewItem, into items: inout [ReviewItem]) {
         let position = items.firstIndex { $0.order > item.order } ?? items.count
         items.insert(item, at: position)
