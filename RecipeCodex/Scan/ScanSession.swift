@@ -361,6 +361,9 @@ final class ScanSession: PageCaptureSink {
             let reader = Task { try await Self.readPage(url, index: index, quality: quality, with: pipeline, reporting: continuation) }
             for await stage in stream { apply(stage) }
             let reading = try? await reader.value
+            // Close → Discard while this page was reading empties `captures`; the reader is not a
+            // child task, so it finishes anyway and must not write into what is gone.
+            guard !Task.isCancelled, index < captures.count, captures[index].id == id else { return }
             captures[index].reading = reading
             if let reading, captures[index].mode == .recipe, !captures[index].isDeleted { noteCapture(reading, quality: quality) }
             if index == captures.count - 1 { isReadingCaptures = false }
