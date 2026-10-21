@@ -520,7 +520,7 @@ final class ScanSession: PageCaptureSink {
             // A book with a punchlist: each recipe's entry, and its chapter's course (ux-notes row
             // 73); otherwise the book's last course.
             entryMatch = book.map { book in
-                PunchlistLinking.match(titles: model.recipes.map { $0.title?.text ?? "" }, pages: reading.pageNumbers.compactMap(\.self),
+                PunchlistLinking.match(titles: model.recipes.map { $0.title?.text ?? "" }, pages: PunchlistMatcher.pages(read: reading.pageNumbers),
                                        in: book, current: nil, courses: BookScanStore.shared.courseChoices(for: book), createsMissing: false, context: modelContext)
             }
             for index in model.recipes.indices {

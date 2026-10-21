@@ -182,8 +182,12 @@ final class BookScanSession: PageCaptureSink {
     }
 
     func addCapture(id: Int, at url: URL, mode: CaptureMode, quality: PageQualityReading?, note: String) {
+        addCapture(id: id, at: url, mode: mode, quality: quality, note: note, entry: state.currentEntry)
+    }
+
+    private func addCapture(id: Int, at url: URL, mode: CaptureMode, quality: PageQualityReading?, note: String, entry: UUID?) {
         var capture = BookScanState.StoredCapture(id: id, file: url.lastPathComponent, mode: mode, quality: quality.map(BookScanState.Quality.init), note: note)
-        capture.entry = state.currentEntry
+        capture.entry = entry
         capture.sitting = state.sitting
         state.captures.append(capture)
         save()
@@ -283,7 +287,7 @@ final class BookScanSession: PageCaptureSink {
         let url = captureFolder().appending(path: "capture-\(id + 1).\(pathExtension)")
         guard (try? data.write(to: url)) != nil else { return }
         let number = shownCaptures.count + 1
-        addCapture(id: id, at: url, mode: mode, quality: nil, note: "\(mode == .photo ? "Photo" : "Page") \(number)")
+        addCapture(id: id, at: url, mode: mode, quality: nil, note: "\(mode == .photo ? "Photo" : "Page") \(number)", entry: nil)
     }
 
     // MARK: - The queue
@@ -385,8 +389,10 @@ final class BookScanSession: PageCaptureSink {
         // A first recipe that continues a page nobody captured: nothing to join it to.
         if reading.isContinuation, owner == id { model.recipes[0].isSkipped = true }
         let titles = model.recipes.map { $0.title?.text ?? "" }
-        let pages = reading.pageNumbers.compactMap(\.self)
-        let current = ownerCapture.entry.flatMap { entryID in book.orderedEntries.first { $0.id == entryID } }
+        let pages = PunchlistMatcher.pages(read: reading.pageNumbers)
+        // A camera capture is the item that was current when it was taken; photos chosen in a batch
+        // follow the list as each is read.
+        let current = ownerCapture.entry.flatMap { entryID in book.orderedEntries.first { $0.id == entryID } } ?? currentEntry
         let match = PunchlistLinking.match(titles: titles, pages: pages, in: book, current: current, courses: state.courses, context: context)
 
         var hasRecipes = !(book.recipes ?? []).isEmpty
@@ -447,7 +453,7 @@ final class BookScanSession: PageCaptureSink {
         // The list moves on, unless the cook jumped elsewhere since this page was taken, or the page
         // was one already captured.
         let matched = linked
-        if state.currentEntry == ownerCapture.entry || matched.contains(where: { $0.id == state.currentEntry }) || state.currentEntry == nil {
+        if ownerCapture.entry == nil || state.currentEntry == ownerCapture.entry || matched.contains(where: { $0.id == state.currentEntry }) || state.currentEntry == nil {
             let entries = book.orderedEntries
             let last = matched.compactMap { entries.firstIndex(of: $0) }.max()
             if let last {

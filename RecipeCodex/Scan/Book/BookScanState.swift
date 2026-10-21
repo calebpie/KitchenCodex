@@ -38,7 +38,7 @@ struct BookScanState: Codable {
         /// "Page 3 · Sharp".
         var note: String
         /// The punchlist's current item when it was captured: a page with no page number is that
-        /// entry.
+        /// entry. Nil for photos chosen in a batch, which take the current item as each is read.
         var entry: UUID?
         /// Needs review as the cook set it on the last capture's pane; nil when untouched.
         var flagged: Bool?

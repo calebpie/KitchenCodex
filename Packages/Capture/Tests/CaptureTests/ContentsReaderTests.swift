@@ -264,6 +264,17 @@ struct ContentsReaderTests {
         #expect(PunchlistMatcher.match(titles: ["Quick Pickled Shallots"], pages: [16], entries: Self.entries, current: 0) == [4])
     }
 
+    /// A recipe over two photos whose first page read no number starts the page before the second.
+    @Test func aJoinedReadingCountsItsFirstPageBack() {
+        #expect(PunchlistMatcher.pages(read: [nil, 26]) == [25, 26])
+        #expect(PunchlistMatcher.pages(read: [46]) == [46])
+        #expect(PunchlistMatcher.pages(read: [12, nil]) == [12, 13])
+        #expect(PunchlistMatcher.pages(read: [nil]).isEmpty)
+        // Matched by the page it starts on, a title that agrees beating the second page's entry.
+        let entries: [PunchlistMatcher.Entry] = [.init(title: "Clams with Lemon Butter", page: 25), .init(title: "Mussels in Cider", page: 26)]
+        #expect(PunchlistMatcher.match(titles: ["Clams with Lemon Butter"], pages: PunchlistMatcher.pages(read: [nil, 26]), entries: entries, current: nil) == [0])
+    }
+
     @Test func aCaptureWithNoPageNumberIsTheCurrentItem() {
         #expect(PunchlistMatcher.match(titles: ["Toasted Seed Crunch"], pages: [], entries: Self.entries, current: 5) == [5])
         #expect(PunchlistMatcher.match(titles: [""], pages: [], entries: Self.entries, current: 3) == [3])

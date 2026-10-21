@@ -112,6 +112,14 @@ public enum PunchlistMatcher {
         return result
     }
 
+    /// A reading's page numbers with the gaps filled: a recipe photographed over consecutive pages
+    /// whose first page had no number read is counted back from the one that did ([nil, 26] →
+    /// [25, 26]), so it is matched by the page it starts on. Empty when no page was read.
+    public static func pages(read numbers: [Int?]) -> [Int] {
+        guard let known = numbers.firstIndex(where: { $0 != nil }), let page = numbers[known] else { return [] }
+        return numbers.indices.map { numbers[$0] ?? max(1, page + $0 - known) }
+    }
+
     /// The next entry not yet captured after `index` in the list's order, wrapping to the top; nil
     /// once every entry is captured.
     public static func next(after index: Int?, in entries: [Entry]) -> Int? {
