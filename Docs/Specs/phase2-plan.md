@@ -95,7 +95,7 @@ Each slice follows the Phase 1 pattern: a brief with groups and a verification l
 
 ### Slice 8 — Accuracy, cover selection, PDF import, and the exit
 
-- **Accuracy pass**: the harness's report against the full fixture set; prompt and heuristic iteration until the review step averages under a minute per recipe (04 §2); the image-input second pass if the stall risk shows (04 §6). The pass replays the phone's blocks from the Read Fixtures report in the harness and measures on the phone (04 §5.1 "Device readings"), IMG_1051's split title and misfiled ingredient lines first; a bilingual title's dash when both names stay (row 69). First device timing (Oct 20, ux-notes row 64): about 1.6 s a photo to read on the iPhone 17 Pro, and 15 s to review and fix the hardest page, well under the target.
+- **Accuracy pass**: the harness's report against the full fixture set; prompt and heuristic iteration until the review step averages under a minute per recipe (04 §2); the image-input second pass if the stall risk shows (04 §6). The pass replays the phone's blocks from the Read Fixtures report in the harness and measures on the phone (04 §5.1 "Device readings"), IMG_1051's split title and misfiled ingredient lines first; a bilingual title's dash when both names stay (row 69). First device timing (Oct 20, ux-notes row 64): about 1.6 s a photo to read on the iPhone 17 Pro, and 15 s to review and fix the hardest page, well under the target. *The phone's Read Fixtures report (Oct 20, build 75ec6ce, all 69 photos at full size; ux-notes row 63): 55 of the 62 single pages read as the Mac reads them; the 7 that differ, the 7 spread photos read alone, Nobu's note paragraphs (row 88) and a step split by a shadow are the pass's first cases.*
 - **Cover selection** (`CalculateImageAestheticScoresRequest` over a recipe's images) and **PDF and photo-library import** through the same pipeline.
 - **Exit**: the exit book captured end to end on the device by Caleb; the notes end with the Phase 2 exit checklist.
 
@@ -104,6 +104,7 @@ Each slice follows the Phase 1 pattern: a brief with groups and a verification l
 - Review time per recipe on the fixture set (target under a minute; the 04 §6 trigger is over two minutes after iteration).
 - Share of fixture pages that read without forced review once a layout is confirmed.
 - Ingredient lines parsed to quantity and item on scanned pages, against the web pages' rate.
+- Seconds a photo on the phone at full size (Oct 20, iPhone 17 Pro: median 1.60 s, one 29 s outlier on a contents page) and the share of fixture pages the phone reads as the Mac does (Oct 20: 55 of 62 single pages).
 
 ## Out of scope for Phase 2
 

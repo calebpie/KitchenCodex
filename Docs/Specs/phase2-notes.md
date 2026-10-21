@@ -277,6 +277,27 @@ On the iPhone 17 Pro (and the iPad where it says so), with this build:
 13. **Profile → About**: the build reads the installed commit; the sync row reads "iCloud sync on · last change …" on a signed-in phone, and Recipes shows no flag.
 14. **Read Fixtures** (Profile → Developer): Read Fixtures from Photos…, open the "Recipe Codex Fixtures" album, select every photo, Add; when it says "report saved", Share the Report to the Mac and put both files in `Docs/Fixtures/Private/Review/` (gitignored; the JSON holds page text).
 
+### Caleb's device check (Oct 20, build 75ec6ce, iPhone 17 Pro and iPad Pro)
+
+The crash on the first frame (above) came first; with it fixed, the checklist:
+
+1. **Scan Page opens the camera** at once; From Photo and Files appear only after Close. Works; the choice is row 79's.
+2. **The outline** follows the page; on a two-page spread it sometimes takes both pages (row 80).
+3. **The pill** reads Sharp held still, Hold still when shaken, Clean the lens through a uniform haze; a finger over part of the lens that blurs half the text still reads Sharp (row 77 closed, row 81).
+4. **Shutter, Add Next Page and the stack's count** work, with the note after each capture; Add Next Page's wait for a still page is slower than the shutter (fine). The sticky Photo mode caught a recipe page as a photo (row 82); tapping the stack does nothing (row 83).
+5. **Auto-Capture** works; it was hard to find beside the flash in one pill (row 84).
+6. **Flash** fires; on glossy pages its glare hides text (row 85).
+7. **Photo mode** saves the plate as the cover, uncropped (row 86).
+8. **Barcode first** names the book with the chip.
+9. **Done** leads to the processing sheet, Which book?, review and saving as before.
+10. **iPad**: the camera beside the last capture's text, which left out the recipe's end note (row 87).
+11. **The lens prompt** never came after four hazy captures that still read well (row 57's rule; row 91).
+12. **Add Cookbook** opens the live scanner; with camera access off, Add Cookbook and Scan Page say so with Open Settings. Add Cookbook is missing from the Recipes view's Add menu (row 90).
+13. **Profile** reads the installed build; iCloud sync on, no flag.
+14. **Read Fixtures**: no "Recipe Codex Fixtures" album (row 75), so all 69 fixture photos were picked; the report is filed under `Docs/Fixtures/Private/Review/` (gitignored) and summarised in row 63: median 1.60 s a photo at full size, 55 of 62 single pages read as the Mac reads them, 7 differ, the 7 spread photos not comparable.
+
+Also: Nobu's end notes split into three regions and lose content, and review can't combine regions (row 88); the shutter sat off centre before the first capture (fixed, `a9d3bc7`, row 89).
+
 ### Left for Phase 2
 
 - **From this slice:** rows 75–79 once decided; Caleb's device check above, with the Read Fixtures report shared to the Mac for slice 8; the cleanup's effect on real captures (slice 8's accuracy pass, with IMG_1068).
