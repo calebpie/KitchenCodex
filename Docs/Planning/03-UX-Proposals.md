@@ -67,6 +67,8 @@ Each entry gives purpose, layout on both devices, key interactions, states, and 
 
 **HIG notes.** One prominent action (Cook). Large title collapses on scroll; the top edge uses the hard scroll-edge style so step text does not ghost under the title bar (04 §5.1 "Floating headers"). Highlighted times and temperatures are buttons, not just color: tap shows the original wording (04 §5.1 "Step pills"). A time pill covers the number and unit only; qualifying words such as "up to" or "at least" stay as text beside it (decided Oct 19, 2026, ux-notes row 29).
 
+**Ingredient rows (decided Oct 21, 2026, ux-notes row 99).** Plain text with the quantity bold: no check bubbles on the detail and no Clear Checks in More. Gathering and "do I have it" belong to the shopping list and to cook mode's prep, not to the reading surface.
+
 **Disclosures (decided Oct 21, 2026, ux-notes row 97).** Headnote and Versions are compact disclosures: the chevron sits beside the label and the pair is the control, at every width, so the wide iPad detail never puts a chevron a screen from its label.
 
 ### 3.4 Add menu and import preview
