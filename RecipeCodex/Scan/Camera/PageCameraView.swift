@@ -200,13 +200,15 @@ struct PageCameraView: View {
             .frame(width: 200)
             .accessibilityHint("Recipe pages are read; a photo goes with the recipe as a cover.")
 
+            // Fixed slots either side keep the shutter centred before the first page, when Add
+            // Next Page isn't there yet.
             HStack {
                 CaptureStack(thumbnails: camera.thumbnails)
                     .frame(width: 88, alignment: .leading)
                 Spacer()
                 shutter
                 Spacer()
-                addNextPage
+                ZStack(alignment: .trailing) { addNextPage }
                     .frame(width: 88, alignment: .trailing)
             }
         }
