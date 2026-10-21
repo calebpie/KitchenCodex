@@ -1,4 +1,4 @@
-# Recipe Codex — User Flows, App Layout and Architecture
+# Kitchen Codex — User Flows, App Layout and Architecture
 
 *Oct 17, 2026. This document describes how the app is organized, how the core flows move through it, and how it talks to Apple's systems and outside services. Screen-level design is in [03-UX-Proposals](03-UX-Proposals.md) and [wireframes.html](wireframes.html).*
 
@@ -46,7 +46,7 @@ Each flow lists the steps, the system pieces involved, and where the user can ba
 
 ### Flow A — Import from the share sheet
 
-1. In Safari or NYT Cooking, tap Share → Recipe Codex.
+1. In Safari or NYT Cooking, tap Share → Kitchen Codex.
 2. The Share Extension shows a compact preview: title, image, source, "Save" and "Open in app."
 3. Behind the preview: parse JSON-LD (instant). If none, render and extract with the on-device model (2 to 6 seconds, with specific progress text per the HIG Generative AI guidance: "Reading ingredients…").
 4. Save writes to the shared App Group store; the main app picks up the change through `HistoryObserver` and syncs via CloudKit.

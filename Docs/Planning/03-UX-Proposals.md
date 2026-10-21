@@ -1,4 +1,4 @@
-# Recipe Codex — UX Proposals for iPhone and iPad
+# Kitchen Codex — UX Proposals for iPhone and iPad
 
 *Oct 17, 2026. Screen-level proposals for the core pages and flows, written against the Human Interface Guidelines as updated through October 13, 2026 (Liquid Glass, iOS/iPadOS 27 tab bar and search conventions, Snippets, Generative AI, Live Activities). Rendered low-fidelity wireframes are in [wireframes.html](wireframes.html); open it in a browser or on the iPad.*
 
@@ -12,7 +12,7 @@
 
 ## 2. System conventions adopted
 
-| Element | HIG guidance | How Recipe Codex uses it |
+| Element | HIG guidance | How Kitchen Codex uses it |
 |---|---|---|
 | Tab bar (iPhone) | Few tabs; search as a trailing search tab; floats on Liquid Glass; can minimize on scroll with an accessory | Recipes, Pantry, Plan, Cook + Search tab, in the order the work happens. Minimizes on scroll only when the Now Cooking accessory is present. |
 | Tab bar (iPad) | Top of screen; optionally converts to a sidebar; let people customize tabs | `.sidebarAdaptable`: the tabs at the top of the system sidebar with each tab's sections below them, collapsible into the floating bar (04 §5.1 "iPad tabs", Oct 19, 2026); collections listed, not pinned (04 §5.1 "Collections"); no customization beyond the system's. |

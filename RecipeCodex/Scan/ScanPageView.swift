@@ -137,7 +137,7 @@ struct ScanPageView: View {
                 } footer: {
                     if isCameraDenied {
                         VStack(alignment: .leading, spacing: 6) {
-                            Text("Camera access is off for Recipe Codex. Turn it on in Settings to scan with the camera.")
+                            Text("Camera access is off for Kitchen Codex. Turn it on in Settings to scan with the camera.")
                             Button("Open Settings") { CameraAccess.openSettings() }
                         }
                     }

@@ -132,7 +132,7 @@ struct SearchView: View {
             if recents.isEmpty {
                 Scrolling {
                     ContentUnavailableView {
-                        Label("Search Recipe Codex", systemImage: "magnifyingglass")
+                        Label("Search Kitchen Codex", systemImage: "magnifyingglass")
                     } description: {
                         Text("Recipes, cookbooks, events, ingredients and what is in your pantry.")
                     }

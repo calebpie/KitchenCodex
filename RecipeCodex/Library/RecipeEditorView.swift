@@ -117,7 +117,7 @@ struct RecipeEditorView: View {
                                 }
                             }
                         } footer: {
-                            Text("Add the times you cooked it before Recipe Codex, with a date and a rating.")
+                            Text("Add the times you cooked it before Kitchen Codex, with a date and a rating.")
                         }
                     }
 

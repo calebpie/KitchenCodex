@@ -7,7 +7,7 @@ import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 
-/// Entry point for "Share → Recipe Codex" (Flow A). Reads the shared page (Safari hands over the
+/// Entry point for "Share → Kitchen Codex" (Flow A). Reads the shared page (Safari hands over the
 /// rendered DOM through GetPageSource.js; other apps share a link, which is fetched), imports it
 /// with the same importer as the app, shows a compact preview, and saves into the App Group store.
 final class ShareViewController: UIViewController {

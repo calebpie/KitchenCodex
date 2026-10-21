@@ -1,4 +1,4 @@
-# Recipe Codex — Feasibility Assessment
+# Kitchen Codex — Feasibility Assessment
 
 *Oct 17, 2026. Target platforms: iOS 27 and iPadOS 27 on iPhone 17 Pro and 13-inch iPad Pro; macOS 27 later. Your Mac already has Xcode 27.0 (27A266a) and the iOS 27.0 simulator runtime, so there is no toolchain gap.*
 

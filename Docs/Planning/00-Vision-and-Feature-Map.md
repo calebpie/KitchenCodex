@@ -2,7 +2,7 @@
 
 *Prepared Oct 17, 2026 from `Docs/Input/InitialProposal.md`, Apple's developer and design documentation as of iOS 27 / Xcode 27, and a survey of the recipe-app market. Companion documents: [01-Feasibility](01-Feasibility.md), [02-Flows-and-Architecture](02-Flows-and-Architecture.md), [03-UX-Proposals](03-UX-Proposals.md), [04-Execution-Plan](04-Execution-Plan.md), and the rendered wireframes in [wireframes.html](wireframes.html).*
 
-*Named **Kitchen Codex** on Oct 21, 2026 (04 §5.1 "Name"); it was Recipe Codex until then, and the rest of these documents say so until the rename lands (`Docs/Specs/rename-plan.md`).*
+*Named **Kitchen Codex** on Oct 21, 2026 (04 §5.1 "Name"), Recipe Codex until then; the rename landed the same day (`Docs/Specs/rename-plan.md`).*
 
 ## 1. The one-sentence pitch
 
@@ -12,7 +12,7 @@ Kitchen Codex is a personal kitchen system for a serious home cook who hosts: it
 
 Every recipe manager on the market stops at "store, scale, shop, show one recipe at a time." Paprika, Mela and Crouton all do that well. None of them understands a *menu* as a unit of work, and none of them plans *time*. The dinner-party timing apps that do exist (CookingTimer, Dinner Ninja, MultiCook Timer+) are dumb countdown stackers with no recipe knowledge.
 
-Recipe Codex's wedge is the gap between those two categories:
+Kitchen Codex's wedge is the gap between those two categories:
 
 1. **Whole-cookbook capture.** Scan an ISBN, scan the index, then photograph pages; the app builds the book's table of contents and tracks which recipes are captured. Mela and Crouton scan a page; nobody owns the book.
 2. **Menu as the unit.** Events, guests, dietary needs, course slots with candidates, sub-recipe auto-inclusion, balance checks, and scaling across the whole menu.
@@ -87,7 +87,7 @@ Legend for *Source*: **P** = in your proposal, **M** = market parity (competitor
 | Book detail: by section or index, completeness callouts | P | 2 | |
 | Keyword search in a single place (search tab) | P | 1 | HIG: search as a dedicated tab on iPhone. |
 | Natural-language search over cook history ("that veg dish I made in Seattle") | P | 6 | Model turns the phrase into a structured query; semantic ranking. |
-| Spotlight and Siri indexing of recipes (`IndexedEntity`) | N | 6 | "Show my braises in Recipe Codex." |
+| Spotlight and Siri indexing of recipes (`IndexedEntity`) | N | 6 | "Show my braises in Kitchen Codex." |
 | Collections (manual) and Smart Collections (saved filters) | M | 1 | Cheap and heavily used in every competitor. |
 | Favorites, recently viewed, recently cooked | M | 1 | |
 

@@ -11,7 +11,7 @@ import UniformTypeIdentifiers
 /// device (full size on a phone, the 4,096-pixel copy in the Simulator; deterministic, no model) and
 /// writes a report to the app's Documents: a JSON file of Capture's `DeviceReadingReport` records,
 /// which slice 8's harness replays on the Mac, and a Markdown summary of counts only. The photos
-/// come from the Photos picker (open the "Recipe Codex Fixtures" album there and select them all)
+/// come from the Photos picker (open the "Kitchen Codex Fixtures" album there and select them all)
 /// or a folder in Files; the report is shared to the Mac from here. It holds page text, so it stays
 /// on the device and in `Docs/Fixtures/Private`, never the repository.
 struct DeveloperSection: View {
@@ -71,7 +71,7 @@ struct DeveloperSection: View {
 @MainActor
 @Observable
 final class ReadFixturesRun {
-    static let albumName = "Recipe Codex Fixtures"
+    static let albumName = "Kitchen Codex Fixtures"
 
     private(set) var isRunning = false
     private(set) var done = 0

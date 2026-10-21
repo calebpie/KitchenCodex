@@ -213,7 +213,7 @@ extension SyncMonitor.State {
     var explanation: String {
         switch self {
         case .checking:
-            "Recipe Codex is checking with iCloud."
+            "Kitchen Codex is checking with iCloud."
         case .on:
             "Your library syncs through iCloud with your other devices signed in to the same Apple Account."
         case .waiting:
@@ -221,17 +221,17 @@ extension SyncMonitor.State {
         case .signedOut:
             "This device isn't signed in to iCloud, so recipes you add here stay here. Sign in to iCloud in Settings to sync your library."
         case .accountUnavailable:
-            "iCloud isn't available to Recipe Codex on this device just now (it may be restricted, or still starting). Changes stay on this device until it is."
+            "iCloud isn't available to Kitchen Codex on this device just now (it may be restricted, or still starting). Changes stay on this device until it is."
         case .containerUnavailable:
-            "iCloud turned down Recipe Codex's container, so nothing syncs. Changes stay on this device."
+            "iCloud turned down Kitchen Codex's container, so nothing syncs. Changes stay on this device."
         case .storageFull:
             "Your iCloud storage is full, so changes stay on this device until there's room."
         case .failing:
-            "The last sync with iCloud failed. Recipe Codex tries again on its own; changes stay on this device until one succeeds."
+            "The last sync with iCloud failed. Kitchen Codex tries again on its own; changes stay on this device until one succeeds."
         case .localStore:
-            "Recipe Codex couldn't open its iCloud store, so it's keeping your library in a store on this device only. Recipes added here don't reach your other devices, and theirs don't arrive here."
+            "Kitchen Codex couldn't open its iCloud store, so it's keeping your library in a store on this device only. Recipes added here don't reach your other devices, and theirs don't arrive here."
         case .inMemory:
-            "Recipe Codex couldn't open a store at all, so the library lives in memory and is lost when the app quits."
+            "Kitchen Codex couldn't open a store at all, so the library lives in memory and is lost when the app quits."
         }
     }
 

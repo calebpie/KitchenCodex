@@ -1,6 +1,6 @@
 import Foundation
 
-/// A recipe app whose export Recipe Codex reads.
+/// A recipe app whose export Kitchen Codex reads.
 public enum LibraryFormat: String, Sendable, CaseIterable {
     /// `.paprikarecipes`: a ZIP of gzipped JSON files, one per recipe (`.paprikarecipe`).
     case paprika
@@ -135,7 +135,7 @@ public struct LibraryArchive: Sendable {
 
 /// Paprika's recipe JSON (one per `.paprikarecipe`, gzipped).
 ///
-/// | Paprika | Recipe Codex |
+/// | Paprika | Kitchen Codex |
 /// |---|---|
 /// | `name` | title |
 /// | `ingredients` (lines; "For the sauce:" lines are headings) | ingredients and groups |
@@ -186,7 +186,7 @@ public enum PaprikaImporter {
 
 /// Mela's recipe JSON (`.melarecipe`).
 ///
-/// | Mela | Recipe Codex |
+/// | Mela | Kitchen Codex |
 /// |---|---|
 /// | `title` | title |
 /// | `ingredients` (lines; "# Dough" lines are headings) | ingredients and groups |

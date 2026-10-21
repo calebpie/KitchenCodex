@@ -266,7 +266,7 @@ private struct CaptureIntake: View {
             VStack(spacing: 20) {
                 if isCameraDenied {
                     VStack(spacing: 8) {
-                        Text("Camera access is off for Recipe Codex. Turn it on in Settings to scan with the camera, or choose photos of the pages.")
+                        Text("Camera access is off for Kitchen Codex. Turn it on in Settings to scan with the camera, or choose photos of the pages.")
                             .multilineTextAlignment(.center)
                         Button("Open Settings") { CameraAccess.openSettings() }
                     }

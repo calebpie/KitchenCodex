@@ -8,8 +8,8 @@ public enum ArchiveError: Error, Equatable, LocalizedError {
 
     public var errorDescription: String? {
         switch self {
-        case .notAnArchive: "That file isn't an archive Recipe Codex can open."
-        case let .unsupported(detail): "That archive uses a format Recipe Codex can't read (\(detail))."
+        case .notAnArchive: "That file isn't an archive Kitchen Codex can open."
+        case let .unsupported(detail): "That archive uses a format Kitchen Codex can't read (\(detail))."
         case let .damaged(name): "Part of the archive is damaged (\(name))."
         }
     }

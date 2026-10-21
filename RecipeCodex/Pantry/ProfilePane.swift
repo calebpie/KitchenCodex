@@ -93,7 +93,7 @@ private struct ProfileForm: View {
             }
 
             Section {
-                ShareLink(item: LibraryExport(recipes: recipes.map(ExportRecipe.init(recipe:))), preview: SharePreview("Recipe Codex Library", icon: Image(systemName: "books.vertical"))) {
+                ShareLink(item: LibraryExport(recipes: recipes.map(ExportRecipe.init(recipe:))), preview: SharePreview("Kitchen Codex Library", icon: Image(systemName: "books.vertical"))) {
                     Label("Export Library", systemImage: "square.and.arrow.up")
                 }
                 .disabled(recipes.isEmpty)
@@ -115,7 +115,7 @@ private struct ProfileForm: View {
 }
 
 /// Profile → Export Library: one Markdown file per recipe (`RecipeExporter`), zipped into
-/// "Recipe Codex Library.zip" when the share sheet asks for it. The zip comes from
+/// "Kitchen Codex Library.zip" when the share sheet asks for it. The zip comes from
 /// `NSFileCoordinator`'s `.forUploading` reading of a folder, which archives it with no code of ours.
 struct LibraryExport: Transferable {
     let recipes: [ExportRecipe]
@@ -124,7 +124,7 @@ struct LibraryExport: Transferable {
         FileRepresentation(exportedContentType: .zip) { export in
             SentTransferredFile(try export.archive())
         }
-        .suggestedFileName("Recipe Codex Library.zip")
+        .suggestedFileName("Kitchen Codex Library.zip")
     }
 
     /// Writes the files into a fresh folder and returns the zip of it, in the temporary directory.
@@ -132,7 +132,7 @@ struct LibraryExport: Transferable {
     nonisolated func archive() throws -> URL {
         let fileManager = FileManager.default
         let work = fileManager.temporaryDirectory.appending(path: "LibraryExport-\(UUID().uuidString)", directoryHint: .isDirectory)
-        let folder = work.appending(path: "Recipe Codex Library", directoryHint: .isDirectory)
+        let folder = work.appending(path: "Kitchen Codex Library", directoryHint: .isDirectory)
         try fileManager.createDirectory(at: folder, withIntermediateDirectories: true)
         for (name, recipe) in zip(Self.fileNames(for: recipes), recipes) {
             try Data(RecipeExporter.markdown(recipe).utf8).write(to: folder.appending(path: name))
@@ -143,7 +143,7 @@ struct LibraryExport: Transferable {
         var copyError: Error?
         NSFileCoordinator().coordinate(readingItemAt: folder, options: .forUploading, error: &coordinatorError) { temporaryZip in
             // The coordinator removes its zip when this block returns, so keep a copy.
-            let destination = work.appending(path: "Recipe Codex Library.zip")
+            let destination = work.appending(path: "Kitchen Codex Library.zip")
             do {
                 try fileManager.copyItem(at: temporaryZip, to: destination)
                 zipped = destination

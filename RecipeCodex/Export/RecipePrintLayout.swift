@@ -65,7 +65,7 @@ enum RecipePDFRenderer {
         guard let consumer = CGDataConsumer(data: data as CFMutableData),
               let context = CGContext(consumer: consumer, mediaBox: &mediaBox, [
                   kCGPDFContextTitle: recipe.title,
-                  kCGPDFContextCreator: "Recipe Codex",
+                  kCGPDFContextCreator: "Kitchen Codex",
               ] as CFDictionary) else { return Data() }
 
         for (index, page) in pages.enumerated() {

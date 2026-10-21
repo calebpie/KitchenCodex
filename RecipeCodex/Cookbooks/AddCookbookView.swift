@@ -154,10 +154,10 @@ struct AddCookbookView: View {
             } footer: {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(ISBNScanner.isSupported
-                         ? "Scan the barcode on the back cover, or choose a photo of it. Recipe Codex reads the ISBN under it and finds the book."
-                         : "A photo of the barcode on the back cover. Recipe Codex reads the ISBN under it and finds the book.")
+                         ? "Scan the barcode on the back cover, or choose a photo of it. Kitchen Codex reads the ISBN under it and finds the book."
+                         : "A photo of the barcode on the back cover. Kitchen Codex reads the ISBN under it and finds the book.")
                     if isCameraDenied {
-                        Text("Camera access is off for Recipe Codex. Turn it on in Settings to scan, or choose a photo.")
+                        Text("Camera access is off for Kitchen Codex. Turn it on in Settings to scan, or choose a photo.")
                         Button("Open Settings") { CameraAccess.openSettings() }
                     }
                 }

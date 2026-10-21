@@ -552,7 +552,7 @@
 				DEVELOPMENT_ASSET_PATHS = "\"RecipeCodex/Preview Content\"";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "Recipe Codex";
+				INFOPLIST_KEY_CFBundleDisplayName = "Kitchen Codex";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Recipe Codex uses the camera to scan cookbook pages and ISBN barcodes.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIBackgroundModes = "remote-notification";
@@ -585,7 +585,7 @@
 				DEVELOPMENT_ASSET_PATHS = "\"RecipeCodex/Preview Content\"";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "Recipe Codex";
+				INFOPLIST_KEY_CFBundleDisplayName = "Kitchen Codex";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Recipe Codex uses the camera to scan cookbook pages and ISBN barcodes.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIBackgroundModes = "remote-notification";
@@ -615,7 +615,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = RecipeCodexShare/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Recipe Codex";
+				INFOPLIST_KEY_CFBundleDisplayName = "Kitchen Codex";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -640,7 +640,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = RecipeCodexShare/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Recipe Codex";
+				INFOPLIST_KEY_CFBundleDisplayName = "Kitchen Codex";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -665,7 +665,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = RecipeCodexWidgets/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Recipe Codex";
+				INFOPLIST_KEY_CFBundleDisplayName = "Kitchen Codex";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -689,7 +689,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = RecipeCodexWidgets/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Recipe Codex";
+				INFOPLIST_KEY_CFBundleDisplayName = "Kitchen Codex";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

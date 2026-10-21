@@ -16,7 +16,7 @@ public enum WebImportError: Error, Equatable, LocalizedError {
         case let .network(message):
             "Couldn't reach the page. \(message)"
         case let .httpStatus(code) where code == 401 || code == 403:
-            "The site wouldn't let Recipe Codex read the page (error \(code))."
+            "The site wouldn't let Kitchen Codex read the page (error \(code))."
         case let .httpStatus(code) where code == 404:
             "The page wasn't found (error 404)."
         case let .httpStatus(code):

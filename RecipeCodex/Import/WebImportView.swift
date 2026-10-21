@@ -5,7 +5,7 @@ import RecipeModel
 import SwiftData
 import SwiftUI
 
-/// Recipes → Add → Import from Web: paste a link, Recipe Codex fetches the page as Safari would, reads
+/// Recipes → Add → Import from Web: paste a link, Kitchen Codex fetches the page as Safari would, reads
 /// the recipe with the same importer as the Share Extension, and shows the import preview (03 §3.4)
 /// for a check before saving through the manual-entry path. A page whose fetched HTML holds no recipe
 /// is rendered in a hidden web view and read again (`RenderedPageLoader`).
@@ -125,7 +125,7 @@ struct WebImportView: View {
                     start()
                 }
             } footer: {
-                Text("Paste a link to a recipe page. Recipe Codex reads the page the way Safari shows it and finds the recipe on it.")
+                Text("Paste a link to a recipe page. Kitchen Codex reads the page the way Safari shows it and finds the recipe on it.")
             }
         }
         .onAppear { addressFocused = true }
