@@ -121,6 +121,9 @@ struct ComponentSplitTests {
         #expect(ComponentSplit.plan(title: "Soup", ingredientGroups: Self.groups([("For the soup", 4)]), steps: ["Chop.", "Simmer."]) == nil)
         // Groups no step names or starts.
         #expect(ComponentSplit.plan(title: "Cake", ingredientGroups: Self.groups([("Dry", 3), ("Wet", 3)]), steps: ["Heat the oven.", "Mix it all and bake."]) == nil)
+        // One group that would run to the end, leaving the parent its lines and no steps.
+        #expect(ComponentSplit.plan(title: "Chilled Pea Soup", ingredientGroups: Self.groups([("Soup base", 3), (nil, 4)]),
+                                    steps: ["First make the soup base.", "Strain it.", "Add the peas.", "Serve cold."]) == nil)
         // Only serving groups line up.
         #expect(ComponentSplit.plan(title: "Tacos", ingredientGroups: Self.groups([(nil, 4), ("To serve", 3)]), steps: ["Cook the filling.", "To serve: Warm the tortillas."]) == nil)
     }

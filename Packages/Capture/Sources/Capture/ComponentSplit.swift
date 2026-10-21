@@ -134,6 +134,11 @@ public enum ComponentSplit {
             parts[main].isComponent = false
         }
         guard parts.contains(where: \.isComponent) else { return nil }
+        // One component that would take every step, leaving the parent lines and no method, is a
+        // group that runs to the end because nothing after it says where it stops.
+        let components = parts.indices.filter { parts[$0].isComponent }
+        let kept = Plan(parts: parts, ingredientCount: ingredientGroups.count, stepCount: steps.count).parent(choosing: Set(components))
+        if components.count == 1, kept.steps.isEmpty, !kept.ingredients.isEmpty { return nil }
         return Plan(parts: parts, ingredientCount: ingredientGroups.count, stepCount: steps.count)
     }
 
