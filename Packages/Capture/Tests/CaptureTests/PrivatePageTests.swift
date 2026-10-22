@@ -118,7 +118,9 @@ struct PrivatePageTests {
                     }
                     if let expected = entry.contents {
                         let contents = ContentsReader.read(single)
-                        let counts = PageFixtures.ContentsCounts(sections: contents.sections.count, entries: contents.entries.count, paged: contents.pagedEntryCount)
+                        // An index page's entries are the book's index, apart from its chapters.
+                        let listed = entry.kind == "index" ? contents.index : contents.entries
+                        let counts = PageFixtures.ContentsCounts(sections: contents.sections.count, entries: listed.count, paged: listed.count { $0.page != nil })
                         #expect(counts == expected, "\(entry.testDescription): contents read \(counts.sections)/\(counts.entries)/\(counts.paged) (sections/entries/paged), manifest \(expected.sections)/\(expected.entries)/\(expected.paged) \(hint)")
                     }
                 case "bad-capture":

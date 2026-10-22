@@ -67,6 +67,13 @@ public struct PagePipeline: Sendable {
         return try await readPage(image, file: url.lastPathComponent, page: page, of: count, quality: quality, progress: progress).reading
     }
 
+    /// A photo chosen as a contents page (Build the Recipe List): read as `readPage` reads it, with
+    /// the page's outline found whatever kind the structurer made of it, for `ContentsReader`.
+    public func readContentsPage(contentsOf url: URL) async throws -> PageReading {
+        let image = try PageImage.load(contentsOf: url, maxPixelSize: reader.maxPixelSize)
+        return try await readPage(image, file: url.lastPathComponent, page: 0, of: 1, quality: nil, progress: nil, findsOutline: true).reading
+    }
+
     /// What one photo gave at each step, for Read Fixtures' report (04 §5.1 "Device readings"): the
     /// reader's scan, the margin lines read again when no folio was found, and the reading.
     public struct PageRead: Sendable {
@@ -82,7 +89,7 @@ public struct PagePipeline: Sendable {
         return try await readPage(image, file: url.lastPathComponent, page: 0, of: 1, quality: nil, progress: nil)
     }
 
-    func readPage(_ image: CGImage, file: String, page: Int, of count: Int, quality known: PageQualityReading?, progress: Progress?) async throws -> PageRead {
+    func readPage(_ image: CGImage, file: String, page: Int, of count: Int, quality known: PageQualityReading?, progress: Progress?, findsOutline: Bool = false) async throws -> PageRead {
         let clock = ContinuousClock()
         let start = clock.now
         progress?(.checking(page: page, of: count))
@@ -99,6 +106,9 @@ public struct PagePipeline: Sendable {
             let margins = await reader.marginLines(of: image, paper: scan.paper)
             marginLines = margins
             if let number = PageStructurer.folioNumber(in: margins) { reading.pageNumbers = [number] }
+        }
+        if findsOutline || reading.kind == .contents || reading.kind == .index {
+            reading.outline = await PageCleanup.detectOutline(in: image, quarterTurns: scan.quarterTurns)
         }
         reading.durations = [clock.now - start]
         progress?(.read(page: page, of: count, kind: reading.kind, recipes: reading.recipes.count,

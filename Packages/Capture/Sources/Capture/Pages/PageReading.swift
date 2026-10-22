@@ -279,6 +279,9 @@ public struct PageReading: Sendable {
     /// What a page of reference reading holds (`ReferenceReader`), for a page of kind `.prose`
     /// that reads as a glossary, a chapter opener or a technique; nil otherwise.
     public var reference: ImportedReference?
+    /// The page's outline in the frame the blocks are in, found for a contents or index page so
+    /// its reader can drop what lies beside the book (ux-notes row 119); nil otherwise.
+    public var outline: PageQuad?
 
     public init(files: [String], blocks: [PageBlock], kind: PageKind, reason: String? = nil, recipes: [PageRecipe] = [], pageNumbers: [Int?] = [], quality: [PageQualityReading?] = [], ocrConfidence: Double = 0, isContinuation: Bool = false, durations: [Duration] = []) {
         self.files = files

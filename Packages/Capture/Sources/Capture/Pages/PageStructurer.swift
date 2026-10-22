@@ -381,7 +381,14 @@ extension Page {
         let lowerText = lines.joined(separator: "\n").lowercased()
         let commaLists = lines.count { $0.range(of: #",\s*\d{1,3}(\s*[,–-]\s*\d{1,3})+\s*$"#, options: .regularExpression) != nil }
         let topLines = content.sorted { blocks[$0].rect.minY < blocks[$1].rect.minY }.prefix(3).map { blocks[$0].text.lowercased().trimmingCharacters(in: .whitespaces) }
-        if topLines.contains("index") || commaLists >= 6 {
+        // An index prints a comma before each page ("bouchons, 284"), and often "Index" in its
+        // running head or foot ("INDEX – 333"), which the structurer may have set aside as furniture.
+        let commaPages = lines.count { $0.range(of: #"[\p{L}\)],\s*\d{1,3}(\s*[–-]\s*\d{1,3})?$"#, options: .regularExpression) != nil }
+        let byHeight = textIndices.sorted { blocks[$0].rect.minY < blocks[$1].rect.minY }
+        let runningIndex = [byHeight.first, byHeight.last].compactMap(\.self).contains { index in
+            blocks[index].text.lowercased().range(of: #"^\s*index\b[^a-z0-9]*\d{1,3}\s*$|^\s*\d{1,3}[^a-z0-9]*\bindex\s*$"#, options: .regularExpression) != nil
+        }
+        if topLines.contains("index") || commaLists >= 6 || runningIndex && commaPages >= 4 || commaPages >= 8 && commaPages * 2 >= entries {
             if entries + commaLists >= 8 { return (.index, "an index page: \(entries + commaLists) entries with page numbers") }
         }
         if entries >= 8, Double(entries) >= Double(lines.count) * 0.35, strong < 4 || Double(entries) > Double(strong) * 2 {

@@ -62,6 +62,19 @@ public struct PageQuad: Sendable, Equatable, Hashable, Codable {
         zip(corners, other.corners).map { hypot($0.x - $1.x, $0.y - $1.y) }.max() ?? 0
     }
 
+    /// Whether `point` lies inside the quad (on an edge counts): on the same side of every edge.
+    public func contains(_ point: PagePoint) -> Bool {
+        let points = corners
+        var sign = 0.0
+        for index in points.indices {
+            let a = points[index], b = points[(index + 1) % 4]
+            let cross = (b.x - a.x) * (point.y - a.y) - (b.y - a.y) * (point.x - a.x)
+            if abs(cross) < 1e-9 { continue }
+            if sign == 0 { sign = cross } else if (sign > 0) != (cross > 0) { return false }
+        }
+        return true
+    }
+
     /// Each corner pushed away from the centre by `fraction` of its distance, clamped to the image:
     /// a little room so a folio set close to the edge isn't trimmed.
     public func expanded(by fraction: Double) -> PageQuad {
@@ -97,6 +110,26 @@ public enum PageCleanup {
         return isPlausible(quad, aspect: Double(image.width) / Double(max(1, image.height))) ? quad : nil
     }
 
+    /// The page's outline as Vision finds it in the frame the reader read (`quarterTurns`, as
+    /// `PageScan` has them), with `isPlausible`'s tests but the edge clearance: a contents page's
+    /// reader drops the lines outside it (ux-notes row 119) even where the page runs to the frame's
+    /// edge and the outline is too doubtful to crop to.
+    public static func detectOutline(in image: CGImage, quarterTurns: Int) async -> PageQuad? {
+        let orientation: CGImagePropertyOrientation = switch quarterTurns % 4 {
+        case 1: .left
+        case 2: .down
+        case 3: .right
+        default: .up
+        }
+        guard let observation = try? await DetectDocumentSegmentationRequest().perform(on: image, orientation: orientation) else { return nil }
+        func point(_ normalized: NormalizedPoint) -> PagePoint { PagePoint(x: Double(normalized.x), y: 1 - Double(normalized.y)) }
+        let quad = PageQuad(topLeft: point(observation.topLeft), topRight: point(observation.topRight),
+                            bottomRight: point(observation.bottomRight), bottomLeft: point(observation.bottomLeft))
+        let turned = quarterTurns % 2 == 1
+        let aspect = Double(turned ? image.height : image.width) / Double(max(1, turned ? image.width : image.height))
+        return quad.isConvex && quad.area() >= minimumPageArea && hasPageShape(quad, aspect: aspect) ? quad : nil
+    }
+
     /// Whether `quad` is a page to crop to: convex, a good share of the frame, clear of the frame's
     /// edges (a corner on the edge means the page runs out of the photo, and the edge found is the
     /// frame's), and shaped like a page seen at a modest angle (opposite sides of similar length).
@@ -104,6 +137,12 @@ public enum PageCleanup {
     public static func isPlausible(_ quad: PageQuad, aspect: Double = 3 / 4) -> Bool {
         guard quad.isConvex, quad.area() >= minimumPageArea else { return false }
         guard quad.corners.allSatisfy({ $0.x > edgeClearance && $0.x < 1 - edgeClearance && $0.y > edgeClearance && $0.y < 1 - edgeClearance }) else { return false }
+        return hasPageShape(quad, aspect: aspect)
+    }
+
+    /// Opposite sides of similar length, as a page seen at a modest angle has (`aspect` is the
+    /// frame's width over its height).
+    public static func hasPageShape(_ quad: PageQuad, aspect: Double) -> Bool {
         func length(_ a: PagePoint, _ b: PagePoint) -> Double { hypot((a.x - b.x) * aspect, a.y - b.y) }
         let top = length(quad.topLeft, quad.topRight), bottom = length(quad.bottomLeft, quad.bottomRight)
         let left = length(quad.topLeft, quad.bottomLeft), right = length(quad.topRight, quad.bottomRight)

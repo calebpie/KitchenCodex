@@ -187,17 +187,189 @@ struct ContentsReaderTests {
             Self.line("Lentils: warm salad, 27", x: 0.1, y: 0.22),
             Self.line("Lemon curd, 88–89", x: 0.1, y: 0.24),
         ], kind: .index))
-        #expect(contents.sections.map(\.title) == ["Index"])
-        #expect(contents.entries == [
+        #expect(contents.sections.isEmpty)
+        #expect(contents.index == [
             BookContents.Entry(title: "Leek soup", page: 16),
             BookContents.Entry(title: "Lentils: warm salad", page: 27),
             BookContents.Entry(title: "Lemon curd", page: 88),
         ])
-        // An index fills in only where the contents pages listed no recipes.
+        #expect(!ContentsReader.wantsModel(contents))
+        // The index is the book's Index tab, apart from its chapters (ux-notes row 117): a list of
+        // chapters stays chapters, and the index pages add no entries to it.
         let chapters = BookContents(sections: [BookContents.Section(title: "Soups", page: 10)], isOverview: true)
-        #expect(ContentsReader.combine([chapters], indexPages: [contents]).entries.count == 3)
-        let listed = BookContents(sections: [BookContents.Section(title: "Soups", entries: [BookContents.Entry(title: "Leek Soup", page: 16)])])
-        #expect(ContentsReader.combine([listed], indexPages: [contents]).entries.count == 1)
+        let combined = ContentsReader.combine([chapters], indexPages: [contents, contents])
+        #expect(combined.sections.map(\.title) == ["Soups"])
+        #expect(combined.entries.isEmpty)
+        #expect(combined.index.count == 3)
+    }
+
+    /// A headword ending in a colon heads the indented lines under it; a line that runs over is one
+    /// entry; "see also" and a letter heading are not entries.
+    @Test func readsAnIndexWithHeadwords() {
+        let contents = ContentsReader.read(Self.page([
+            Self.line("chard:", x: 0.10, y: 0.20),
+            Self.line("in spring gratin, 41", x: 0.115, y: 0.215),
+            Self.line("with brown butter and toasted", x: 0.115, y: 0.23),
+            Self.line("hazelnuts, 63–64", x: 0.13, y: 0.245),
+            Self.line("see also greens", x: 0.115, y: 0.26),
+            Self.line("cherry clafoutis, 280", x: 0.10, y: 0.275),
+            Self.line("E", x: 0.10, y: 0.30, size: 0.02),
+            Self.line("eggplant, smoked, 112", x: 0.10, y: 0.33),
+        ], kind: .index))
+        #expect(contents.index == [
+            BookContents.Entry(title: "Chard, in spring gratin", page: 41),
+            BookContents.Entry(title: "Chard, with brown butter and toasted hazelnuts", page: 63),
+            BookContents.Entry(title: "Cherry clafoutis", page: 280),
+            BookContents.Entry(title: "Eggplant, smoked", page: 112),
+        ])
+    }
+
+    // MARK: - Ux-notes rows 118 and 119
+
+    /// Caleb's rule: an entry is complete only when a page number closes it. A title wrapped at a
+    /// plain word, with nothing else to say so, joins the line below; a short entry whose page
+    /// didn't read, a line whose number is there but unread, and (in a sentence-case book) a line
+    /// starting with a capital stay entries of their own.
+    @Test func anEntryRunsOnUntilAPageNumberClosesIt() {
+        let titles: [(String, Double, String?)] = [
+            ("Seared Scallops with Charred Leeks and Smoked", 0.20, nil),
+            ("Butter Sauce", 0.22, "41"),
+            ("Pickled Plums", 0.24, nil),
+            ("Chilled Melon Soup with Shiso and Lime Granita", 0.26, "45"),
+            ("Duck Breast with Sour Cherries and Five-Spice", 0.28, nil),
+            ("Glaze and Crisp Shallots", 0.30, "48"),
+        ]
+        var lines = titles.map { Self.line($0.0, x: 0.12, y: $0.1) }
+        lines += titles.compactMap { title in title.2.map { Self.line($0, x: 0.56, y: title.1) } }
+        lines.insert(Self.line("FIRST COURSES", x: 0.12, y: 0.15, size: 0.018), at: 0)
+        let contents = ContentsReader.read(Self.page(lines))
+        #expect(contents.entries == [
+            BookContents.Entry(title: "Seared Scallops with Charred Leeks and Smoked Butter Sauce", page: 41),
+            BookContents.Entry(title: "Pickled Plums", page: nil),
+            BookContents.Entry(title: "Chilled Melon Soup with Shiso and Lime Granita", page: 45),
+            BookContents.Entry(title: "Duck Breast with Sour Cherries and Five-Spice Glaze and Crisp Shallots", page: 48),
+        ])
+
+        // Sentence case: a capital starts a new entry, though the line above fills the column.
+        let sentence = ContentsReader.read(Self.page([
+            Self.line("Grains", x: 0.12, y: 0.18, size: 0.018),
+            Self.line("Barley risotto with roasted squash and sage", x: 0.12, y: 0.20),
+            Self.line("Farro salad with herbs 12", x: 0.12, y: 0.22),
+            Self.line("Freekeh with charred onions and yogurt 14", x: 0.12, y: 0.24),
+            Self.line("Millet cakes with a quick tomato sauce", x: 0.12, y: 0.26),
+            Self.line("and greens 17", x: 0.12, y: 0.28),
+        ]))
+        #expect(sentence.entries.map(\.title) == ["Barley risotto with roasted squash and sage", "Farro salad with herbs", "Freekeh with charred onions and yogurt", "Millet cakes with a quick tomato sauce and greens"])
+        #expect(sentence.entries.map(\.page) == [nil, 12, 14, 17])
+    }
+
+    /// Columns read in the order their page numbers run, whatever their place across the page; a
+    /// column with no heading continues the section before, within a page as across pages.
+    @Test func columnsFollowThePageNumbers() {
+        let contents = ContentsReader.read(Self.page([
+            // The right column holds the earlier pages (the book turned, the facing page's column).
+            Self.line("SOUPS", x: 0.56, y: 0.15, size: 0.018),
+            Self.line("Leek Soup 12", x: 0.56, y: 0.20),
+            Self.line("Onion Soup 13", x: 0.56, y: 0.22),
+            Self.line("Bean Soup 14", x: 0.56, y: 0.24),
+            Self.line("Corn Chowder 16", x: 0.12, y: 0.20),
+            Self.line("Fish Stew 18", x: 0.12, y: 0.22),
+            Self.line("Pea Soup 19", x: 0.12, y: 0.24),
+        ]))
+        #expect(contents.sections.map(\.title) == ["Soups"])
+        #expect(contents.entries.map(\.page) == [12, 13, 14, 16, 18, 19])
+    }
+
+    /// Text outside the page's outline (a label beside the book) is dropped; a heading just outside
+    /// it that lines up with the page's column stays; a page-less heading over page-less entries
+    /// on a page that prints pages is noise.
+    @Test func whatLiesBesideTheBookIsDropped() {
+        var reading = Self.page([
+            Self.line("Shop Label Model X12", x: 0.02, y: 0.03),
+            Self.line("Made in Somewhere", x: 0.02, y: 0.05),
+            Self.line("STARTERS", x: 0.20, y: 0.14, size: 0.018),
+            Self.line("Radish Butter Toast 10", x: 0.20, y: 0.20),
+            Self.line("Smoked Trout Rillettes 12", x: 0.20, y: 0.22),
+            Self.line("Fried Olives 14", x: 0.20, y: 0.24),
+            Self.line("Chicken Liver Mousse 16", x: 0.20, y: 0.26),
+            Self.line("Fava Bean Crostini 18", x: 0.20, y: 0.28),
+            Self.line("Grilled Sardines 20", x: 0.20, y: 0.30),
+            Self.line("Marinated Peppers 22", x: 0.20, y: 0.32),
+            Self.line("Salt Cod Fritters 24", x: 0.20, y: 0.34),
+            Self.line("Deviled Eggs 26", x: 0.20, y: 0.36),
+            Self.line("Another Book's Cover", x: 0.60, y: 0.70, size: 0.02),
+            Self.line("Weeknights and", x: 0.60, y: 0.73),
+            Self.line("Everything Else", x: 0.60, y: 0.75),
+        ])
+        reading.outline = PageQuad(topLeft: PagePoint(x: 0.15, y: 0.16), topRight: PagePoint(x: 0.55, y: 0.16),
+                                   bottomRight: PagePoint(x: 0.55, y: 0.40), bottomLeft: PagePoint(x: 0.15, y: 0.40))
+        let contents = ContentsReader.read(reading)
+        #expect(contents.sections.map(\.title) == ["Starters"])
+        #expect(contents.entries.count == 9)
+
+        // Without the outline the label still goes, as noise.
+        reading.outline = nil
+        #expect(!ContentsReader.read(reading).sections.map(\.title).contains("Another Book's Cover"))
+    }
+
+    /// An overview printed in groups: a chapter's line, then its name in a second language and its
+    /// companion essay set close under it (ux-notes row 96): only the chapter, which takes the
+    /// essay's page when its own didn't read. A chapter printed twice under two parts stays two.
+    @Test func anOverviewsEssaysAreNeitherChapterNorEntry() {
+        let first = ContentsReader.read(Self.page([
+            Self.line("SOUPS", x: 0.12, y: 0.20),
+            Self.line("LES SOUPES", x: 0.12, y: 0.215),
+            Self.line("ON MAKING STOCK 30", x: 0.12, y: 0.23),
+            Self.line("GRAINS 44", x: 0.12, y: 0.26),
+            Self.line("ON SOAKING GRAINS 45", x: 0.12, y: 0.275),
+            Self.line("FISH 60", x: 0.12, y: 0.305),
+            Self.line("THE MARKET 72", x: 0.12, y: 0.32),
+            Self.line("BREADS 90", x: 0.12, y: 0.35),
+        ]))
+        #expect(first.isOverview)
+        #expect(first.sections.map(\.title) == ["Soups", "Grains", "Fish", "Breads"])
+        #expect(first.sections.map(\.page) == [30, 44, 60, 90])
+        let second = ContentsReader.read(Self.page([
+            Self.line("MAINS 120", x: 0.12, y: 0.20),
+            Self.line("FISH 128", x: 0.12, y: 0.23),
+            Self.line("MEAT 150", x: 0.12, y: 0.26),
+            Self.line("DESSERTS 190", x: 0.12, y: 0.29),
+        ]))
+        let combined = ContentsReader.combine([first, second])
+        #expect(combined.sections.map(\.title) == ["Soups", "Grains", "Fish", "Breads", "Mains", "Fish", "Meat", "Desserts"])
+    }
+
+    /// Two photos overlapping list an entry once.
+    @Test func overlappingPhotosListAnEntryOnce() {
+        let first = BookContents(sections: [BookContents.Section(title: "Soups", page: 10, entries: [.init(title: "Leek Soup", page: 12), .init(title: "Onion Soup", page: 13)])])
+        let second = BookContents(sections: [BookContents.Section(title: "", entries: [.init(title: "Onion Soup", page: 13), .init(title: "Bean Soup", page: 14)])])
+        #expect(ContentsReader.combine([first, second]).entries.map(\.title) == ["Leek Soup", "Onion Soup", "Bean Soup"])
+    }
+
+    // MARK: - What the page is (ux-notes row 114)
+
+    @Test func tellsAContentsPageFromARecipePage() {
+        let contents = Self.page([
+            Self.line("SOUPS 10", x: 0.14, y: 0.20, size: 0.022),
+            Self.line("Leek Soup 12", x: 0.14, y: 0.24),
+            Self.line("Onion Soup 13", x: 0.14, y: 0.26),
+            Self.line("Bean Soup 14", x: 0.14, y: 0.28),
+            Self.line("Corn Chowder 16", x: 0.14, y: 0.30),
+            Self.line("Fish Stew 18", x: 0.14, y: 0.32),
+        ])
+        #expect(ContentsReader.judge(contents) == .contents)
+        let recipe = Self.page([
+            Self.line("Leek and Potato Soup", x: 0.14, y: 0.10, size: 0.024),
+            Self.line("Serves 4", x: 0.14, y: 0.15),
+            Self.line("2 tablespoons butter", x: 0.14, y: 0.20),
+            Self.line("3 large leeks, sliced", x: 0.14, y: 0.22),
+            Self.line("1 pound potatoes, diced", x: 0.14, y: 0.24),
+            Self.line("4 cups chicken stock", x: 0.14, y: 0.26),
+            Self.line("1 teaspoon salt", x: 0.14, y: 0.28),
+            Self.line("Melt the butter in a large pot over medium heat and add the leeks.", x: 0.14, y: 0.32),
+        ], kind: .recipe)
+        #expect(ContentsReader.judge(recipe) == .recipe)
+        #expect(ContentsReader.judge(Self.page([Self.line("A note on the text", x: 0.14, y: 0.2)], kind: .prose)) == .unsure)
     }
 
     // MARK: - The model

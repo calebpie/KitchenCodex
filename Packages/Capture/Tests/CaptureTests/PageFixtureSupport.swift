@@ -59,7 +59,7 @@ enum PageFixtures {
     }
 
     /// What a contents page reads as (`ContentsReader`): its chapters, its entries, and the entries
-    /// with a page number. Counts only, never a title.
+    /// with a page number; for an index page, its index entries. Counts only, never a title.
     struct ContentsCounts: Codable, Sendable, Equatable {
         var sections: Int
         var entries: Int
