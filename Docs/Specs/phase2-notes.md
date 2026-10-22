@@ -567,7 +567,7 @@ On the iPhone 17 Pro and the iPad, with this build:
 
 ### Caleb's device checklist
 
-On the iPhone 17 Pro and the iPad, with this build:
+On the iPhone 17 Pro and the iPad, with this build (the iPad's Display Zoom lives under Settings → Appearance on iPadOS 27; name it in any note about size or fit, since More Space draws everything smaller than the simulator's Default):
 
 1. **The glossary**: in Nobu West's session, photograph glossary pp. 250–253: each capture says "Saved “Glossary” as reference reading" (the later ones "· joined the glossary"); Pantry → References shows one Glossary, pp. 250–253, with about 90 entries.
 2. **The pill**: on the p. 14 recipe, tap "see page 253" on the mountain yam line: the glossary opens at yama-imo, its heading tinted; Related Reading lists the glossary.
