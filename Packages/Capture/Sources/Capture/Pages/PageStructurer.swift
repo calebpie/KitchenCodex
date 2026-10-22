@@ -381,7 +381,7 @@ extension Page {
         let lowerText = lines.joined(separator: "\n").lowercased()
         let commaLists = lines.count { $0.range(of: #",\s*\d{1,3}(\s*[,–-]\s*\d{1,3})+\s*$"#, options: .regularExpression) != nil }
         let topLines = content.sorted { blocks[$0].rect.minY < blocks[$1].rect.minY }.prefix(3).map { blocks[$0].text.lowercased().trimmingCharacters(in: .whitespaces) }
-        // An index prints a comma before each page ("bouchons, 284"), and often "Index" in its
+        // An index prints a comma before each page ("clafoutis, 280"), and often "Index" in its
         // running head or foot ("INDEX – 333"), which the structurer may have set aside as furniture.
         let commaPages = lines.count { $0.range(of: #"[\p{L}\)],\s*\d{1,3}(\s*[–-]\s*\d{1,3})?$"#, options: .regularExpression) != nil }
         let byHeight = textIndices.sorted { blocks[$0].rect.minY < blocks[$1].rect.minY }

@@ -30,7 +30,7 @@ public struct BookContents: Sendable, Equatable {
     }
 
     public var sections: [Section]
-    /// What the book's index pages list ("Chocolate, in chocolate bouchons", by its first page),
+    /// What the book's index pages list ("Chard, in spring gratin", by its first page),
     /// kept apart from the chapters: it is the book's Index tab, not its punchlist (ux-notes row
     /// 117).
     public var index: [Entry]
@@ -78,7 +78,7 @@ public struct BookContents: Sendable, Equatable {
 ///   in (`combine`). On an overview, a line set close under a chapter's (its name in a second
 ///   language, a companion essay) is neither chapter nor entry (ux-notes row 96), and lends the
 ///   chapter its page when the chapter's own didn't read.
-/// - An index page's lines ("Leek soup, 16, 42", "chocolate:" over "in tart, 271") are the book's
+/// - An index page's lines ("Leek soup, 16, 42", "chard:" over "in spring gratin, 41") are the book's
 ///   index, by their first page, a sub-entry under its headword; they fill the Index tab, not the
 ///   punchlist (ux-notes row 117).
 public enum ContentsReader {
@@ -176,7 +176,7 @@ public enum ContentsReader {
 
     /// The same chapter read twice (an overview's line and the detailed page's heading): the same
     /// title, and no two different first pages. A book that prints a chapter name under two parts
-    /// (a Fish and Shellfish among the first courses and another among the main courses) has two.
+    /// (once among the first courses and again among the main courses) has two.
     public static func sameChapter(_ a: BookContents.Section, _ b: BookContents.Section) -> Bool {
         guard sameTitle(a.title, b.title) else { return false }
         guard let first = a.page, let second = b.page else { return true }
@@ -703,9 +703,9 @@ public enum ContentsReader {
     // MARK: - Index pages
 
     /// An index page (ux-notes row 117): "Leek soup, 16, 42" and "Leeks: braised, 30" by their
-    /// first page; a headword ending in a colon ("chocolate:") heads the indented lines under it
-    /// ("Chocolate, in tart"); a line that runs over ("salad with oranges and radishes," over
-    /// "108") is one entry; "see also" lines and letter headings ("D") are not entries. Column by
+    /// first page; a headword ending in a colon ("chard:") heads the indented lines under it
+    /// ("Chard, in spring gratin"); a line that runs over ("with brown butter and toasted" over
+    /// "hazelnuts, 63–64") is one entry; "see also" lines and letter headings ("D") are not entries. Column by
     /// column, outside the page's outline dropped as on a contents page.
     static func readIndex(_ reading: PageReading) -> BookContents {
         let lines = printedLines(of: reading).compactMap { line -> Line? in
@@ -752,7 +752,7 @@ public enum ContentsReader {
         return BookContents(index: entries)
     }
 
-    /// "Leek soup, 16, 42", "pots de crème, 268–69": the title and the first page.
+    /// "Leek soup, 16, 42", "lemon curd, 88–89": the title and the first page.
     static func indexEntry(_ text: String) -> (String, Int)? {
         guard let match = text.firstMatch(of: /^(.*?[\p{L}\)])\s*[,:]?\s*(\d{1,3})(?:\s*[,–\-]\s*\d{1,3})*$/),
               let page = Int(match.output.2) else { return nil }
@@ -761,7 +761,7 @@ public enum ContentsReader {
         return (title, page)
     }
 
-    /// The first letter as a capital, the rest as printed ("chocolate" → "Chocolate").
+    /// The first letter as a capital, the rest as printed ("chard" → "Chard").
     static func capitalizedFirst(_ text: String) -> String {
         guard let first = text.first else { return text }
         return first.uppercased() + text.dropFirst()
