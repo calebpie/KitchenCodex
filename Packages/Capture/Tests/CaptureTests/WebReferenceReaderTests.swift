@@ -87,7 +87,7 @@ struct WebReferenceReaderTests {
             <h2>Three ways to use it</h2>
             <p>\(Self.second)</p>
             <div class="FeaturedRecipe_list">\(card("cookies"))\(card("sauce"))\(card("cake"))</div>
-            <p>This is a members' feature.</p>
+            <p>Members only: join to see every recipe.</p>
             <h2>Keeping it</h2>
             <p>\(Self.paragraph)</p>
             """
@@ -96,7 +96,7 @@ struct WebReferenceReaderTests {
         #expect(reference.sections.map(\.heading) == ["", "Three ways to use it", "Keeping it"])
         #expect(reference.figures.map(\.url.lastPathComponent) == ["pan.jpg"])
         // The paywall's line after the cards is furniture too.
-        #expect(!reference.sections[1].body.contains("members"))
+        #expect(!reference.sections[1].body.contains("Members"))
 
         let wrapped = Self.page(
             jsonLD: #"{"@type":"Article","headline":"On Brown Butter"}"#,
