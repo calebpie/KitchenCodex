@@ -157,7 +157,7 @@ public enum SourcesPageReader {
         if let match = text.firstMatch(of: /(\+?\d{1,3}[\s.\-]?)?\(?\d{3}\)?[\s.\-]\d{3}[\s.\-]\d{4}\b/) {
             return String(match.output.0).trimmingCharacters(in: .whitespaces)
         }
-        // A number spelled in letters, "866-COOKWARE (26659273)", "1-888-9-SHELLS".
+        // A number spelled in letters, "866-PANSHOP (72674671)", "1-800-5-KNIVES".
         if let match = text.firstMatch(of: /\b(?:1-)?\d{3}-(?:\d-)?[A-Z]{4,}[A-Z0-9]*(?:\s*\([\d\-]{7,}\))?/) {
             return String(match.output).trimmingCharacters(in: .whitespaces)
         }
