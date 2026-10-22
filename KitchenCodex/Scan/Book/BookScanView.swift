@@ -5,13 +5,17 @@ import SwiftData
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// The whole-book session, full screen (03 §3.8, 02 Flow C step 4). iPad: three regions, the
-/// punchlist on the left, the camera in the centre and the last capture's structure on the right
-/// with its Needs Review toggle, over a status strip ("12 captured · 9 processed · 2 need review ·
-/// battery 64%"). iPhone: a compact header ("Now: Leek Soup, p. 114 · 12 of 112") that opens the
-/// punchlist as a sheet, the camera filling the rest. Where there is no camera (the Simulator) the
-/// centre takes photos and files instead. Close pauses: nothing is lost, and Continue Scanning in
-/// Book detail comes back to the next entry not captured.
+/// The whole-book session, full screen (03 §3.8, 02 Flow C step 4). Its camera page mirrors Scan
+/// Page's (ux-notes row 123): the camera full bleed, Done at the top right saving what was captured
+/// and closing (asking first when the sitting sent recipes to the review queue), ✕ at the top left
+/// discarding this sitting's captures after a warning that says how many, and the recipes saved
+/// from them; "Now: …", the count and Show List on a glass card under the top bar; the strip's four
+/// figures (captured, processed, need review, battery) stacked right of the shutter (row 134).
+/// iPad: three regions, the punchlist on the left, the camera in the centre and the last capture's
+/// structure on the right with its Needs Review pill. Where there is no camera (the Simulator) the
+/// centre takes photos and files instead, with ✕ and Done in the header and the status strip
+/// ("12 captured · 9 processed · 2 need review · battery 64%") at the foot. Done pauses: nothing
+/// is lost, and Continue Scanning in Book detail comes back to the next entry not captured.
 struct BookScanView: View {
     let book: Book
     /// Scan now: the session opens at this entry.
@@ -26,7 +30,8 @@ struct BookScanView: View {
     @State private var session: BookScanSession?
     @State private var isShowingList = false
     @State private var isReviewing = false
-    @State private var isConfirmingClose = false
+    @State private var isConfirmingDone = false
+    @State private var isConfirmingDiscard = false
     @State private var cameraState = CameraState.checking
     @State private var hasTakenFirstPages = false
 
@@ -44,7 +49,7 @@ struct BookScanView: View {
                 }
             }
         }
-        .background(Color(.systemGroupedBackground))
+        .background(cameraState == .ready ? Color.black : Color(.systemGroupedBackground))
         .task {
             let session = BookScanStore.shared.session(for: book, context: modelContext)
             session.open(at: startAt)
@@ -82,6 +87,20 @@ struct BookScanView: View {
         } message: {
             Text("The last three pages looked hazy and read poorly.")
         }
+        // Done asks only when this sitting added to the queue; what waited before waits in the book.
+        .confirmationDialog(session.map { $0.needReviewCount == 1 ? "1 recipe needs review" : "\($0.needReviewCount) recipes need review" } ?? "", isPresented: $isConfirmingDone, titleVisibility: .visible) {
+            Button("Review Now") { isReviewing = true }
+            Button("Later") { dismiss() }
+        } message: {
+            Text("Everything captured is saved. The review queue waits in the book's detail.")
+        }
+        // ✕ where there is no camera; the camera asks its own.
+        .confirmationDialog(session?.discardQuestion?.title ?? "", isPresented: $isConfirmingDiscard, titleVisibility: .visible) {
+            Button("Discard", role: .destructive) { discard() }
+            Button("Keep Scanning", role: .cancel) {}
+        } message: {
+            if let message = session?.discardQuestion?.message { Text(message) }
+        }
     }
 
     // MARK: - iPad
@@ -90,8 +109,8 @@ struct BookScanView: View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
                 VStack(spacing: 0) {
-                    HStack {
-                        closeButton(session)
+                    HStack(spacing: 12) {
+                        if cameraState != .ready { closeButton(session) }
                         VStack(alignment: .leading, spacing: 2) {
                             Text(book.displayTitle)
                                 .font(.headline)
@@ -101,88 +120,150 @@ struct BookScanView: View {
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
+                        if cameraState != .ready { doneButton(session) }
                     }
                     .padding(.horizontal)
                     .padding(.vertical, 10)
                     PunchlistPane(session: session)
                 }
                 .frame(width: 330)
+                .background(Color(.systemGroupedBackground))
                 Divider()
-                centre(session)
+                centre(session, header: false)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 Divider()
                 LastCapturePane(session: session)
                     .frame(width: 340)
             }
-            Divider()
-            statusStrip(session)
+            if cameraState != .ready {
+                Divider()
+                statusStrip(session)
+            }
         }
     }
 
     // MARK: - iPhone
 
+    @ViewBuilder
     private func compact(_ session: BookScanSession) -> some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                closeButton(session)
-                Button {
-                    isShowingList = true
-                } label: {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(nowLine(session))
-                            .font(.subheadline.weight(.semibold))
-                            .lineLimit(2)
-                            .multilineTextAlignment(.leading)
-                        Text("\(progressLine) · Show List")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(.rect)
+        if cameraState == .ready {
+            // The camera full bleed, its controls over it (ux-notes row 123).
+            centre(session, header: true)
+        } else {
+            VStack(spacing: 0) {
+                HStack(spacing: 12) {
+                    closeButton(session)
+                    nowButton(session)
+                    doneButton(session)
                 }
-                .buttonStyle(.plain)
-                .accessibilityHint("Shows the recipe list.")
-            }
-            .padding(.horizontal)
-            .padding(.vertical, 8)
-            .background(.bar)
-            centre(session)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            if cameraState != .ready {
+                .padding(.horizontal)
+                .padding(.vertical, 8)
+                .background(.bar)
+                centre(session, header: false)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 LastCaptureCard(session: session)
+                statusStrip(session)
             }
-            statusStrip(session)
         }
     }
 
     // MARK: - Shared
 
+    /// ✕: this sitting's captures discarded, after the warning when there are any.
     private func closeButton(_ session: BookScanSession) -> some View {
-        Button("Close", systemImage: "xmark") {
-            // Asks only when this sitting added to the queue; what waited before waits in the book.
-            if session.needReviewCount > 0, session.shownCaptures.contains(where: { session.needsReview($0) }) {
-                isConfirmingClose = true
-            } else {
-                dismiss()
-            }
+        Button("Discard This Sitting", systemImage: "xmark") {
+            if session.discardQuestion != nil { isConfirmingDiscard = true } else { dismiss() }
         }
         .labelStyle(.iconOnly)
         .font(.title3)
         .frame(width: 44, height: 44)
         .keyboardShortcut(.cancelAction)
-        .confirmationDialog(session.needReviewCount == 1 ? "1 recipe needs review" : "\(session.needReviewCount) recipes need review", isPresented: $isConfirmingClose, titleVisibility: .visible) {
-            Button("Review Now") { isReviewing = true }
-            Button("Later") { dismiss() }
-        } message: {
-            Text("Everything captured is saved. The review queue waits in the book's detail.")
+    }
+
+    /// Done: what was captured is saved and the session closes.
+    private func doneButton(_ session: BookScanSession) -> some View {
+        Button("Done") { finish(session) }
+            .font(.headline)
+    }
+
+    /// "Now: Leek Soup, p. 114" over "12 of 112 captured · Show List": the list as a sheet.
+    private func nowButton(_ session: BookScanSession) -> some View {
+        Button {
+            isShowingList = true
+        } label: {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(nowLine(session))
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                Text("\(progressLine) · Show List")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Shows the recipe list.")
+    }
+
+    /// The same over the camera: light text on a glass card, the camera's dim layer behind it.
+    private func nowCard(_ session: BookScanSession) -> some View {
+        Button {
+            isShowingList = true
+        } label: {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(nowLine(session))
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                Text("\(progressLine) · Show List")
+                    .font(.caption)
+                    .opacity(0.85)
+                if let refining = session.refining {
+                    Text(refining.isEmpty ? "Apple Intelligence is reading a recipe" : "Apple Intelligence is reading “\(refining)”")
+                        .font(.caption)
+                        .opacity(0.85)
+                        .lineLimit(1)
+                }
+            }
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .contentShape(.rect)
+            .glassEffect(.clear.interactive(), in: .rect(cornerRadius: 16))
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Shows the recipe list.")
+    }
+
+    /// Done: the review question when this sitting sent recipes to the queue, else closed.
+    private func finish(_ session: BookScanSession) {
+        if session.needReviewCount > 0, session.shownCaptures.contains(where: { session.needsReview($0) }) {
+            isConfirmingDone = true
+        } else {
+            dismiss()
         }
     }
 
+    /// ✕, answered Discard.
+    private func discard() {
+        session?.discardSitting()
+        dismiss()
+    }
+
     @ViewBuilder
-    private func centre(_ session: BookScanSession) -> some View {
+    private func centre(_ session: BookScanSession, header: Bool) -> some View {
         switch cameraState {
         case .ready:
-            PageCameraView(session: session, confirmsClose: false, showsTextPreview: false, showsClose: false, onDone: nil) { dismiss() }
+            PageCameraView(session: session, showsTextPreview: false, alwaysShowsDone: true,
+                           header: header ? AnyView(nowCard(session)) : nil,
+                           trailing: AnyView(SessionFigures(session: session))) {
+                finish(session)
+            } onClose: {
+                discard()
+            }
         case .checking:
             ProgressView()
         case .denied, .unavailable:
@@ -209,8 +290,52 @@ struct BookScanView: View {
     }
 }
 
+/// Right of the shutter (ux-notes row 134): the strip's four figures stacked, captured, processed,
+/// need review (in orange while there are any) and battery.
+private struct SessionFigures: View {
+    let session: BookScanSession
+
+    /// -1 where there is no battery to report (the Simulator).
+    @State private var battery: Float = -1
+
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 2) {
+            HStack(spacing: 4) {
+                if session.isReadingCaptures {
+                    ProgressView()
+                        .controlSize(.mini)
+                        .tint(.white)
+                }
+                Text("\(session.capturedCount) captured")
+            }
+            Text("\(session.processedCount) processed")
+            Text(session.needReviewCount == 1 ? "1 needs review" : "\(session.needReviewCount) need review")
+                .foregroundStyle(session.needReviewCount > 0 ? Color.orange : Color.white)
+            if battery >= 0 {
+                Text("battery \(Int((battery * 100).rounded()))%")
+            }
+        }
+        .font(.caption2.weight(.semibold))
+        .monospacedDigit()
+        .foregroundStyle(.white)
+        .lineLimit(1)
+        .fixedSize()
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .glassEffect(.clear, in: .rect(cornerRadius: 12))
+        .accessibilityElement(children: .combine)
+        .onAppear {
+            UIDevice.current.isBatteryMonitoringEnabled = true
+            battery = UIDevice.current.batteryLevel
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIDevice.batteryLevelDidChangeNotification)) { _ in
+            battery = UIDevice.current.batteryLevel
+        }
+    }
+}
+
 /// "12 captured · 9 processed · 2 need review · battery 64%", with Review once there is something
-/// to review (03 §3.8).
+/// to review (03 §3.8): where there is no camera, at the session's foot.
 private struct StatusStrip: View {
     let session: BookScanSession
     var onReview: () -> Void
@@ -333,13 +458,14 @@ private struct CaptureIntake: View {
             Task { await session.add(photos: items, mode: chosen) }
         }
         .sheet(isPresented: $isShowingCaptures) {
-            CaptureListSheet(items: session.captureItems) { session.removeCapture(id: $0) } onSetMode: { session.setMode($1, ofCapture: $0) } onSetNeedsReview: { session.setNeedsReview($1, for: $0) } onKeep: { session.resolveDuplicates(of: $0, keepNew: $1) } onJoin: { session.resolveJoin(of: $0, join: $1) } onContents: { session.resolveContents(of: $0, add: $1) }
+            CaptureListSheet(items: session.captureItems) { session.removeCapture(id: $0) } onSetMode: { session.setMode($1, ofCapture: $0) } onKeep: { session.resolveDuplicates(of: $0, keepNew: $1) } onJoin: { session.resolveJoin(of: $0, join: $1) } onContents: { session.resolveContents(of: $0, add: $1) }
         }
     }
 }
 
 /// iPad's right region: the last capture's structure as read (title, yield, ingredients, steps),
-/// every other text block dimmed after it, and the Needs Review toggle (03 §3.8).
+/// every other text block dimmed after it, and its Needs Review pill (03 §3.8; a pill, not a
+/// toggle, as in the captures sheet, ux-notes row 135).
 struct LastCapturePane: View {
     let session: BookScanSession
 
@@ -358,9 +484,11 @@ struct LastCapturePane: View {
             }
             .padding()
             if let capture = session.lastCapture {
-                Toggle("Needs Review", isOn: Binding { session.needsReview(capture) } set: { session.setNeedsReview($0, for: capture.id) })
-                    .padding(.horizontal)
-                    .padding(.bottom, 8)
+                if session.needsReview(capture), !capture.recipes.isEmpty || !capture.references.isEmpty {
+                    NeedsReviewPill()
+                        .padding(.horizontal)
+                        .padding(.bottom, 8)
+                }
                 if let detail = capture.status == .pending ? "Reading…" : capture.detail {
                     Text("\(capture.note) · \(detail)")
                         .font(.footnote)
@@ -385,19 +513,21 @@ struct LastCapturePane: View {
     }
 }
 
-/// iPhone where there is no camera: the last capture in a line, with its Needs Review toggle.
+/// iPhone where there is no camera: the last capture in a line, with its Needs Review pill.
 private struct LastCaptureCard: View {
     let session: BookScanSession
 
     var body: some View {
         if let capture = session.lastCapture {
-            VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text("Last: \(capture.note) · \(capture.status == .pending ? "Reading…" : capture.detail ?? "")")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
-                Toggle("Needs Review", isOn: Binding { session.needsReview(capture) } set: { session.setNeedsReview($0, for: capture.id) })
-                    .font(.subheadline)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if session.needsReview(capture), !capture.recipes.isEmpty || !capture.references.isEmpty {
+                    NeedsReviewPill()
+                }
             }
             .padding(.horizontal)
             .padding(.vertical, 8)

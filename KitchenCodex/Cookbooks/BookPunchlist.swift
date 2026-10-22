@@ -173,6 +173,16 @@ extension BookEntry {
     var displayTitle: String { title.isEmpty ? "Untitled Recipe" : title }
 }
 
+extension Recipe {
+    /// A recipe about to be deleted gives its punchlist entry back, listed again at once (ux-notes
+    /// row 141), as the session's own delete does, so the book's list is right on return.
+    func releaseBookEntry() {
+        guard let entry = bookEntry else { return }
+        entry.status = .listed
+        bookEntry = nil
+    }
+}
+
 /// Linking saved recipes to their punchlist entries, for the book session and for a page scanned on
 /// its own into a book that has a punchlist: page first, then title (`PunchlistMatcher`).
 @MainActor

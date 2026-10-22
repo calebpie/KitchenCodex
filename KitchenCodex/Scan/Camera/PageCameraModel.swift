@@ -31,7 +31,10 @@ final class PageCameraModel {
     var autoCapture: Bool {
         didSet { UserDefaults.standard.set(autoCapture, forKey: Self.autoCaptureKey) }
     }
+    /// The outline drawn over the viewfinder: Vision's, steadied (ux-notes row 133).
     private(set) var outline: PageQuad?
+    /// What to change when no page has been found for two seconds; the pill shows it.
+    private(set) var hint: PageOutlineSmoother.Hint?
     /// The frame's width over its height, as shown, for drawing the outline.
     private(set) var frameAspect: CGFloat = 3 / 4
     /// The gate's reading of a live frame, about once a second; advisory only.
@@ -41,8 +44,6 @@ final class PageCameraModel {
     private(set) var thumbnails: [Thumbnail] = []
     /// Captures still being cleaned.
     private(set) var preparing = 0
-    /// Add Next Page: the next page is captured as soon as it is held steady.
-    private(set) var isAwaitingNextPage = false
     /// "Page 3 · Sharp", shown for a moment after a capture.
     private(set) var captureNote: String?
     /// Bumped on each capture, for the shutter's blink and the haptic.
@@ -52,6 +53,7 @@ final class PageCameraModel {
 
     private var addChain: Task<Void, Never>?
     private var isAssessing = false
+    private var smoother = PageOutlineSmoother()
     private var rotation: AVCaptureDevice.RotationCoordinator?
     private var rotationObservation: NSKeyValueObservation?
     private weak var previewLayer: AVCaptureVideoPreviewLayer?
@@ -80,8 +82,8 @@ final class PageCameraModel {
     // MARK: - Session
 
     func start() async {
-        controller.onOutline = { [weak self] quad, aspect in
-            Task { @MainActor in self?.handleOutline(quad, aspect: aspect) }
+        controller.onOutline = { [weak self] quad, aspect, luminance in
+            Task { @MainActor in self?.handleOutline(quad, aspect: aspect, luminance: luminance) }
         }
         controller.onQualityFrame = { [weak self] frame in
             Task { @MainActor in self?.assess(frame) }
@@ -126,13 +128,14 @@ final class PageCameraModel {
 
     // MARK: - Live frames
 
-    /// The outline, and auto-capture: a page held still for a moment is taken when auto-capture is
-    /// on and the page changed since the last capture (it left the view or moved, as when a page is
-    /// turned), or when Add Next Page asked for it.
-    private func handleOutline(_ quad: PageQuad?, aspect: CGFloat) {
+    /// The outline, steadied, with its hint, and auto-capture: a page held still for a moment is
+    /// taken when auto-capture is on and the page changed since the last capture (it left the view
+    /// or moved, as when a page is turned). Auto-capture reads Vision's outline as it comes.
+    private func handleOutline(_ quad: PageQuad?, aspect: CGFloat, luminance: Double?) {
         frameAspect = aspect
-        outline = quad
         let now = ContinuousClock.now
+        outline = smoother.feed(quad, at: now, aspect: Double(aspect), luminance: luminance)
+        hint = smoother.hint(at: now)
         guard let quad, quad.area() >= Self.autoCaptureArea else {
             steadySince = nil
             lastQuad = nil
@@ -151,9 +154,7 @@ final class PageCameraModel {
             steadySince = nil
         }
         lastQuad = quad
-        let armed = isAwaitingNextPage || (autoCapture && pageChanged)
-        if armed, let since = steadySince, now - since >= Self.steadyTime, preparing == 0 {
-            isAwaitingNextPage = false
+        if autoCapture, pageChanged, let since = steadySince, now - since >= Self.steadyTime, preparing == 0 {
             steadySince = nil
             shutter()
         }
@@ -192,11 +193,6 @@ final class PageCameraModel {
     }
 
     // MARK: - Capturing
-
-    func addNextPage() {
-        isAwaitingNextPage.toggle()
-        steadySince = nil
-    }
 
     /// Takes a photo now. Never blocked by the pill (ux-notes row 57).
     func shutter() {

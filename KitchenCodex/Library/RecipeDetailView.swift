@@ -230,6 +230,7 @@ struct RecipeDetailView: View {
         .onDisappear {
             // Delete after the pop so the view never renders a deleted model.
             guard isDeleting else { return }
+            recipe.releaseBookEntry()
             modelContext.delete(recipe)
             try? modelContext.save()
         }

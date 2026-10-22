@@ -24,6 +24,9 @@ struct BookScanState: Codable {
     var nextCaptureID = 0
     /// Bumped each time the session opens.
     var sitting = 0
+    /// The first capture id of this sitting: ✕ discards the captures taken since (ux-notes row
+    /// 123), not an earlier sitting's page this one's joined.
+    var sittingStart = 0
     /// Pages the book's recipes point to that went on its to-scan list (04 §5.1 "Page pointers").
     var pointerEntries: [PointerEntry] = []
 
@@ -184,6 +187,7 @@ struct BookScanState: Codable {
         captures = try container.decodeIfPresent([StoredCapture].self, forKey: .captures) ?? []
         nextCaptureID = try container.decodeIfPresent(Int.self, forKey: .nextCaptureID) ?? (captures.map(\.id).max() ?? -1) + 1
         sitting = try container.decodeIfPresent(Int.self, forKey: .sitting) ?? 0
+        sittingStart = try container.decodeIfPresent(Int.self, forKey: .sittingStart) ?? nextCaptureID
         pointerEntries = try container.decodeIfPresent([PointerEntry].self, forKey: .pointerEntries) ?? []
     }
 }

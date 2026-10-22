@@ -2,30 +2,35 @@ import AVFoundation
 import Capture
 import SwiftUI
 
-/// The camera (03 §3.5, 02 Flow B steps 1–3), Scan Page's full-screen cover and the centre of the
-/// whole-book session (03 §3.8): the viewfinder with the live page outline, the quality pill at the
-/// top, Close, Flash and Auto as two round glass buttons with their captions, and Done; at the
-/// bottom the shutter, the Recipe · Photo mode above it, Add Next Page once a page exists and the
-/// captured pages stacking at the left with their count, which opens the captures to look over.
-/// On iPad Scan Page's camera sits beside a running preview of the last capture's text. Controls
-/// are clear glass over the viewfinder, with a dim layer at the top and bottom. Never shown in the
-/// Simulator.
+/// The camera (03 §3.5, 02 Flow B steps 1–3), Scan Page's full-screen cover and the whole-book
+/// session's camera page (03 §3.8): the viewfinder full bleed with the live page outline, the
+/// quality pill at the top (what to change when no page can be found, ux-notes row 133), ✕ and
+/// Done in matching slots either side of Flash and Auto, two round glass buttons with their
+/// captions (row 140); at the bottom the shutter, the Recipe · Photo mode above it, the captured
+/// pages stacking at the left with their count, which opens the captures to look over, and on the
+/// right what the page that shows the camera puts there (the session's four figures, row 134).
+/// Add Next Page is gone: Auto covers it. On iPad Scan Page's camera sits beside a running preview
+/// of the last capture's text. Controls are clear glass over the viewfinder, with a dim layer at
+/// the top and bottom. Never shown in the Simulator.
 struct PageCameraView: View {
-    /// Done: the captures go on to the processing sheet. Nil hides it (the book session has its own
-    /// way on).
-    var onDone: (() -> Void)?
-    /// Close: Scan Page discards the captures; the book session pauses.
+    /// Done: Scan Page's captures go on to the processing sheet; the book session saves and closes.
+    var onDone: () -> Void
+    /// ✕: the captures are discarded, after the sink's question (or "Discard N pages?").
     var onClose: () -> Void
-    /// Whether Close asks before discarding the pages (nothing is lost in the book session).
+    /// Whether ✕ asks before discarding the pages.
     var confirmsClose = true
     /// The iPad's running text preview beside the camera (the book session shows the last capture
     /// in its own pane).
     var showsTextPreview = true
-    /// The book session has its own Close beside the punchlist.
-    var showsClose = true
     /// The Recipe · Photo switch, here and in the captures sheet: hidden where every capture is a
     /// page, the contents and Sources pages (ux-notes row 116).
     var showsCaptureMode = true
+    /// Done shows before the first page: the book session's way out (ux-notes row 123).
+    var alwaysShowsDone = false
+    /// Under the top bar: the book session's "Now: …" card.
+    var header: AnyView?
+    /// Right of the shutter: the book session's figures.
+    var trailing: AnyView?
 
     let session: any PageCaptureSink
     @State private var camera: PageCameraModel
@@ -33,12 +38,15 @@ struct PageCameraView: View {
     @State private var isShowingCaptures = false
     @Environment(\.horizontalSizeClass) private var sizeClass
 
-    init(session: any PageCaptureSink, confirmsClose: Bool = true, showsTextPreview: Bool = true, showsClose: Bool = true, showsCaptureMode: Bool = true, onDone: (() -> Void)?, onClose: @escaping () -> Void) {
+    init(session: any PageCaptureSink, confirmsClose: Bool = true, showsTextPreview: Bool = true, showsCaptureMode: Bool = true, alwaysShowsDone: Bool = false,
+         header: AnyView? = nil, trailing: AnyView? = nil, onDone: @escaping () -> Void, onClose: @escaping () -> Void) {
         self.session = session
         self.confirmsClose = confirmsClose
         self.showsTextPreview = showsTextPreview
-        self.showsClose = showsClose
         self.showsCaptureMode = showsCaptureMode
+        self.alwaysShowsDone = alwaysShowsDone
+        self.header = header
+        self.trailing = trailing
         self.onDone = onDone
         self.onClose = onClose
         _camera = State(initialValue: PageCameraModel(session: session))
@@ -68,12 +76,14 @@ struct PageCameraView: View {
         } message: {
             Text("The last three pages looked hazy and read poorly. Wipe the camera lens with a soft cloth, then carry on.")
         }
-        .confirmationDialog(camera.pageCount == 1 ? "Discard the page?" : "Discard \(camera.pageCount) pages?", isPresented: $isConfirmingClose, titleVisibility: .visible) {
+        .confirmationDialog(closeQuestion.title, isPresented: $isConfirmingClose, titleVisibility: .visible) {
             Button("Discard", role: .destructive, action: onClose)
             Button("Keep Scanning", role: .cancel) {}
+        } message: {
+            if let message = closeQuestion.message { Text(message) }
         }
         .sheet(isPresented: $isShowingCaptures) {
-            CaptureListSheet(items: session.captureItems, showsMode: showsCaptureMode) { camera.removeCapture(id: $0) } onSetMode: { camera.setMode($1, ofCapture: $0) } onSetNeedsReview: { session.setNeedsReview($1, for: $0) } onKeep: { session.resolveDuplicates(of: $0, keepNew: $1) } onJoin: { session.resolveJoin(of: $0, join: $1) } onContents: { id, add in
+            CaptureListSheet(items: session.captureItems, showsMode: showsCaptureMode) { camera.removeCapture(id: $0) } onSetMode: { camera.setMode($1, ofCapture: $0) } onKeep: { session.resolveDuplicates(of: $0, keepNew: $1) } onJoin: { session.resolveJoin(of: $0, join: $1) } onContents: { id, add in
                 if add { session.resolveContents(of: id, add: true) } else { camera.removeCapture(id: id) }
             }
         }
@@ -89,7 +99,8 @@ struct PageCameraView: View {
             PageOutline(quad: camera.outline, frameAspect: camera.frameAspect)
                 .ignoresSafeArea()
                 .allowsHitTesting(false)
-                .animation(.easeOut(duration: 0.12), value: camera.outline)
+                // Readings eased into each other (ux-notes row 133).
+                .animation(.easeOut(duration: 0.2), value: camera.outline)
             // The shutter's blink.
             Color.white
                 .opacity(0)
@@ -137,24 +148,22 @@ struct PageCameraView: View {
 
     // MARK: - Top
 
-    /// Close at the left, Done at the right, and between them Flash and Auto, two separate round
-    /// glass buttons, each with its state in colour and a one-word caption (ux-notes row 84).
+    /// ✕ at the left, Done at the right, each in a slot of the same width so Flash and Auto sit
+    /// centred between them (ux-notes row 140): two separate round glass buttons, each with its
+    /// state in colour and a one-word caption (ux-notes row 84).
     private var topBar: some View {
         HStack(alignment: .top, spacing: 12) {
-            if showsClose {
-                Button("Close", systemImage: "xmark") {
-                    if confirmsClose, camera.pageCount > 0 { isConfirmingClose = true } else { onClose() }
-                }
-                .labelStyle(.iconOnly)
-                .font(.title3)
-                .frame(width: 44, height: 44)
-                .glassEffect(.clear.interactive(), in: .circle)
-                .keyboardShortcut(.cancelAction)
-            } else {
-                Color.clear.frame(width: 44, height: 44)
+            Button("Close", systemImage: "xmark") {
+                if confirmsClose, session.discardQuestion != nil || camera.pageCount > 0 { isConfirmingClose = true } else { onClose() }
             }
+            .labelStyle(.iconOnly)
+            .font(.title3)
+            .frame(width: 44, height: 44)
+            .glassEffect(.clear.interactive(), in: .circle)
+            .keyboardShortcut(.cancelAction)
+            .frame(width: Self.sideSlot, alignment: .leading)
 
-            Spacer()
+            Spacer(minLength: 0)
 
             HStack(alignment: .top, spacing: 18) {
                 CameraToggle(title: "Flash", systemImage: camera.flash ? "bolt.fill" : "bolt.slash", tint: .yellow, isOn: $camera.flash)
@@ -164,28 +173,41 @@ struct PageCameraView: View {
                     .accessibilityHint("Captures a page as soon as it is held still.")
             }
 
-            Spacer()
+            Spacer(minLength: 0)
 
-            if let onDone {
-                Button("Done") { onDone() }
-                    .font(.headline)
-                    .padding(.horizontal, 16)
-                    .frame(height: 44)
-                    .glassEffect(.regular.tint(.accentColor).interactive(), in: .capsule)
-                    .disabled(camera.pageCount == 0 || camera.preparing > 0)
-                    .opacity(camera.pageCount == 0 ? 0 : 1)
-            } else {
-                Color.clear.frame(width: 44, height: 44)
-            }
+            let hidesDone = camera.pageCount == 0 && !alwaysShowsDone
+            Button("Done", action: onDone)
+                .font(.headline)
+                .padding(.horizontal, 16)
+                .frame(height: 44)
+                .glassEffect(.regular.tint(.accentColor).interactive(), in: .capsule)
+                .disabled(hidesDone || camera.preparing > 0)
+                .opacity(hidesDone ? 0 : 1)
+                .frame(width: Self.sideSlot, alignment: .trailing)
         }
         .foregroundStyle(.white)
     }
 
-    /// The quality pill (advisory: it never stops the shutter), and the book the barcode named.
+    /// The width of the top bar's side slots, ✕'s and Done's alike.
+    private static let sideSlot: CGFloat = 88
+
+    /// ✕'s question: the sink's (the book session counts the sitting's captures and the recipes
+    /// saved from them), else the pages in the stack.
+    private var closeQuestion: (title: String, message: String?) {
+        session.discardQuestion ?? (camera.pageCount == 1 ? "Discard the page?" : "Discard \(camera.pageCount) pages?", nil)
+    }
+
+    /// The quality pill (advisory: it never stops the shutter), or what to change when no page can
+    /// be found (ux-notes row 133), and the book the barcode named.
     private var statusLine: some View {
         VStack(spacing: 8) {
-            if let quality = camera.liveQuality {
+            if let hint = camera.hint {
+                HintPill(hint: hint)
+            } else if let quality = camera.liveQuality {
                 QualityPill(quality: quality)
+            }
+            if let header {
+                header
             }
             if let title = camera.scannedTitle {
                 HStack(spacing: 8) {
@@ -208,6 +230,7 @@ struct PageCameraView: View {
             }
         }
         .animation(.default, value: camera.liveQuality)
+        .animation(.default, value: camera.hint)
     }
 
     // MARK: - Bottom
@@ -226,8 +249,7 @@ struct PageCameraView: View {
                 .accessibilityHint("Recipe pages are read; a photo goes with the recipe as a cover, then the camera goes back to Recipe.")
             }
 
-            // Fixed slots either side keep the shutter centred before the first page, when Add
-            // Next Page isn't there yet.
+            // Fixed slots either side keep the shutter centred.
             HStack {
                 Button {
                     isShowingCaptures = true
@@ -241,7 +263,7 @@ struct PageCameraView: View {
                 Spacer()
                 shutter
                 Spacer()
-                ZStack(alignment: .trailing) { addNextPage }
+                ZStack(alignment: .trailing) { trailing }
                     .frame(width: 88, alignment: .trailing)
             }
         }
@@ -261,31 +283,29 @@ struct PageCameraView: View {
         .accessibilityLabel(camera.mode == .photo ? "Capture Photo" : "Capture Page")
         .keyboardShortcut(.space, modifiers: [])
     }
+}
 
-    @ViewBuilder
-    private var addNextPage: some View {
-        if camera.pageCount > 0 {
-            Button {
-                camera.addNextPage()
-            } label: {
-                VStack(spacing: 4) {
-                    if camera.isAwaitingNextPage {
-                        ProgressView().tint(.white)
-                        Text("Hold Steady")
-                    } else {
-                        Image(systemName: "plus.rectangle.on.rectangle")
-                            .font(.title3)
-                        Text("Add Next Page")
-                    }
-                }
-                .font(.caption.weight(.medium))
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.white)
-                .frame(width: 84, height: 64)
-                .glassEffect(.clear.interactive(), in: .rect(cornerRadius: 16))
-            }
-            .buttonStyle(.plain)
-            .accessibilityHint(camera.isAwaitingNextPage ? "Waiting for the page to be held steady. Tap to stop waiting." : "Turn the page; it is captured as soon as it's held steady.")
+/// What to change when no page can be found (ux-notes row 133): Move closer, More light, Flatten
+/// the page, Fill the frame, in amber where the quality pill sits.
+private struct HintPill: View {
+    let hint: PageOutlineSmoother.Hint
+
+    var body: some View {
+        Label(hint.label, systemImage: symbol)
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(Color.orange)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 7)
+            .glassEffect(.clear, in: .capsule)
+            .accessibilityLabel("No page found: \(hint.label)")
+    }
+
+    private var symbol: String {
+        switch hint {
+        case .moveCloser: "arrow.down.right.and.arrow.up.left"
+        case .moreLight: "sun.max"
+        case .flattenThePage: "book.pages"
+        case .fillTheFrame: "viewfinder"
         }
     }
 }

@@ -20,7 +20,8 @@ struct CaptureItem: Identifiable, Equatable {
     var note: String
     /// What became of it, once read: "Saved: Leek Soup", "A cover for Leek Soup".
     var detail: String?
-    /// The book session's Needs Review for the capture; nil where there is no review queue.
+    /// The book session's Needs Review for the capture, shown as a pill (ux-notes row 135); nil
+    /// where there is no review queue.
     var needsReview: Bool?
     /// A page shot again over a recipe the cook reviewed or edited (ux-notes row 93): the question,
     /// answered Keep Earlier · Keep New.
@@ -67,6 +68,9 @@ protocol PageCaptureSink: AnyObject, Observable {
     /// Whether a capture is still being read.
     var isReadingCaptures: Bool { get }
     var captureItems: [CaptureItem] { get }
+    /// What the camera's ✕ asks before discarding, when the sink says more than the page count
+    /// (the book session: the sitting's captures and the recipes saved from them).
+    var discardQuestion: (title: String, message: String?)? { get }
 
     /// The folder the camera writes its cleaned pages to.
     func captureFolder() -> URL
@@ -76,8 +80,6 @@ protocol PageCaptureSink: AnyObject, Observable {
     /// Deleting a capture removes it from the queue and the scan.
     func removeCapture(id: Int)
     func setMode(_ mode: CaptureMode, ofCapture id: Int)
-    /// Puts a capture's recipes in the review queue or takes them out (the book session).
-    func setNeedsReview(_ on: Bool, for id: Int)
     /// Keep Earlier · Keep New for a page shot again (the book session).
     func resolveDuplicates(of id: Int, keepNew: Bool)
     /// Join · Keep Apart for a page continuing a reviewed recipe (the book session).
@@ -89,7 +91,7 @@ protocol PageCaptureSink: AnyObject, Observable {
 }
 
 extension PageCaptureSink {
-    func setNeedsReview(_ on: Bool, for id: Int) {}
+    var discardQuestion: (title: String, message: String?)? { nil }
     func resolveDuplicates(of id: Int, keepNew: Bool) {}
     func resolveJoin(of id: Int, join: Bool) {}
     func resolveContents(of id: Int, add: Bool) {}
@@ -113,15 +115,14 @@ struct LensWatch {
 }
 
 /// The camera's captures in order (ux-notes row 83, 04 §5.1 "Camera controls"): each with its
-/// thumbnail, its note and what became of it, a Recipe/Photo switch, swipe to delete.
+/// thumbnail, its note and what became of it, a Recipe/Photo switch, a Needs Review pill when the
+/// app flagged it, swipe to delete.
 struct CaptureListSheet: View {
     let items: [CaptureItem]
     /// Each capture's Recipe/Photo switch: hidden where every capture is a page (ux-notes row 116).
     var showsMode = true
     var onDelete: (Int) -> Void
     var onSetMode: (Int, CaptureMode) -> Void
-    /// The book session's Needs Review per capture, so a phone with the camera can flag one too.
-    var onSetNeedsReview: ((Int, Bool) -> Void)?
     /// Keep Earlier (false) · Keep New (true) for a page shot again.
     var onKeep: ((Int, Bool) -> Void)?
     /// Join (true) · Keep Apart (false) for a page continuing a reviewed recipe (row 100).
@@ -140,7 +141,7 @@ struct CaptureListSheet: View {
                         .frame(maxWidth: .infinity)
                 }
                 ForEach(items) { item in
-                    CaptureRow(item: item, showsMode: showsMode) { onSetMode(item.id, $0) } onSetNeedsReview: { onSetNeedsReview?(item.id, $0) } onKeep: { onKeep?(item.id, $0) } onJoin: { onJoin?(item.id, $0) } onContents: { onContents?(item.id, $0) }
+                    CaptureRow(item: item, showsMode: showsMode) { onSetMode(item.id, $0) } onKeep: { onKeep?(item.id, $0) } onJoin: { onJoin?(item.id, $0) } onContents: { onContents?(item.id, $0) }
                 }
                 .onDelete { offsets in
                     for id in offsets.map({ items[$0].id }) { onDelete(id) }
@@ -163,7 +164,6 @@ private struct CaptureRow: View {
     let item: CaptureItem
     var showsMode: Bool
     var onSetMode: (CaptureMode) -> Void
-    var onSetNeedsReview: (Bool) -> Void
     var onKeep: (Bool) -> Void
     var onJoin: (Bool) -> Void
     var onContents: (Bool) -> Void
@@ -199,11 +199,6 @@ private struct CaptureRow: View {
                     }
                     .pickerStyle(.segmented)
                     .frame(maxWidth: 200)
-                }
-                if let needsReview = item.needsReview {
-                    Toggle("Needs Review", isOn: Binding { needsReview } set: { onSetNeedsReview($0) })
-                        .font(.subheadline)
-                        .frame(maxWidth: 220)
                 }
                 if let question = item.keepWhich {
                     // Until the cook answers, both copies stay (ux-notes row 93).
@@ -247,11 +242,28 @@ private struct CaptureRow: View {
             }
         }
         .padding(.vertical, 4)
+        // The app's own flag, never a setting (ux-notes row 135): a cook who wants a second look
+        // opens the capture's recipe.
+        .overlay(alignment: .topTrailing) {
+            if item.needsReview == true { NeedsReviewPill() }
+        }
         .task(id: item.url) { thumbnail = await Self.thumbnail(item.url).map(UIImage.init(cgImage:)) }
     }
 
     @concurrent
     nonisolated private static func thumbnail(_ url: URL) async -> CGImage? {
         try? PageImage.load(contentsOf: url, maxPixelSize: 200)
+    }
+}
+
+/// The app's Needs Review flag on a capture (ux-notes row 135): a warning pill, never a toggle.
+struct NeedsReviewPill: View {
+    var body: some View {
+        Label("Needs Review", systemImage: "exclamationmark.triangle.fill")
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.orange)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(Color.orange.opacity(0.15), in: .capsule)
     }
 }

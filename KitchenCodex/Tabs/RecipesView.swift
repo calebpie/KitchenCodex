@@ -612,7 +612,10 @@ struct RecipesView: View {
         Task {
             await Task.yield()
             withAnimation {
-                for recipe in recipes { modelContext.delete(recipe) }
+                for recipe in recipes {
+                    recipe.releaseBookEntry()
+                    modelContext.delete(recipe)
+                }
             }
             try? modelContext.save()
         }
@@ -882,6 +885,7 @@ private struct LibraryRecipes<Header: View>: View {
 
     private func delete(_ recipe: Recipe) {
         withAnimation {
+            recipe.releaseBookEntry()
             modelContext.delete(recipe)
         }
         try? modelContext.save()

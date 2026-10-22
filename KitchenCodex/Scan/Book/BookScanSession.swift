@@ -81,6 +81,7 @@ final class BookScanSession: PageCaptureSink {
         CrossReferenceLinking.prune(in: book, state: &state, context: context)
         if !isOpen {
             state.sitting += 1
+            state.sittingStart = state.nextCaptureID
             let sitting = state.sitting
             let carried = carriedCaptures()
             for capture in state.captures where capture.status != .pending && capture.sitting < sitting && !carried.contains(capture.id) {
@@ -113,7 +114,7 @@ final class BookScanSession: PageCaptureSink {
         return kept
     }
 
-    /// Close: nothing is lost. Captures still reading finish in the queue.
+    /// Done: nothing is lost. Captures still reading finish in the queue.
     func pause() {
         isOpen = false
         save()
@@ -150,7 +151,7 @@ final class BookScanSession: PageCaptureSink {
     var needReviewCount: Int { book.reviewQueue.count + ReferenceSaving.reviewQueue(for: book).count }
     var isReadingCaptures: Bool { state.captures.contains { $0.status == .pending } }
 
-    /// The last capture this sitting, for its pane and the Needs Review toggle.
+    /// The last capture this sitting, for its pane and its Needs Review pill.
     var lastCapture: BookScanState.StoredCapture? {
         state.captures.filter { $0.sitting == state.sitting }.max { $0.id < $1.id }
     }
@@ -163,18 +164,36 @@ final class BookScanSession: PageCaptureSink {
         return owner.flagged ?? owner.queued
     }
 
-    /// The Needs Review toggle (03 §3.8): the capture's recipes join or leave the review queue.
-    func setNeedsReview(_ on: Bool, for id: Int) {
-        guard let index = state.captures.firstIndex(where: { $0.id == id }) else { return }
-        state.captures[index].flagged = on
-        let owner = state.captures[index].joinedTo.flatMap { joined in state.captures.firstIndex { $0.id == joined } } ?? index
-        if state.captures[owner].status == .processed {
-            for recipe in recipes(of: state.captures[owner]) { recipe.currentVersion?.needsReview = on }
-            // A reference waits in the queue through the capture's own flag.
-            state.captures[owner].queued = on
-            try? context.save()
+    // MARK: - ✕: the sitting discarded (ux-notes row 123)
+
+    /// The captures taken this sitting.
+    private var sittingCaptures: [BookScanState.StoredCapture] {
+        state.captures.filter { $0.id >= state.sittingStart }
+    }
+
+    /// ✕'s warning: how many captures go, and the recipes and references saved from them with
+    /// them. Nil when the sitting took none.
+    var discardQuestion: (title: String, message: String?)? {
+        let captures = sittingCaptures
+        guard !captures.isEmpty else { return nil }
+        let recipes = Set(captures.flatMap(\.recipes)).count
+        let references = Set(captures.flatMap(\.references)).count
+        var saved: [String] = []
+        if recipes > 0 { saved.append(recipes == 1 ? "the recipe" : "the \(recipes) recipes") }
+        if references > 0 { saved.append(references == 1 ? "the reference" : "the \(references) references") }
+        let title = captures.count == 1 ? "Discard this sitting's capture?" : "Discard this sitting's \(captures.count) captures?"
+        guard !saved.isEmpty else { return (title, nil) }
+        let one = recipes + references == 1
+        let named = saved.joined(separator: " and ")
+        return (title, "\(named.prefix(1).uppercased() + named.dropFirst()) saved from \(captures.count == 1 ? "it" : "them") \(one ? "goes" : "go") too, and \(one ? "its entry is" : "their entries are") listed again.")
+    }
+
+    /// ✕: this sitting's captures and what they saved go, last first, their entries listed again;
+    /// an earlier sitting's page one of them joined is read again on its own.
+    func discardSitting() {
+        for capture in sittingCaptures.sorted(by: { $0.id > $1.id }) {
+            removeCapture(id: capture.id)
         }
-        save()
     }
 
     // MARK: - Courses
@@ -693,10 +712,12 @@ final class BookScanSession: PageCaptureSink {
 
     // MARK: - A page continuing a reviewed recipe (ux-notes row 100)
 
-    /// The captures sheet's answer. Keep Apart leaves the page saved on its own. Join reads the
-    /// recipe again with this page: the page it continues and every page joined to it, read as
-    /// one with this one, and saved as a new version of each recipe the page before held (the
-    /// cook's review stays as history); this page's own recipes go, and it joins the page before.
+    /// The captures sheet's answer. Keep Apart leaves the page saved on its own, and saves its
+    /// opening, the end of the recipe it continues, as a recipe of its own flagged for a look, so
+    /// nothing printed is lost (ux-notes row 109). Join reads the recipe again with this page: the
+    /// page it continues and every page joined to it, read as one with this one, and saved as a
+    /// new version of each recipe the page before held (the cook's review stays as history); this
+    /// page's own recipes go, and it joins the page before.
     func resolveJoin(of id: Int, join: Bool) {
         guard let index = state.captures.firstIndex(where: { $0.id == id }), let offer = state.captures[index].joinOffer else { return }
         state.captures[index].joinOffer = nil
@@ -704,11 +725,30 @@ final class BookScanSession: PageCaptureSink {
         guard join else {
             state.captures[index].detail = detail + ": kept apart"
             save()
+            Task { await self.keepApart(id, offer: offer) }
             return
         }
         state.captures[index].detail = detail + ": joining…"
         save()
         Task { await self.join(id, offer: offer) }
+    }
+
+    /// Keep Apart: the page's opening, skipped while the question stood, saved as "Leek Soup,
+    /// continued" and sent to the review queue.
+    private func keepApart(_ id: Int, offer: BookScanState.JoinOffer) async {
+        guard let capture = state.captures.first(where: { $0.id == id }), let reading = await readings(of: [capture]).first,
+              reading.isContinuation, !reading.recipes.isEmpty, !isAbandoned else { return }
+        let model = ScanReviewModel(reading: reading, urls: [url(of: capture)])
+        model.recipes[0].title = ReviewItem(text: "\(offer.title), continued", regions: model.recipes[0].title?.regions ?? [])
+        model.recipes[0].course = recipes(of: capture).first?.course ?? book.recipes?.first { $0.id == offer.recipe }?.course
+        let recipe = await ScanSaving.saveNew(model, recipe: 0, book: book, reviewed: false, images: images, appliesPointers: false, in: context)
+        recipe.currentVersion?.needsReview = true
+        try? context.save()
+        finish(id) { capture in
+            capture.recipes.append(recipe.id)
+            capture.queued = true
+            capture.detail = (capture.detail ?? "") + ", its opening saved as “\(recipe.title)” for a look"
+        }
     }
 
     private func join(_ id: Int, offer: BookScanState.JoinOffer) async {

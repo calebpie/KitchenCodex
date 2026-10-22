@@ -43,15 +43,16 @@ enum CameraAccess {
 /// The capture session behind Scan Page's camera (03 §3.5, 02 Flow B steps 1–3): the back camera
 /// (the Pro's virtual camera, so a close page gets the macro lens), a photo output at about 24
 /// megapixels as the fixtures were shot, video frames for the live page outline (Vision's document
-/// segmentation, about ten a second) and the quality pill (the gate, about once a second), and
+/// segmentation and the frame's luminance, about ten a second, steadied by the camera model's
+/// `PageOutlineSmoother`) and the quality pill (the gate, about once a second), and
 /// EAN-13 metadata for an ISBN barcode shown at the start. Everything AVFoundation touches runs on
 /// the session queue or the video queue; results go back through the callbacks.
 nonisolated final class CameraController: NSObject, @unchecked Sendable {
     let session = AVCaptureSession()
 
-    /// The page outline in a frame, in unit coordinates of the frame as shown, and the frame's
-    /// width over its height.
-    var onOutline: (@Sendable (PageQuad?, CGFloat) -> Void)?
+    /// The page outline in a frame, in unit coordinates of the frame as shown, the frame's width
+    /// over its height, and its mean luminance (0…1).
+    var onOutline: (@Sendable (PageQuad?, CGFloat, Double?) -> Void)?
     /// A frame for the quality pill, about once a second.
     var onQualityFrame: (@Sendable (CGImage) -> Void)?
     /// An ISBN read off a barcode in view (on the main queue).
@@ -264,7 +265,7 @@ nonisolated extension CameraController: AVCaptureVideoDataOutputSampleBufferDele
                 quad = PageQuad(topLeft: point(page.topLeft), topRight: point(page.topRight),
                                 bottomRight: point(page.bottomRight), bottomLeft: point(page.bottomLeft))
             }
-            onOutline?(quad.flatMap { $0.isConvex ? $0 : nil }, aspect)
+            onOutline?(quad.flatMap { $0.isConvex ? $0 : nil }, aspect, Self.luminance(of: pixels))
         }
 
         // A frame for the quality pill, about once a second, at a size the gate measures quickly.
@@ -277,6 +278,28 @@ nonisolated extension CameraController: AVCaptureVideoDataOutputSampleBufferDele
                 onQualityFrame(frame)
             }
         }
+    }
+
+    /// The frame's mean luminance, from a sparse grid of the luma plane (or the green channel of a
+    /// BGRA frame): enough to tell a dark frame (More light, ux-notes row 133).
+    private static func luminance(of pixels: CVPixelBuffer) -> Double? {
+        guard CVPixelBufferLockBaseAddress(pixels, .readOnly) == kCVReturnSuccess else { return nil }
+        defer { CVPixelBufferUnlockBaseAddress(pixels, .readOnly) }
+        let planar = CVPixelBufferGetPlaneCount(pixels) > 0
+        guard let base = planar ? CVPixelBufferGetBaseAddressOfPlane(pixels, 0) : CVPixelBufferGetBaseAddress(pixels) else { return nil }
+        let width = planar ? CVPixelBufferGetWidthOfPlane(pixels, 0) : CVPixelBufferGetWidth(pixels)
+        let height = planar ? CVPixelBufferGetHeightOfPlane(pixels, 0) : CVPixelBufferGetHeight(pixels)
+        let row = planar ? CVPixelBufferGetBytesPerRowOfPlane(pixels, 0) : CVPixelBufferGetBytesPerRow(pixels)
+        let bytes = base.assumingMemoryBound(to: UInt8.self)
+        let step = max(1, min(width, height) / 32)
+        var sum = 0, count = 0
+        for y in stride(from: 0, to: height, by: step) {
+            for x in stride(from: 0, to: width, by: step) {
+                sum += Int(planar ? bytes[y * row + x] : bytes[y * row + x * 4 + 1])
+                count += 1
+            }
+        }
+        return count == 0 ? nil : Double(sum) / Double(count) / 255
     }
 
     private static func orientation(forAngle angle: CGFloat) -> CGImagePropertyOrientation {
