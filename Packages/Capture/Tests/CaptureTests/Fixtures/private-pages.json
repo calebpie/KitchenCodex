@@ -22,6 +22,7 @@
   {"slug": "bouchon", "isbn": "9781579652395", "file": "IMG_1069.HEIC", "kind": "recipe", "gate": "cleanTheLens", "page": 27, "recipes": [{"ingredients": 13, "steps": 8}], "settled": true, "note": "smudge over 0.9 (haze); reads cleanly"},
   {"slug": "bouchon", "isbn": "9781579652395", "file": "IMG_1070.HEIC", "kind": "spread-start", "gate": "sharp", "page": 28, "recipes": [{"ingredients": 20, "steps": 15}], "settled": true, "note": "recipe over two photos"},
   {"slug": "bouchon", "isbn": "9781579652395", "file": "IMG_1071.HEIC", "kind": "spread-end", "gate": "sharp", "page": 29, "settled": true},
+  {"slug": "bouchon", "isbn": "9781579652395", "file": "IMG_1244.HEIC", "kind": "sources", "gate": "sharp", "page": 330, "suppliers": 27, "settled": false, "note": "Sources page, four columns, names in small capitals; 28 printed, one name read in part and one missed"},
   {"slug": "gjelina", "isbn": "9781452128092", "file": "IMG_1072.HEIC", "kind": "other", "gate": "sharp", "settled": true, "note": "ISBN barcode"},
   {"slug": "gjelina", "isbn": "9781452128092", "file": "IMG_1073.HEIC", "kind": "contents", "gate": "sharp", "contents": {"sections": 2, "entries": 49, "paged": 47}, "settled": true, "note": "contents, first of four pages"},
   {"slug": "gjelina", "isbn": "9781452128092", "file": "IMG_1074.HEIC", "kind": "contents", "gate": "sharp", "contents": {"sections": 3, "entries": 43, "paged": 41}, "settled": true},
@@ -67,5 +68,9 @@
   {"slug": "nobu-west", "isbn": "9780740765476", "file": "IMG_1115.HEIC", "kind": "photo", "gate": "sharp", "settled": true, "note": "photo plate, full bleed"},
   {"slug": "nobu-west", "isbn": "9780740765476", "file": "IMG_1116.HEIC", "kind": "recipe", "gate": "sharp", "page": 25, "recipes": [{"ingredients": 7, "steps": 4}], "settled": true, "note": "process photos across the foot"},
   {"slug": "nobu-west", "isbn": "9780740765476", "file": "IMG_1117.HEIC", "kind": "recipe", "gate": "sharp", "page": 26, "recipes": [{"ingredients": 14, "steps": 5}], "settled": true, "note": "small italic fractions misread (a quarter as 14)"},
-  {"slug": "nobu-west", "isbn": "9780740765476", "file": "IMG_1118.HEIC", "kind": "photo", "gate": "sharp", "settled": true, "note": "photo plate"}
+  {"slug": "nobu-west", "isbn": "9780740765476", "file": "IMG_1118.HEIC", "kind": "photo", "gate": "sharp", "settled": true, "note": "photo plate"},
+  {"slug": "nobu-west", "isbn": "9780740765476", "file": "IMG_1231.HEIC", "kind": "reference", "gate": "sharp", "page": 250, "sections": 23, "settled": false, "note": "glossary page, three columns of lowercase terms; 25 printed, two terms run into a neighbouring line"},
+  {"slug": "nobu-west", "isbn": "9780740765476", "file": "IMG_1232.HEIC", "kind": "reference", "gate": "sharp", "page": 251, "sections": 24, "settled": false, "note": "glossary page, three columns; count as read"},
+  {"slug": "nobu-west", "isbn": "9780740765476", "file": "IMG_1233.HEIC", "kind": "reference", "gate": "sharp", "page": 252, "sections": 23, "settled": false, "note": "glossary page, three columns; count as read"},
+  {"slug": "nobu-west", "isbn": "9780740765476", "file": "IMG_1234.HEIC", "kind": "reference", "gate": "sharp", "page": 253, "sections": 22, "settled": false, "note": "glossary page, three columns; count as read"}
 ]

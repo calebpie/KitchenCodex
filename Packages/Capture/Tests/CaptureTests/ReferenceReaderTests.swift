@@ -61,6 +61,42 @@ struct ReferenceReaderTests {
         #expect(reading.reference?.sections[1].body.hasPrefix("Mountain yam") == true)
     }
 
+    /// Terms set in lowercase over their definitions, in two columns, each column one block, as
+    /// the recognizer often reads a printed glossary. The terms keep the page's case.
+    @Test func readsLowercaseTermsLineByLine() throws {
+        let column = { (x: Double, lines: [String]) -> PageBlock in
+            Pages.block(lines.enumerated().map { Pages.line($0.element, x: x, y: 0.12 + Double($0.offset) * 0.016) })
+        }
+        let page = Pages.scan([
+            Pages.block([Pages.line("Glossary", x: 0.10, y: 0.06, size: 0.022, spacing: 0.55)]),
+            column(0.10, [
+                "kombu",
+                "A dried kelp sold in stiff, dusty sheets, the",
+                "backbone of the stock in this book.",
+                "mirin",
+                "A sweet rice wine for cooking, syrupy and golden;",
+                "it gives glazes their shine.",
+                "yama-imo",
+                "Mountain yam, a pale tuber that turns slippery",
+                "when grated. Season it at the last moment.",
+            ]),
+            column(0.55, [
+                "shiso",
+                "A broad, jagged leaf of the mint family, eaten",
+                "raw with fish and in pickles.",
+                "yuzu",
+                "A small, knobbly citrus; the zest is used far",
+                "more than the juice.",
+            ]),
+        ])
+        let reading = PageStructurer().read(page)
+        let reference = try #require(reading.reference)
+        #expect(reference.kind == .glossary)
+        #expect(reference.title == "Glossary")
+        #expect(reference.sections.map(\.heading) == ["kombu", "mirin", "yama-imo", "shiso", "yuzu"])
+        #expect(reference.sections[2].body == "Mountain yam, a pale tuber that turns slippery when grated. Season it at the last moment.")
+    }
+
     @Test func readsAChapterOpenerAndATechnique() throws {
         let opener = Pages.scan([
             Pages.block([Pages.line("Soups", x: 0.12, y: 0.10, size: 0.026, spacing: 0.55)]),

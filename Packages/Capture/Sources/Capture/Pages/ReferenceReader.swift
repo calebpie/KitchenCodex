@@ -27,7 +27,7 @@ enum ReferenceReader {
         guard content.reduce(0, { $0 + $1.characterCount }) >= minimumCharacters else { return nil }
         let furniture = blocks.filter { $0.role == .furniture }.map(\.text)
 
-        if let glossary = glossary(in: content, furniture: furniture) { return glossary }
+        if let glossary = glossary(in: content, furniture: furniture) ?? glossaryByLines(in: content) { return glossary }
 
         let headings = content.filter { isHeading($0) }
         let paragraphs = content.filter { !isHeading($0) && $0.text.count >= 20 }
@@ -146,6 +146,74 @@ enum ReferenceReader {
             sections: sections,
             reason: "a glossary page: \(pairs.count) entries",
             confidence: 0.6
+        )
+    }
+
+    // MARK: - Glossary, line by line
+
+    struct Line {
+        var text: String
+        var rect: PageRect
+        var block: Int
+        var isHeading: Bool
+    }
+
+    /// A glossary set as terms on their own lines over their definitions, in columns, the way the
+    /// recognizer often runs a term into the paragraph before or after it: read line by line. A
+    /// term line is short against its column's lines, a few words with no sentence end, after a
+    /// line that ends one (or at a column's top), and before a line that starts one. Three or more
+    /// terms that take most of the page's lines make it a glossary; each term's definition is the
+    /// lines up to the next.
+    static func glossaryByLines(in content: [PageBlock]) -> ImportedReference? {
+        var lines: [Line] = []
+        for block in content {
+            for line in block.lines {
+                let text = line.text.trimmingCharacters(in: .whitespaces)
+                guard !text.isEmpty else { continue }
+                lines.append(Line(text: text, rect: line.rect, block: block.id, isHeading: block.role == .title && block.lines.count == 1 && lines.isEmpty))
+            }
+        }
+        guard lines.count >= 8 else { return nil }
+        let heading = lines.first(where: \.isHeading).map { PageLines.titleText($0.text) }
+        let body = lines.filter { !$0.isHeading }
+        // Each column's measure: the median width of its longer lines.
+        let widths = body.map(\.rect.width).sorted()
+        let measure = widths[widths.count * 3 / 4]
+        var terms: [Int] = []
+        for (index, line) in body.enumerated() {
+            let words = line.text.split(whereSeparator: \.isWhitespace)
+            guard (1...6).contains(words.count), line.text.count <= 48, line.text.filter(\.isLetter).count >= 2,
+                  !(line.text.last.map { ".,;:!?".contains($0) } ?? false), line.rect.width <= measure * 0.65 else { continue }
+            if case .strong = PageLines.ingredientShape(line.text), line.text.first?.isNumber == true { continue }
+            guard index + 1 < body.count else { continue }
+            let next = body[index + 1]
+            let nextSameColumn = next.rect.horizontalOverlap(with: line.rect) > 0.3 && next.rect.minY > line.rect.minY
+            guard nextSameColumn, let first = next.text.first, first.isUppercase || first == "(" || first.isNumber else { continue }
+            if index > 0 {
+                let previous = body[index - 1]
+                let sameColumn = previous.rect.horizontalOverlap(with: line.rect) > 0.3 && previous.rect.minY < line.rect.minY
+                if sameColumn, !(previous.text.last.map { ".)!?\"”".contains($0) } ?? false) { continue }
+            }
+            terms.append(index)
+        }
+        guard terms.count >= 3 else { return nil }
+        var sections: [ImportedReference.Section] = []
+        for (position, start) in terms.enumerated() {
+            let end = position + 1 < terms.count ? terms[position + 1] : body.count
+            let definition = PageText.join(body[(start + 1)..<end].map(\.text))
+            guard !definition.isEmpty else { continue }
+            sections.append(ImportedReference.Section(heading: termText(body[start].text), body: definition))
+        }
+        // The terms and their definitions make the page: little before the first term.
+        guard sections.count >= 3, terms[0] * 4 <= body.count else { return nil }
+        let instructions = sections.count { PageLines.readsAsInstruction($0.body) }
+        guard Double(instructions) < Double(sections.count) * 0.4 else { return nil }
+        return ImportedReference(
+            title: heading.flatMap { $0.count <= 40 ? $0 : nil } ?? "Glossary",
+            kind: .glossary,
+            sections: sections,
+            reason: "a glossary page: \(sections.count) entries",
+            confidence: 0.55
         )
     }
 

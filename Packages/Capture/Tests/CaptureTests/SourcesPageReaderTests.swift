@@ -61,6 +61,31 @@ struct SourcesPageReaderTests {
         #expect(sources.map(\.categories) == [[], []])
     }
 
+    @Test func readsSmallCapsNamesOverTwoLinesAndSpelledNumbers() {
+        // Headings with an introduction under them, names in capitals set over two lines, numbers
+        // spelled in letters, a contact line.
+        let sources = SourcesPageReader.read(lines: [
+            "SOURCES",
+            "FOR EQUIPMENT",
+            "Equipment used in this book can be found at one of the following.",
+            "HARBOR KITCHEN",
+            "SUPPLY COMPANY",
+            "866-PANSHOP (72674671)",
+            "www.harborkitchen.com",
+            "copper pots and molds",
+            "FOR FOOD",
+            "Most good food stores carry these.",
+            "TWO RIVERS FARM",
+            "Contact: Pat Example",
+            "207-555-0199",
+            "lamb and eggs",
+        ])
+        #expect(sources.map(\.name) == ["HARBOR KITCHEN SUPPLY COMPANY", "TWO RIVERS FARM"])
+        #expect(sources.map(\.categories) == [["equipment"], ["food"]])
+        #expect(sources[0].phone == "866-PANSHOP (72674671)")
+        #expect(sources[1].carries == "lamb and eggs")
+    }
+
     @Test func tellsTheLinesApart() {
         #expect(SourcesPageReader.isName("Harbor Kitchen Supply"))
         #expect(SourcesPageReader.isName("CELLAR & CO."))

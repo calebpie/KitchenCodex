@@ -38,9 +38,13 @@ public struct ImportedSource: Sendable, Equatable {
 /// and the rest is what they carry; a short heading between entries (Equipment · Food · Drink, or
 /// a word that means one of them) groups what follows.
 public enum SourcesPageReader {
-    /// The page's suppliers, in the order printed.
+    /// The page's suppliers, in the order printed. A short website or phone line the structurer
+    /// set aside as noise (a URL reads with low confidence) is a contact line here.
     public static func read(_ reading: PageReading) -> [ImportedSource] {
-        let blocks = reading.blocks.filter { $0.kind != .photo && $0.role != .ignore && $0.role != .furniture }
+        let blocks = reading.blocks.filter { block in
+            guard block.kind != .photo, block.role != .furniture else { return false }
+            return block.role != .ignore || website(in: block.text) != nil || phoneNumber(in: block.text) != nil
+        }
         return read(lines: blocks.flatMap { $0.lines.map(\.text) })
     }
 
@@ -65,9 +69,11 @@ public enum SourcesPageReader {
         for (index, text) in texts.enumerated() {
             let lower = text.lowercased().trimmingCharacters(in: .punctuationCharacters)
             if ["sources", "resources", "suppliers", "source guide", "where to buy", "mail-order sources", "mail order sources"].contains(lower) { continue }
-            // A heading names a group and is followed by a name; a shop called "Sakura Pantry" is
-            // followed by its details.
-            if let group = categoryHeading(text), !isName(text) || index + 1 >= texts.count || isName(texts[index + 1]) || categoryHeading(texts[index + 1]) != nil {
+            // A heading names a group and is followed by a name or the group's introduction; a
+            // shop called "Sakura Pantry" is followed by its details. "For Equipment" is a heading.
+            if let group = categoryHeading(text),
+               lower.hasPrefix("for ") || !isName(text) || index + 1 >= texts.count || isName(texts[index + 1]) || categoryHeading(texts[index + 1]) != nil
+                || (phoneNumber(in: texts[index + 1]) == nil && website(in: texts[index + 1]) == nil && !isAddress(texts[index + 1])) {
                 finish()
                 category = group
                 continue
@@ -86,6 +92,13 @@ public enum SourcesPageReader {
                 open.address = open.address.map { "\($0), \(text)" } ?? text
                 current = open
                 currentHasDetails = true
+                continue
+            }
+            // A "Contact:" line names a person, not the supplier.
+            if lower.hasPrefix("contact") { continue }
+            // A name set over two lines ("CULINARY INSTITUTE OF" / "AMERICA AT GREYSTONE").
+            if isName(text), let open = current, !open.name.isEmpty, !currentHasDetails, open.carries.isEmpty {
+                current?.name = open.name + " " + text
                 continue
             }
             if isName(text), current == nil || currentHasDetails || !current!.carries.isEmpty || current!.name.isEmpty {
@@ -141,8 +154,14 @@ public enum SourcesPageReader {
     }
 
     static func phoneNumber(in text: String) -> String? {
-        guard let match = text.firstMatch(of: /(\+?\d{1,3}[\s.\-]?)?\(?\d{3}\)?[\s.\-]\d{3}[\s.\-]\d{4}\b/) else { return nil }
-        return String(match.output.0).trimmingCharacters(in: .whitespaces)
+        if let match = text.firstMatch(of: /(\+?\d{1,3}[\s.\-]?)?\(?\d{3}\)?[\s.\-]\d{3}[\s.\-]\d{4}\b/) {
+            return String(match.output.0).trimmingCharacters(in: .whitespaces)
+        }
+        // A number spelled in letters, "866-COOKWARE (26659273)", "1-888-9-SHELLS".
+        if let match = text.firstMatch(of: /\b(?:1-)?\d{3}-(?:\d-)?[A-Z]{4,}[A-Z0-9]*(?:\s*\([\d\-]{7,}\))?/) {
+            return String(match.output).trimmingCharacters(in: .whitespaces)
+        }
+        return nil
     }
 
     static func website(in text: String) -> URL? {

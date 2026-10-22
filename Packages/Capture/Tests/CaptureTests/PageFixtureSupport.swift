@@ -72,7 +72,8 @@ enum PageFixtures {
         var isbn: String
         var file: String
         /// recipe | spread-start | spread-middle | spread-end | contents | index | sources | photo |
-        /// bad-capture | other (the ISBN barcode photo is "other").
+        /// reference (a glossary, a chapter opener, a technique) | bad-capture | other (the ISBN
+        /// barcode photo is "other").
         var kind: String
         /// The gate's expected reading: sharp | holdStill | cleanTheLens.
         var gate: String
@@ -83,6 +84,10 @@ enum PageFixtures {
         var recipes: [RecipeCounts]?
         /// For a contents page: what its punchlist reading counts.
         var contents: ContentsCounts?
+        /// For a page of reference reading: its sections as read (a glossary's entries).
+        var sections: Int?
+        /// For a Sources page: the suppliers it reads into.
+        var suppliers: Int?
         /// False where the counts are the reading's and could not be checked against the page.
         var settled: Bool
         var note: String?

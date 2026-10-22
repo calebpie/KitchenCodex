@@ -102,8 +102,17 @@ struct PrivatePageTests {
                 case "spread-middle", "spread-end":
                     #expect(single.isContinuation, "\(entry.testDescription): should continue the page before \(hint)")
                     #expect(reading?.files.first != name, "\(entry.testDescription): not stitched to the page before \(hint)")
+                case "reference":
+                    #expect(single.kind == .prose && single.reference != nil, "\(entry.testDescription): read as \(single.kind.rawValue), no reference \(hint)")
+                    if let expected = entry.sections {
+                        #expect(single.reference?.sections.count == expected, "\(entry.testDescription): \(single.reference?.sections.count ?? 0) sections, manifest \(expected) \(hint)")
+                    }
                 case "contents", "index", "sources", "photo":
                     #expect(single.kind.rawValue == entry.kind, "\(entry.testDescription): read as \(single.kind.rawValue) \(hint)")
+                    if let expected = entry.suppliers {
+                        let count = SourcesPageReader.read(single).count
+                        #expect(count == expected, "\(entry.testDescription): \(count) suppliers, manifest \(expected) \(hint)")
+                    }
                     if let expected = entry.contents {
                         let contents = ContentsReader.read(single)
                         let counts = PageFixtures.ContentsCounts(sections: contents.sections.count, entries: contents.entries.count, paged: contents.pagedEntryCount)
@@ -239,8 +248,8 @@ struct PageManifestTests {
         let entries = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [[String: Any]])
         #expect(!entries.isEmpty)
         #expect(PageFixtures.manifest.count == entries.count, "every entry decodes")
-        let allowed: Set<String> = ["slug", "isbn", "file", "kind", "gate", "page", "recipes", "contents", "settled", "note"]
-        let kinds: Set<String> = ["recipe", "spread-start", "spread-middle", "spread-end", "contents", "index", "sources", "photo", "bad-capture", "other"]
+        let allowed: Set<String> = ["slug", "isbn", "file", "kind", "gate", "page", "recipes", "contents", "sections", "suppliers", "settled", "note"]
+        let kinds: Set<String> = ["recipe", "spread-start", "spread-middle", "spread-end", "contents", "index", "sources", "photo", "reference", "bad-capture", "other"]
         let gates = Set(PageQuality.allCases.map(\.rawValue))
         for entry in entries {
             #expect(Set(entry.keys).isSubset(of: allowed), "\(entry.keys.sorted())")
@@ -252,6 +261,8 @@ struct PageManifestTests {
             #expect(kinds.contains(entry.kind))
             #expect(gates.contains(entry.gate))
             #expect(entry.contents == nil || entry.kind == "contents" || entry.kind == "index", "contents counts belong to contents and index pages")
+            #expect(entry.sections == nil || entry.kind == "reference", "section counts belong to reference pages")
+            #expect(entry.suppliers == nil || entry.kind == "sources", "supplier counts belong to Sources pages")
             // A note describes the capture ("ISBN barcode", "haze over the upper left"), never the page's words.
             #expect((entry.note?.count ?? 0) <= 160)
         }

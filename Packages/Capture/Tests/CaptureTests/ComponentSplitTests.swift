@@ -144,6 +144,7 @@ struct ComponentSplitTests {
         #expect(ComponentSplit.readsAsSubRecipe("For the ragù"))
         #expect(ComponentSplit.readsAsSubRecipe("Pasta Dough"))
         #expect(ComponentSplit.readsAsSubRecipe("For the glaze"))
+        #expect(ComponentSplit.readsAsSubRecipe("For the piperade"))
         #expect(!ComponentSplit.readsAsSubRecipe("For the glazed onions"))
         #expect(!ComponentSplit.readsAsSubRecipe("Baby Leeks"))
     }
