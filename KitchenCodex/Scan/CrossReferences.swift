@@ -162,14 +162,17 @@ enum CrossReferenceLinking {
         return pointer.entryTitle(item: line?.item)
     }
 
-    /// The book's Sources page is captured (02 Flow C step 8, ux-notes row 103): the pointers to it
-    /// come off the list, an entry a pointer made goes, and one the contents listed is captured.
+    /// The book's Sources page is captured (02 Flow C step 8, ux-notes row 103): the entry the
+    /// pointers to it put on the list is captured (titled Sources when a pointer made it, since it
+    /// took the pointer's words), and the pointers come off the session's state, having nothing to
+    /// link.
     static func captureSourcesPage(pages: [Int], in book: Book, state: inout BookScanState, context: ModelContext) {
         for index in state.pointerEntries.indices.reversed() {
             let pointer = state.pointerEntries[index]
             guard pointer.kind == PageCrossReference.Kind.sources.rawValue || pages.contains(pointer.page) && pointer.isReference else { continue }
             if let entry = book.orderedEntries.first(where: { $0.id == pointer.entry }), entry.recipe == nil, entry.reference == nil {
-                if pointer.madeEntry { context.delete(entry) } else { entry.status = .captured }
+                entry.status = .captured
+                if pointer.madeEntry { entry.title = "Sources" }
             }
             state.pointerEntries.remove(at: index)
         }

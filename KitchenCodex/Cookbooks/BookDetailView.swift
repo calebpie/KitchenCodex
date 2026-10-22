@@ -350,6 +350,11 @@ private struct EntryRow: View {
         } else if let reference = entry.reference ?? entry.page.flatMap({ page in entry.section?.book?.references(onPage: page).first }) {
             // Reference reading captured from the entry's page opens it.
             NavigationLink(value: LibraryRoute.reference(reference.persistentModelID)) { PunchlistEntryLine(entry: entry) }
+        } else if entry.status != .listed {
+            // Captured with nothing to open here: the book's Sources page, whose suppliers are in
+            // Pantry → Sources.
+            PunchlistEntryLine(entry: entry)
+                .accessibilityHint("Captured; its suppliers are in Pantry, Sources.")
         } else if showsScanNow {
             HStack {
                 PunchlistEntryLine(entry: entry)
