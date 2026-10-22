@@ -19,6 +19,12 @@ struct PrivateFixtureTests {
 
         guard let method = expected.method else {
             #expect(recipe == nil, hint)
+            // An article page reads as a reference, its figures between its sections (ux-notes row 130).
+            if let sections = expected.sections {
+                let article = try #require(extraction.article)
+                #expect(article.sections.count == sections, hint)
+                #expect(article.figures.count == expected.figures ?? 0, hint)
+            }
             return
         }
         let imported = try #require(recipe)
@@ -51,7 +57,7 @@ struct PrivateFixtureManifestTests {
         // Titles and counts only: no entry carries ingredient or step text.
         let url = try #require(Bundle.module.url(forResource: "private-fixtures", withExtension: "json", subdirectory: "Fixtures"))
         let entries = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [[String: Any]])
-        let allowed: Set<String> = ["file", "title", "method", "ingredients", "steps", "groups", "stepImages", "notes", "note"]
+        let allowed: Set<String> = ["file", "title", "method", "ingredients", "steps", "groups", "stepImages", "notes", "note", "sections", "figures"]
         #expect(!entries.isEmpty)
         for entry in entries {
             #expect(Set(entry.keys).isSubset(of: allowed))

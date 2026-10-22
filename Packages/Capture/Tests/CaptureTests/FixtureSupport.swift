@@ -67,6 +67,9 @@ enum Fixtures {
         var notes: Int?
         /// `ImportMethod` raw value, or nil when the page should yield no recipe.
         var method: String?
+        /// For an article page (no recipe): its sections and figures as Save as Reference reads them.
+        var sections: Int?
+        var figures: Int?
         var note: String?
 
         var testDescription: String { file }
