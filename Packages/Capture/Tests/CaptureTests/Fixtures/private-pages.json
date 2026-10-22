@@ -69,8 +69,8 @@
   {"slug": "nobu-west", "isbn": "9780740765476", "file": "IMG_1116.HEIC", "kind": "recipe", "gate": "sharp", "page": 25, "recipes": [{"ingredients": 7, "steps": 4}], "settled": true, "note": "process photos across the foot"},
   {"slug": "nobu-west", "isbn": "9780740765476", "file": "IMG_1117.HEIC", "kind": "recipe", "gate": "sharp", "page": 26, "recipes": [{"ingredients": 14, "steps": 5}], "settled": true, "note": "small italic fractions misread (a quarter as 14)"},
   {"slug": "nobu-west", "isbn": "9780740765476", "file": "IMG_1118.HEIC", "kind": "photo", "gate": "sharp", "settled": true, "note": "photo plate"},
-  {"slug": "nobu-west", "isbn": "9780740765476", "file": "IMG_1231.HEIC", "kind": "reference", "gate": "sharp", "page": 250, "sections": 23, "settled": false, "note": "glossary page, three columns of lowercase terms; 25 printed, two terms run into a neighbouring line"},
-  {"slug": "nobu-west", "isbn": "9780740765476", "file": "IMG_1232.HEIC", "kind": "reference", "gate": "sharp", "page": 251, "sections": 24, "settled": false, "note": "glossary page, three columns; count as read"},
-  {"slug": "nobu-west", "isbn": "9780740765476", "file": "IMG_1233.HEIC", "kind": "reference", "gate": "sharp", "page": 252, "sections": 23, "settled": false, "note": "glossary page, three columns; count as read"},
-  {"slug": "nobu-west", "isbn": "9780740765476", "file": "IMG_1234.HEIC", "kind": "reference", "gate": "sharp", "page": 253, "sections": 22, "settled": false, "note": "glossary page, three columns; count as read"}
+  {"slug": "nobu-west", "isbn": "9780740765476", "file": "IMG_1231.HEIC", "kind": "glossary", "gate": "sharp", "page": 250, "sections": 23, "settled": false, "note": "glossary page, three columns of lowercase terms; 25 printed, two terms run into a neighbouring line"},
+  {"slug": "nobu-west", "isbn": "9780740765476", "file": "IMG_1232.HEIC", "kind": "glossary", "gate": "sharp", "page": 251, "sections": 24, "settled": false, "note": "glossary page, three columns; count as read"},
+  {"slug": "nobu-west", "isbn": "9780740765476", "file": "IMG_1233.HEIC", "kind": "glossary", "gate": "sharp", "page": 252, "sections": 23, "settled": false, "note": "glossary page, three columns; count as read"},
+  {"slug": "nobu-west", "isbn": "9780740765476", "file": "IMG_1234.HEIC", "kind": "glossary", "gate": "sharp", "page": 253, "sections": 22, "settled": false, "note": "glossary page, three columns; count as read"}
 ]
