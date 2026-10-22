@@ -23,6 +23,9 @@ struct PageCameraView: View {
     var showsTextPreview = true
     /// The book session has its own Close beside the punchlist.
     var showsClose = true
+    /// The Recipe · Photo switch, here and in the captures sheet: hidden where every capture is a
+    /// page, the contents and Sources pages (ux-notes row 116).
+    var showsCaptureMode = true
 
     let session: any PageCaptureSink
     @State private var camera: PageCameraModel
@@ -30,11 +33,12 @@ struct PageCameraView: View {
     @State private var isShowingCaptures = false
     @Environment(\.horizontalSizeClass) private var sizeClass
 
-    init(session: any PageCaptureSink, confirmsClose: Bool = true, showsTextPreview: Bool = true, showsClose: Bool = true, onDone: (() -> Void)?, onClose: @escaping () -> Void) {
+    init(session: any PageCaptureSink, confirmsClose: Bool = true, showsTextPreview: Bool = true, showsClose: Bool = true, showsCaptureMode: Bool = true, onDone: (() -> Void)?, onClose: @escaping () -> Void) {
         self.session = session
         self.confirmsClose = confirmsClose
         self.showsTextPreview = showsTextPreview
         self.showsClose = showsClose
+        self.showsCaptureMode = showsCaptureMode
         self.onDone = onDone
         self.onClose = onClose
         _camera = State(initialValue: PageCameraModel(session: session))
@@ -69,7 +73,9 @@ struct PageCameraView: View {
             Button("Keep Scanning", role: .cancel) {}
         }
         .sheet(isPresented: $isShowingCaptures) {
-            CaptureListSheet(items: session.captureItems) { camera.removeCapture(id: $0) } onSetMode: { camera.setMode($1, ofCapture: $0) } onSetNeedsReview: { session.setNeedsReview($1, for: $0) } onKeep: { session.resolveDuplicates(of: $0, keepNew: $1) } onJoin: { session.resolveJoin(of: $0, join: $1) }
+            CaptureListSheet(items: session.captureItems, showsMode: showsCaptureMode) { camera.removeCapture(id: $0) } onSetMode: { camera.setMode($1, ofCapture: $0) } onSetNeedsReview: { session.setNeedsReview($1, for: $0) } onKeep: { session.resolveDuplicates(of: $0, keepNew: $1) } onJoin: { session.resolveJoin(of: $0, join: $1) } onContents: { id, add in
+                if add { session.resolveContents(of: id, add: true) } else { camera.removeCapture(id: id) }
+            }
         }
     }
 
@@ -210,13 +216,15 @@ struct PageCameraView: View {
         VStack(spacing: 14) {
             // Recipe · Photo (ux-notes rows 62 and 82): what the next capture is; a Photo capture is
             // one capture and the switch goes back to Recipe.
-            Picker("Capture", selection: $camera.mode) {
-                Text("Recipe").tag(CaptureMode.recipe)
-                Text("Photo").tag(CaptureMode.photo)
+            if showsCaptureMode {
+                Picker("Capture", selection: $camera.mode) {
+                    Text("Recipe").tag(CaptureMode.recipe)
+                    Text("Photo").tag(CaptureMode.photo)
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 200)
+                .accessibilityHint("Recipe pages are read; a photo goes with the recipe as a cover, then the camera goes back to Recipe.")
             }
-            .pickerStyle(.segmented)
-            .frame(width: 200)
-            .accessibilityHint("Recipe pages are read; a photo goes with the recipe as a cover, then the camera goes back to Recipe.")
 
             // Fixed slots either side keep the shutter centred before the first page, when Add
             // Next Page isn't there yet.

@@ -7,9 +7,18 @@ import SwiftData
 // contents pages, kept in step by the whole-book session, corrected inline by the cook.
 
 extension Book {
+    /// The chapters, in order. The book's index (`indexSection`) is not one.
     var orderedSections: [BookSection] {
-        (sections ?? []).sorted { ($0.sortOrder, $0.startPage ?? .max) < ($1.sortOrder, $1.startPage ?? .max) }
+        (sections ?? []).filter { !$0.isIndex }.sorted { ($0.sortOrder, $0.startPage ?? .max) < ($1.sortOrder, $1.startPage ?? .max) }
     }
+
+    /// What the book's index pages list (ux-notes row 117): kept as a section titled Index beside
+    /// the chapters, never one of them, so the punchlist's counts are the recipes the contents
+    /// list and the session finds. The Index tab shows it.
+    var indexSection: BookSection? { (sections ?? []).first(where: \.isIndex) }
+
+    /// The index's entries in its order.
+    var indexEntries: [BookEntry] { indexSection?.orderedEntries ?? [] }
 
     /// Every entry in the list's order: section by section, each in its own order.
     var orderedEntries: [BookEntry] { orderedSections.flatMap(\.orderedEntries) }
@@ -32,14 +41,18 @@ extension Book {
 
     /// The contents read off the book's contents pages, added to its punchlist as `listed` entries.
     /// A section already on the list with the same title gains the entries it lacks (same title
-    /// and page); the rest are new sections after it. Nothing on the list is removed, so building
-    /// it again after a session keeps the progress.
+    /// and page), unless its first page says it is another chapter of that name; the rest are new
+    /// sections after it. The index pages' entries go to the book's index. Nothing on the list is
+    /// removed, so building it again after a session keeps the progress.
     func apply(_ contents: BookContents, in context: ModelContext) {
         var nextSection = (orderedSections.map(\.sortOrder).max() ?? -1) + 1
         for read in contents.sections {
             let title = read.title.isEmpty ? (orderedSections.last?.title ?? "") : read.title
             let section: BookSection
-            if let existing = orderedSections.first(where: { PunchlistMatcher.similarity($0.title, title) >= 0.99 || $0.title == title }) {
+            if let existing = orderedSections.first(where: { section in
+                (PunchlistMatcher.similarity(section.title, title) >= 0.99 || section.title == title)
+                    && ContentsReader.sameChapter(BookContents.Section(title: section.title, page: section.startPage), BookContents.Section(title: section.title, page: read.page))
+            }) {
                 section = existing
                 if section.startPage == nil { section.startPage = read.page }
             } else {
@@ -58,6 +71,23 @@ extension Book {
                 nextEntry += 1
                 context.insert(entry)
                 entry.section = section
+            }
+        }
+        if !contents.index.isEmpty {
+            let index = indexSection ?? {
+                let made = BookSection(title: BookSection.indexTitle, sortOrder: 0)
+                context.insert(made)
+                made.book = self
+                return made
+            }()
+            var nextEntry = (index.orderedEntries.map(\.sortOrder).max() ?? -1) + 1
+            let listed = Set(index.orderedEntries.map { "\($0.title.lowercased())|\($0.page ?? -1)" })
+            for item in contents.index where !listed.contains("\(item.title.lowercased())|\(item.page ?? -1)") {
+                let entry = BookEntry(title: item.title, page: item.page)
+                entry.sortOrder = nextEntry
+                nextEntry += 1
+                context.insert(entry)
+                entry.section = index
             }
         }
         try? context.save()
@@ -119,6 +149,11 @@ extension Book {
 extension BookSection {
     var orderedEntries: [BookEntry] { (entries ?? []).sorted { $0.sortOrder < $1.sortOrder } }
 
+    /// The book's index (`Book.indexSection`), by its title: the editor lists chapters only, so the
+    /// cook never names one this.
+    static let indexTitle = "Index"
+    var isIndex: Bool { title == Self.indexTitle }
+
     var displayTitle: String { title.isEmpty ? "Untitled Section" : title }
 
     /// "8 of 12": entries past `listed`.
@@ -152,11 +187,18 @@ enum PunchlistLinking {
         var created: [BookEntry] = []
     }
 
-    static func match(titles: [String], pages: [Int], in book: Book, current: BookEntry?, courses choices: [UUID: String], createsMissing: Bool = true, context: ModelContext) -> Match {
+    static func match(titles: [String], pages: [Int], in book: Book, current: BookEntry?, courses choices: [UUID: String], createsMissing: Bool = true, growsList: Bool = false, context: ModelContext) -> Match {
         let entries = book.orderedEntries
-        guard !entries.isEmpty || !book.orderedSections.isEmpty else {
+        guard !entries.isEmpty || !book.orderedSections.isEmpty || growsList && createsMissing && !pages.isEmpty else {
             let course = ScanSession.lastCourse(of: book)
             return Match(entries: titles.map { _ in nil }, courses: titles.map { _ in course })
+        }
+        // The book session with no list (Scan Recipes Instead, ux-notes row 114): the list grows
+        // as pages are scanned, in a Recipes chapter.
+        if book.orderedSections.isEmpty {
+            let section = BookSection(title: "Recipes", sortOrder: 0)
+            context.insert(section)
+            section.book = book
         }
         let indices = PunchlistMatcher.match(titles: titles, pages: pages, entries: book.matcherEntries, current: current.flatMap { entries.firstIndex(of: $0) })
         var matched: [BookEntry?] = []

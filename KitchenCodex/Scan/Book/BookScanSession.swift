@@ -210,7 +210,8 @@ final class BookScanSession: PageCaptureSink {
                         detail: capture.status == .pending ? "Reading…" : capture.detail,
                         needsReview: capture.mode == .recipe && (!capture.recipes.isEmpty || !capture.references.isEmpty) ? needsReview(capture) : nil,
                         keepWhich: capture.duplicates.isEmpty ? nil : keepQuestion(capture),
-                        joinWhich: capture.joinOffer.map { "This page continues “\($0.title)”, which was reviewed or edited since. Join it, reading the recipe again as a new version, or keep it apart?" })
+                        joinWhich: capture.joinOffer.map { "This page continues “\($0.title)”, which was reviewed or edited since. Join it, reading the recipe again as a new version, or keep it apart?" },
+                        contentsWhich: capture.contentsOffer ? "This looks like a contents page, not a recipe page." : nil)
         }
     }
 
@@ -423,6 +424,9 @@ final class BookScanSession: PageCaptureSink {
         }
         if now.mode == .photo || reading.kind == .photo {
             await attachPhoto(id, reading: reading)
+        } else if ContentsReader.judge(reading) == .contents {
+            // A contents page shot here: said so, and offered to the list (ux-notes row 114).
+            finish(id) { $0.pageNumber = reading.pageNumber; $0.contentsOffer = true; $0.detail = "Looks like a contents page, not a recipe page" }
         } else if reading.kind == .recipe, !reading.recipes.isEmpty {
             await saveRecipes(id, reading: reading)
         } else {
@@ -508,7 +512,7 @@ final class BookScanSession: PageCaptureSink {
         // A camera capture is the item that was current when it was taken; photos chosen in a batch
         // follow the list as each is read.
         let current = ownerCapture.entry.flatMap { entryID in book.orderedEntries.first { $0.id == entryID } } ?? currentEntry
-        let match = PunchlistLinking.match(titles: titles, pages: pages, in: book, current: current, courses: state.courses, context: context)
+        let match = PunchlistLinking.match(titles: titles, pages: pages, in: book, current: current, courses: state.courses, growsList: true, context: context)
 
         var hasRecipes = !(book.recipes ?? []).isEmpty
         var layouts = Set(book.reviewedLayouts + state.layouts)
@@ -754,6 +758,39 @@ final class BookScanSession: PageCaptureSink {
         finish(previous.id) { $0.recipes = saved.map(\.id); $0.detail = Self.savedLine(saved, skipped: false) + " · read again with the next page" }
         finish(id) { $0.detail = "Continues the page before · joined as a new version" }
         Self.logger.info("Book session: capture \(id) joined capture \(offer.previous), \(saved.count) recipes read again")
+    }
+
+    // MARK: - A contents page shot in the session (ux-notes row 114)
+
+    /// The captures sheet's answer: Add to the Recipe List reads the page's chapters and recipes
+    /// onto the list (an index page's into the book's index) and keeps it with the book as a page
+    /// scan; Retake takes the capture back, for the page to be shot again.
+    func resolveContents(of id: Int, add: Bool) {
+        guard let index = state.captures.firstIndex(where: { $0.id == id }), state.captures[index].contentsOffer else { return }
+        guard add else {
+            removeCapture(id: id)
+            return
+        }
+        state.captures[index].contentsOffer = false
+        state.captures[index].detail = "Reading it as a contents page…"
+        save()
+        Task { await addContents(of: id) }
+    }
+
+    private func addContents(of id: Int) async {
+        guard let capture = state.captures.first(where: { $0.id == id }), let reading = await readings(of: [capture]).first, !isAbandoned else { return }
+        let contents = await pipeline.readContents(reading)
+        let combined = reading.kind == .index ? ContentsReader.combine([], indexPages: [contents]) : ContentsReader.combine([contents])
+        book.apply(combined, in: context)
+        await ScanSaving.keepPageScan(ScanReviewModel(reading: reading, urls: [url(of: capture)]), kind: reading.kind == .index ? .index : .contents, book: book, images: images, in: context)
+        if currentEntry == nil || currentEntry?.status != .listed { moveToNextUncaptured(after: currentEntry) }
+        let added = combined.entries.count
+        finish(id) { capture in
+            capture.detail = !combined.index.isEmpty
+                ? "An index page: \(combined.index.count) entries to the book's index"
+                : "A contents page: \(combined.sections.count == 1 ? "1 chapter" : "\(combined.sections.count) chapters"), \(added == 1 ? "1 recipe" : "\(added) recipes") added to the list"
+        }
+        try? context.save()
     }
 
     // MARK: - Readings

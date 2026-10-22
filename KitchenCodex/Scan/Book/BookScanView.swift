@@ -16,6 +16,9 @@ struct BookScanView: View {
     let book: Book
     /// Scan now: the session opens at this entry.
     var startAt: BookEntry?
+    /// Recipe pages offered as contents pages (Scan It as a Recipe, ux-notes row 114): the
+    /// session's first captures.
+    var firstPages: [URL] = []
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
@@ -25,6 +28,7 @@ struct BookScanView: View {
     @State private var isReviewing = false
     @State private var isConfirmingClose = false
     @State private var cameraState = CameraState.checking
+    @State private var hasTakenFirstPages = false
 
     enum CameraState {
         case checking, ready, denied, unavailable
@@ -45,6 +49,10 @@ struct BookScanView: View {
             let session = BookScanStore.shared.session(for: book, context: modelContext)
             session.open(at: startAt)
             self.session = session
+            if !firstPages.isEmpty, !hasTakenFirstPages {
+                hasTakenFirstPages = true
+                session.add(files: firstPages, mode: .recipe)
+            }
             if CameraAccess.isAvailable {
                 cameraState = CameraAccess.isDenied ? .denied : (await CameraAccess.request() ? .ready : .denied)
             } else {
@@ -190,6 +198,8 @@ struct BookScanView: View {
 
     /// "Now: Leek Soup, p. 114".
     private func nowLine(_ session: BookScanSession) -> String {
+        // No recipes listed: the list grows as pages are scanned (ux-notes rows 114, 117).
+        if book.orderedEntries.isEmpty { return "Recipes are added as you scan" }
         guard let entry = session.currentEntry else { return "Every listed recipe is captured" }
         return "Now: \(entry.displayTitle)" + (entry.page.map { ", p. \($0)" } ?? "")
     }
@@ -323,7 +333,7 @@ private struct CaptureIntake: View {
             Task { await session.add(photos: items, mode: chosen) }
         }
         .sheet(isPresented: $isShowingCaptures) {
-            CaptureListSheet(items: session.captureItems) { session.removeCapture(id: $0) } onSetMode: { session.setMode($1, ofCapture: $0) } onSetNeedsReview: { session.setNeedsReview($1, for: $0) } onKeep: { session.resolveDuplicates(of: $0, keepNew: $1) } onJoin: { session.resolveJoin(of: $0, join: $1) }
+            CaptureListSheet(items: session.captureItems) { session.removeCapture(id: $0) } onSetMode: { session.setMode($1, ofCapture: $0) } onSetNeedsReview: { session.setNeedsReview($1, for: $0) } onKeep: { session.resolveDuplicates(of: $0, keepNew: $1) } onJoin: { session.resolveJoin(of: $0, join: $1) } onContents: { session.resolveContents(of: $0, add: $1) }
         }
     }
 }

@@ -74,9 +74,25 @@ struct PunchlistEntryLine: View {
     }
 }
 
-/// Listed, captured, needing review, reviewed: shape and colour both say which.
+/// An entry's mark: its recipe's state (ux-notes row 121).
 struct StatusDot: View {
     let entry: BookEntry
+
+    var body: some View {
+        PunchlistMark(state: entry.recipe?.needsReview == true ? .needsReview : entry.status == .listed ? .listed : .captured)
+    }
+}
+
+/// A punchlist entry's mark (ux-notes row 121, 04 §5.1 "Punchlist marks"): the empty circle until
+/// it is captured, one tinted check once it is, reviewed or not, and the orange mark only while
+/// its recipe needs review. Whether the cook reviewed a page is not something the list shows.
+/// Shape and colour both say which.
+struct PunchlistMark: View {
+    enum State {
+        case listed, captured, needsReview
+    }
+
+    let state: State
 
     var body: some View {
         Image(systemName: symbol)
@@ -84,32 +100,27 @@ struct StatusDot: View {
             .accessibilityLabel(label)
     }
 
-    private var needsLook: Bool { entry.recipe?.needsReview == true }
-
     private var symbol: String {
-        if needsLook { return "exclamationmark.circle.fill" }
-        switch entry.status {
-        case .listed: return "circle"
-        case .captured: return "circle.inset.filled"
-        case .reviewed: return "checkmark.circle.fill"
+        switch state {
+        case .listed: "circle"
+        case .captured: "checkmark.circle.fill"
+        case .needsReview: "exclamationmark.circle.fill"
         }
     }
 
     private var color: Color {
-        if needsLook { return .orange }
-        switch entry.status {
-        case .listed: return .secondary
-        case .captured: return .accentColor
-        case .reviewed: return .green
+        switch state {
+        case .listed: .secondary
+        case .captured: .accentColor
+        case .needsReview: .orange
         }
     }
 
     private var label: String {
-        if needsLook { return "Needs review" }
-        switch entry.status {
-        case .listed: return "Not captured"
-        case .captured: return "Captured"
-        case .reviewed: return "Reviewed"
+        switch state {
+        case .listed: "Not captured"
+        case .captured: "Captured"
+        case .needsReview: "Needs review"
         }
     }
 }

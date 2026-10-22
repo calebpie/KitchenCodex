@@ -67,7 +67,7 @@ struct ScanPageView: View {
             await openCamera()
         }
         .fullScreenCover(isPresented: $isShowingCamera) {
-            PageCameraView(session: session) {
+            PageCameraView(session: session, showsCaptureMode: !expectsSources) {
                 isShowingCamera = false
                 Task { await session.finishCapturing() }
             } onClose: {

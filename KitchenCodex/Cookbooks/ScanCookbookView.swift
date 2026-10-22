@@ -9,10 +9,11 @@ import UniformTypeIdentifiers
 
 /// Add → Scan Cookbook (02 Flow C, 03 §3.7–3.8, 04 §5.1 "Add Cookbook"): the barcode first (the
 /// live scanner on a device, a photo or file of it in the Simulator) and Add Cookbook's card, then
-/// Build the Recipe List from the contents pages, corrected inline, then the whole-book session.
-/// Done for Now after the card leaves the book on the shelf, with Continue Scanning in its detail.
-/// A book already on the shelf whose barcode is scanned again goes straight to its session, or to
-/// Build the Recipe List while it has no list.
+/// Build the Recipe List from the contents pages, corrected inline, then the whole-book session;
+/// or Scan Recipes Instead, the session with no list, which grows as pages are scanned (ux-notes
+/// row 114). Done for Now after the card leaves the book on the shelf, with Continue Scanning in
+/// its detail. A book already on the shelf whose barcode is scanned again goes straight to its
+/// session, or to Build the Recipe List while it has no list.
 struct ScanCookbookView: View {
     /// The book to show once the sheet has gone.
     var onFinish: (Book?) -> Void
@@ -20,6 +21,8 @@ struct ScanCookbookView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var step = Step.barcode
     @State private var scanning: Book?
+    /// Recipe pages offered as contents pages, which the session takes as its first captures.
+    @State private var firstPages: [URL] = []
 
     enum Step {
         case barcode
@@ -35,11 +38,14 @@ struct ScanCookbookView: View {
                 AddCookbookView(title: "Scan Cookbook", continuesToScanning: true) { book in arrive(book) }
             case let .start(book):
                 NavigationStack {
-                    CookbookStartView(book: book) { step = .contents(book) } onDone: { finish(book) }
+                    CookbookStartView(book: book) { step = .contents(book) } onScanInstead: { scanning = book } onDone: { finish(book) }
                 }
             case let .contents(book):
                 NavigationStack {
-                    BuildRecipeListView(book: book) { step = .list(book) }
+                    BuildRecipeListView(book: book) { step = .list(book) } onScanRecipes: { pages in
+                        firstPages = pages
+                        scanning = book
+                    }
                         .toolbar {
                             ToolbarItem(placement: .cancellationAction) {
                                 Button("Done for Now") { finish(book) }
@@ -53,7 +59,7 @@ struct ScanCookbookView: View {
             }
         }
         .fullScreenCover(item: $scanning, onDismiss: { if let book = currentBook { finish(book) } }) { book in
-            BookScanView(book: book)
+            BookScanView(book: book, firstPages: firstPages)
         }
     }
 
@@ -69,7 +75,7 @@ struct ScanCookbookView: View {
     /// the cover came up under the status bar and wouldn't close.
     private func arrive(_ book: Book) {
         step = .start(book)
-        guard !book.orderedEntries.isEmpty else { return }
+        guard !book.orderedSections.isEmpty else { return }
         Task {
             try? await Task.sleep(for: .milliseconds(400))
             scanning = book
@@ -82,10 +88,12 @@ struct ScanCookbookView: View {
     }
 }
 
-/// After the card: Build the Recipe List from the contents pages, or Done for Now.
+/// After the card: Build the Recipe List from the contents pages, Scan Recipes Instead, or Done
+/// for Now.
 private struct CookbookStartView: View {
     let book: Book
     var onBuild: () -> Void
+    var onScanInstead: () -> Void
     var onDone: () -> Void
 
     var body: some View {
@@ -120,6 +128,19 @@ private struct CookbookStartView: View {
                     }
                     .padding(.vertical, 4)
                 }
+                Button(action: onScanInstead) {
+                    Label {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Scan Recipes Instead").foregroundStyle(.primary)
+                            Text("No list to start: the list grows as you scan recipe pages.")
+                                .font(.subheadline)
+                                .foregroundStyle(Color.secondary)
+                        }
+                    } icon: {
+                        Image(systemName: "camera.viewfinder")
+                    }
+                    .padding(.vertical, 4)
+                }
                 Button(action: onDone) {
                     Label {
                         VStack(alignment: .leading, spacing: 2) {
@@ -143,11 +164,15 @@ private struct CookbookStartView: View {
 /// Build the Recipe List (02 Flow C step 3): the contents pages photographed (on a device) or
 /// chosen from Photos or Files, read into chapters and `[title, page]` entries (`ContentsReader`,
 /// the on-device model only for a page that reads few entries), added to the book's punchlist as
-/// listed entries, and kept with the book as page scans.
+/// listed entries, and kept with the book as page scans; index pages fill the book's index. A page
+/// that reads as a recipe page is set aside and named, with Scan It as a Recipe (the book session,
+/// the page its first capture) and Retake (ux-notes row 114).
 struct BuildRecipeListView: View {
     let book: Book
     /// The list is on the book: on to the inline correction.
     var onRead: () -> Void
+    /// Scan It as a Recipe: the pages set aside as recipe pages, for the book session.
+    var onScanRecipes: ([URL]) -> Void
 
     @Environment(\.modelContext) private var modelContext
     @State private var phase = Phase.choosing
@@ -157,9 +182,19 @@ struct BuildRecipeListView: View {
     @State private var isChoosingFiles = false
     @State private var isShowingCamera = false
     @State private var camera = ContentsCaptureSink()
+    /// Pages that read as recipe pages, not contents pages.
+    @State private var recipePages: [URL] = []
+    /// Where the last pages came from, for Retake.
+    @State private var source = Source.photos
+    /// Whether the pages read gave the book a list.
+    @State private var foundList = false
 
     enum Phase: Equatable {
-        case choosing, reading, nothingFound
+        case choosing, reading, nothingFound, recipePages
+    }
+
+    enum Source {
+        case camera, photos, files
     }
 
     /// One contents page's progress: counts only.
@@ -178,16 +213,17 @@ struct BuildRecipeListView: View {
                 Section {
                     if CameraAccess.isAvailable {
                         Button("Photograph the Contents Pages", systemImage: "camera") {
+                            source = .camera
                             Task { if await CameraAccess.request() { isShowingCamera = true } }
                         }
                         .disabled(CameraAccess.isDenied)
                     }
-                    Button("From Photo", systemImage: "photo.on.rectangle") { isChoosingPhotos = true }
-                    Button("Files", systemImage: "folder") { isChoosingFiles = true }
+                    Button("From Photo", systemImage: "photo.on.rectangle") { source = .photos; isChoosingPhotos = true }
+                    Button("Files", systemImage: "folder") { source = .files; isChoosingFiles = true }
                 } footer: {
                     Text("Every contents page, in order, and the index too if you like: contents pages come first. The recipes and their pages are read off them, and you can correct the list before you start.")
                 }
-            case .reading, .nothingFound:
+            case .reading, .nothingFound, .recipePages:
                 Section("Contents Pages") {
                     ForEach(pages) { page in
                         HStack {
@@ -198,6 +234,16 @@ struct BuildRecipeListView: View {
                             } else {
                                 ProgressView()
                             }
+                        }
+                    }
+                }
+                if phase == .recipePages {
+                    Section {
+                        Text(recipePages.count == 1 ? "This looks like a recipe page, not a contents page." : "These look like recipe pages, not contents pages.")
+                        Button(recipePages.count == 1 ? "Scan It as a Recipe" : "Scan Them as Recipes") { onScanRecipes(recipePages) }
+                        Button(source == .camera ? "Retake" : "Choose Again", action: retake)
+                        if foundList {
+                            Button("Continue to the List", action: onRead)
                         }
                     }
                 }
@@ -237,13 +283,27 @@ struct BuildRecipeListView: View {
             }
         }
         .fullScreenCover(isPresented: $isShowingCamera) {
-            PageCameraView(session: camera) {
+            // Every capture here is a page: no Recipe · Photo switch (ux-notes row 116).
+            PageCameraView(session: camera, showsCaptureMode: false) {
                 isShowingCamera = false
-                Task { await read(urls: camera.urls) }
+                let urls = camera.urls
+                camera.handOver()
+                Task { await read(urls: urls) }
             } onClose: {
                 isShowingCamera = false
                 camera.discard()
             }
+        }
+    }
+
+    /// Retake: the camera again, or Photos or Files.
+    private func retake() {
+        recipePages = []
+        phase = .choosing
+        switch source {
+        case .camera: isShowingCamera = true
+        case .photos: isChoosingPhotos = true
+        case .files: isChoosingFiles = true
         }
     }
 
@@ -260,6 +320,8 @@ struct BuildRecipeListView: View {
     private func read(urls: [URL]) async {
         guard !urls.isEmpty else { return }
         phase = .reading
+        recipePages = []
+        foundList = false
         pages = urls.indices.map { PageLine(id: $0) }
         let pipeline = ScanSession.makePipeline()
         var contents: [BookContents] = []
@@ -271,9 +333,18 @@ struct BuildRecipeListView: View {
                 pages[number].isDone = true
                 continue
             }
+            guard let read else {
+                // A recipe page, not a contents page (ux-notes row 114): set aside, not read as one.
+                recipePages.append(url)
+                pages[number].line = "A recipe page"
+                pages[number].isDone = true
+                continue
+            }
             if reading.kind == .index { index.append(read) } else { contents.append(read) }
             let count = read.entries.count
-            pages[number].line = count == 0
+            pages[number].line = !read.index.isEmpty
+                ? "Index, \(read.index.count) entries"
+                : count == 0
                 ? (read.sections.isEmpty ? "No recipes found" : "\(read.sections.count) chapters")
                 : "\(read.sections.count) chapters, \(count) recipes" + (read.method == .model ? " (Apple Intelligence)" : "")
             pages[number].isDone = true
@@ -281,18 +352,25 @@ struct BuildRecipeListView: View {
             await ScanSaving.keepPageScan(ScanReviewModel(reading: reading, urls: [url]), kind: reading.kind == .index ? .index : .contents, book: book, images: images, in: modelContext)
         }
         let combined = ContentsReader.combine(contents, indexPages: index)
-        Self.logger.info("Build the Recipe List: \(urls.count) pages, \(combined.sections.count) sections, \(combined.entries.count) entries, \(combined.pagedEntryCount) with a page")
-        guard !combined.sections.isEmpty else {
-            phase = .nothingFound
-            return
+        Self.logger.info("Build the Recipe List: \(urls.count) pages, \(combined.sections.count) sections, \(combined.entries.count) entries, \(combined.pagedEntryCount) with a page, \(combined.index.count) index entries, \(recipePages.count) recipe pages")
+        if !combined.sections.isEmpty || !combined.index.isEmpty {
+            book.apply(combined, in: modelContext)
+            foundList = !combined.sections.isEmpty
         }
-        book.apply(combined, in: modelContext)
-        onRead()
+        if !recipePages.isEmpty {
+            phase = .recipePages
+        } else if combined.sections.isEmpty {
+            phase = .nothingFound
+        } else {
+            onRead()
+        }
     }
 
+    /// A page's reading and its contents; nil contents for a page that reads as a recipe page.
     @concurrent
-    nonisolated private static func read(_ url: URL, with pipeline: PagePipeline) async throws -> (PageReading, BookContents) {
-        let reading = try await pipeline.readPage(contentsOf: url, page: 0, of: 1)
+    nonisolated private static func read(_ url: URL, with pipeline: PagePipeline) async throws -> (PageReading, BookContents?) {
+        let reading = try await pipeline.readContentsPage(contentsOf: url)
+        if ContentsReader.judge(reading) == .recipe { return (reading, nil) }
         return (reading, await pipeline.readContents(reading))
     }
 }
@@ -309,7 +387,8 @@ final class ContentsCaptureSink: PageCaptureSink {
     var lastCapturePreview: [CapturePreviewBlock] { [] }
     var isReadingCaptures: Bool { false }
     var captureItems: [CaptureItem] { captures }
-    var urls: [URL] { captures.filter { $0.mode == .recipe }.map(\.url) }
+    /// Every capture: each is a page here (ux-notes row 116).
+    var urls: [URL] { captures.map(\.url) }
     @ObservationIgnored private var nextID = 0
     @ObservationIgnored private lazy var folder: URL = {
         let folder = FileManager.default.temporaryDirectory.appending(path: "contents-\(UUID().uuidString)")
@@ -341,6 +420,11 @@ final class ContentsCaptureSink: PageCaptureSink {
 
     func discard() {
         for capture in captures { try? FileManager.default.removeItem(at: capture.url) }
+        captures = []
+    }
+
+    /// The pages are read now: the next sitting starts with none, the files left for the reading.
+    func handOver() {
         captures = []
     }
 }

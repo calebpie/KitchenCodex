@@ -151,8 +151,8 @@ extension Book {
     /// The title, or "Untitled Cookbook" for a book saved without one.
     var displayTitle: String { title.isEmpty ? "Untitled Cookbook" : title }
 
-    /// Every punchlist entry, across sections.
-    var entries: [BookEntry] { (sections ?? []).flatMap { $0.entries ?? [] } }
+    /// Every punchlist entry, across its chapters (the index's entries are not the punchlist's).
+    var entries: [BookEntry] { (sections ?? []).filter { !$0.isIndex }.flatMap { $0.entries ?? [] } }
 
     /// How much of the punchlist is captured: entries past `listed`, and recipes from the book
     /// still waiting for a look.

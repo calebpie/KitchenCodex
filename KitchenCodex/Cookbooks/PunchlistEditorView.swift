@@ -5,8 +5,9 @@ import SwiftUI
 /// The recipe list read off the contents pages, corrected inline before the session starts (02
 /// Flow C step 3): edit a title or a page, add a recipe, delete one, move one to another section,
 /// rename a section, merge it with the one before or after, and confirm its course. Every change
-/// is saved as it is made. Build the Recipe List ends here, and Book detail's More → Edit Recipe
-/// List opens it again.
+/// is saved as it is made. A title's edit ends on Return, on a tap outside it and on the
+/// keyboard's Done (ux-notes row 120). Chapters alone are a list to start scanning from (row 117).
+/// Build the Recipe List ends here, and Book detail's More → Edit Recipe List opens it again.
 struct PunchlistEditorView: View {
     let book: Book
     /// Build the Recipe List: Start Scanning and Done for Now. Nil shows Done.
@@ -16,7 +17,14 @@ struct PunchlistEditorView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var renaming: BookSection?
     @State private var newTitle = ""
-    @FocusState private var focused: UUID?
+    @FocusState private var focused: EntryField?
+    /// Where the field under edit is, so a tap anywhere else ends the edit.
+    @State private var editingFrame: CGRect = .zero
+
+    /// A title or a page under edit.
+    enum EntryField: Hashable {
+        case title(UUID), page(UUID)
+    }
 
     private var session: BookScanSession { BookScanStore.shared.session(for: book, context: modelContext) }
 
@@ -34,7 +42,7 @@ struct PunchlistEditorView: View {
             ForEach(Array(sections.enumerated()), id: \.element.id) { position, section in
                 Section {
                     ForEach(section.orderedEntries) { entry in
-                        EntryEditorRow(entry: entry, focused: $focused, onCommit: commit)
+                        EntryEditorRow(entry: entry, focused: $focused, onCommit: commit) { editingFrame = $0 }
                             .swipeActions(edge: .trailing) {
                                 Button("Delete", systemImage: "trash", role: .destructive) { delete(entry) }
                             }
@@ -91,16 +99,30 @@ struct PunchlistEditorView: View {
                 Button("Add Section", systemImage: "plus.rectangle.on.rectangle") { addSection() }
             }
         }
+        // A tap outside the field under edit ends the edit (ux-notes row 120); one on another
+        // field moves the edit there, so the field is let go only if the tap left focus alone.
+        .simultaneousGesture(SpatialTapGesture(coordinateSpace: .global).onEnded { tap in
+            guard let editing = focused, !editingFrame.contains(tap.location) else { return }
+            Task { @MainActor in
+                await Task.yield()
+                if focused == editing { focused = nil }
+            }
+        })
         .navigationTitle("Recipe List")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") { focused = nil }
+            }
             if let onStartScanning {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done for Now") { commit(); onDone() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
+                    // Chapters alone are a list: recipes file in them as they are scanned.
                     Button("Start Scanning", role: .confirm) { commit(); onStartScanning() }
-                        .disabled(entries.isEmpty)
+                        .disabled(sections.isEmpty)
                 }
             } else {
                 ToolbarItem(placement: .confirmationAction) {
@@ -123,7 +145,7 @@ struct PunchlistEditorView: View {
         let paged = entries.count { $0.page != nil }
         let chapters = sections == 1 ? "1 section" : "\(sections) sections"
         let recipes = entries.count == 1 ? "1 recipe" : "\(entries.count) recipes"
-        return entries.isEmpty ? "\(chapters), no recipes listed" : "\(chapters) · \(recipes) · \(paged) with a page number"
+        return entries.isEmpty ? "\(chapters), no recipes listed; recipes are added as you scan" : "\(chapters) · \(recipes) · \(paged) with a page number"
     }
 
     private func commit() {
@@ -136,7 +158,7 @@ struct PunchlistEditorView: View {
         modelContext.insert(entry)
         entry.section = section
         commit()
-        focused = entry.id
+        focused = .title(entry.id)
     }
 
     private func delete(_ entry: BookEntry) {
@@ -182,21 +204,36 @@ struct PunchlistEditorView: View {
     }
 }
 
-/// One entry, its title and page edited in place.
+/// One entry, its title and page edited in place. The title wraps; Return ends its edit, the
+/// break taken out, as review's in-place edits do (ux-notes rows 70, 120).
 private struct EntryEditorRow: View {
     @Bindable var entry: BookEntry
-    var focused: FocusState<UUID?>.Binding
+    var focused: FocusState<PunchlistEditorView.EntryField?>.Binding
     var onCommit: () -> Void
+    /// The row's frame while one of its fields is under edit.
+    var onEditingFrame: (CGRect) -> Void
 
     @State private var page = ""
+    @State private var frame: CGRect = .zero
+
+    private var isEditing: Bool {
+        focused.wrappedValue == .title(entry.id) || focused.wrappedValue == .page(entry.id)
+    }
 
     var body: some View {
         HStack(spacing: 10) {
             StatusDot(entry: entry)
             TextField("Recipe title", text: $entry.title, axis: .vertical)
-                .focused(focused, equals: entry.id)
-                .onSubmit(onCommit)
+                .focused(focused, equals: .title(entry.id))
+                .submitLabel(.done)
+                .onSubmit { focused.wrappedValue = nil }
+                .onChange(of: entry.title) { _, title in
+                    guard title.contains(where: \.isNewline) else { return }
+                    entry.title = title.split(whereSeparator: \.isNewline).joined(separator: " ")
+                    focused.wrappedValue = nil
+                }
             TextField("Page", text: $page)
+                .focused(focused, equals: .page(entry.id))
                 .keyboardType(.numberPad)
                 .multilineTextAlignment(.trailing)
                 .monospacedDigit()
@@ -207,6 +244,13 @@ private struct EntryEditorRow: View {
                     entry.page = Int(digits)
                 }
                 .accessibilityLabel("Page")
+        }
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame in
+            self.frame = frame
+            if isEditing { onEditingFrame(frame) }
+        }
+        .onChange(of: isEditing) { _, editing in
+            if editing { onEditingFrame(frame) } else { onCommit() }
         }
         .onAppear { page = entry.page.map(String.init) ?? "" }
     }

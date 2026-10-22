@@ -28,6 +28,9 @@ struct CaptureItem: Identifiable, Equatable {
     /// A page continuing a recipe the cook reviewed or edited since (ux-notes row 100): the
     /// question, answered Join · Keep Apart.
     var joinWhich: String?
+    /// A contents page shot in the book session (ux-notes row 114): the word, answered Add to the
+    /// Recipe List · Retake.
+    var contentsWhich: String?
 }
 
 /// One text block of the last capture, for the iPad's running preview (03 §3.5, ux-notes row 87):
@@ -79,6 +82,8 @@ protocol PageCaptureSink: AnyObject, Observable {
     func resolveDuplicates(of id: Int, keepNew: Bool)
     /// Join · Keep Apart for a page continuing a reviewed recipe (the book session).
     func resolveJoin(of id: Int, join: Bool)
+    /// Add to the Recipe List · Retake for a contents page shot in the book session.
+    func resolveContents(of id: Int, add: Bool)
     /// The shelf's book with this ISBN.
     func shelfBook(isbn: String) -> Book?
 }
@@ -87,6 +92,7 @@ extension PageCaptureSink {
     func setNeedsReview(_ on: Bool, for id: Int) {}
     func resolveDuplicates(of id: Int, keepNew: Bool) {}
     func resolveJoin(of id: Int, join: Bool) {}
+    func resolveContents(of id: Int, add: Bool) {}
 }
 
 /// Three captures in a row hazy and poorly read (ux-notes row 57): Clean the lens stays advisory
@@ -110,6 +116,8 @@ struct LensWatch {
 /// thumbnail, its note and what became of it, a Recipe/Photo switch, swipe to delete.
 struct CaptureListSheet: View {
     let items: [CaptureItem]
+    /// Each capture's Recipe/Photo switch: hidden where every capture is a page (ux-notes row 116).
+    var showsMode = true
     var onDelete: (Int) -> Void
     var onSetMode: (Int, CaptureMode) -> Void
     /// The book session's Needs Review per capture, so a phone with the camera can flag one too.
@@ -118,6 +126,8 @@ struct CaptureListSheet: View {
     var onKeep: ((Int, Bool) -> Void)?
     /// Join (true) · Keep Apart (false) for a page continuing a reviewed recipe (row 100).
     var onJoin: ((Int, Bool) -> Void)?
+    /// Add to the Recipe List (true) · Retake (false) for a contents page (row 114).
+    var onContents: ((Int, Bool) -> Void)?
 
     @Environment(\.dismiss) private var dismiss
 
@@ -130,7 +140,7 @@ struct CaptureListSheet: View {
                         .frame(maxWidth: .infinity)
                 }
                 ForEach(items) { item in
-                    CaptureRow(item: item) { onSetMode(item.id, $0) } onSetNeedsReview: { onSetNeedsReview?(item.id, $0) } onKeep: { onKeep?(item.id, $0) } onJoin: { onJoin?(item.id, $0) }
+                    CaptureRow(item: item, showsMode: showsMode) { onSetMode(item.id, $0) } onSetNeedsReview: { onSetNeedsReview?(item.id, $0) } onKeep: { onKeep?(item.id, $0) } onJoin: { onJoin?(item.id, $0) } onContents: { onContents?(item.id, $0) }
                 }
                 .onDelete { offsets in
                     for id in offsets.map({ items[$0].id }) { onDelete(id) }
@@ -151,10 +161,12 @@ struct CaptureListSheet: View {
 
 private struct CaptureRow: View {
     let item: CaptureItem
+    var showsMode: Bool
     var onSetMode: (CaptureMode) -> Void
     var onSetNeedsReview: (Bool) -> Void
     var onKeep: (Bool) -> Void
     var onJoin: (Bool) -> Void
+    var onContents: (Bool) -> Void
 
     @State private var thumbnail: UIImage?
 
@@ -180,12 +192,14 @@ private struct CaptureRow: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                 }
-                Picker("Capture", selection: Binding { item.mode } set: { onSetMode($0) }) {
-                    Text("Recipe").tag(CaptureMode.recipe)
-                    Text("Photo").tag(CaptureMode.photo)
+                if showsMode {
+                    Picker("Capture", selection: Binding { item.mode } set: { onSetMode($0) }) {
+                        Text("Recipe").tag(CaptureMode.recipe)
+                        Text("Photo").tag(CaptureMode.photo)
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(maxWidth: 200)
                 }
-                .pickerStyle(.segmented)
-                .frame(maxWidth: 200)
                 if let needsReview = item.needsReview {
                     Toggle("Needs Review", isOn: Binding { needsReview } set: { onSetNeedsReview($0) })
                         .font(.subheadline)
@@ -200,6 +214,19 @@ private struct CaptureRow: View {
                     HStack(spacing: 12) {
                         Button("Keep Earlier") { onKeep(false) }
                         Button("Keep New") { onKeep(true) }
+                    }
+                    .buttonStyle(.bordered)
+                    .font(.subheadline)
+                }
+                if let word = item.contentsWhich {
+                    // Nothing is saved from it until the cook answers (ux-notes row 114).
+                    Text(word)
+                        .font(.subheadline)
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                    HStack(spacing: 12) {
+                        Button("Add to the Recipe List") { onContents(true) }
+                        Button("Retake") { onContents(false) }
                     }
                     .buttonStyle(.bordered)
                     .font(.subheadline)

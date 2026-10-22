@@ -80,6 +80,9 @@ struct BookScanState: Codable {
         /// A page continuing a recipe the cook reviewed or edited since (ux-notes row 100): saved
         /// on its own until the captures sheet's Join · Keep Apart is answered.
         var joinOffer: JoinOffer?
+        /// A contents or index page shot in the session (ux-notes row 114): nothing saved from it
+        /// until the captures sheet's Add to the Recipe List · Retake is answered.
+        var contentsOffer = false
 
         init(id: Int, file: String, mode: CaptureMode, quality: Quality?, note: String) {
             self.id = id
@@ -112,6 +115,7 @@ struct BookScanState: Codable {
             references = try container.decodeIfPresent([UUID].self, forKey: .references) ?? []
             sources = try container.decodeIfPresent([UUID].self, forKey: .sources) ?? []
             joinOffer = try container.decodeIfPresent(JoinOffer.self, forKey: .joinOffer)
+            contentsOffer = try container.decodeIfPresent(Bool.self, forKey: .contentsOffer) ?? false
         }
     }
 
