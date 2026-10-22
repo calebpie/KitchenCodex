@@ -38,6 +38,7 @@ struct ReferencePageView: View {
                         Text(section.body)
                             .textSelection(.enabled)
                             .fixedSize(horizontal: false, vertical: true)
+                            .id(section.id)
                     } header: {
                         if !section.heading.isEmpty {
                             Text(section.heading)
@@ -45,7 +46,6 @@ struct ReferencePageView: View {
                                 .fontWeight(section == highlighted ? .semibold : .regular)
                         }
                     }
-                    .id(section.id)
                 }
                 let recipes = reference.sortedRecipes
                 if !recipes.isEmpty {
@@ -69,8 +69,12 @@ struct ReferencePageView: View {
             } action: { _, isPast in
                 showsNavigationTitle = isPast
             }
-            .onAppear {
-                if let highlighted { proxy.scrollTo(highlighted.id, anchor: .top) }
+            // The entry a pointer named, once the list has laid out (a sheet's list scrolled at
+            // appear lands at the top).
+            .task {
+                guard let highlighted else { return }
+                try? await Task.sleep(for: .milliseconds(350))
+                withAnimation { proxy.scrollTo(highlighted.id, anchor: .center) }
             }
         }
         .navigationTitle(showsNavigationTitle ? (reference.title.isEmpty ? "Reference" : reference.title) : "")

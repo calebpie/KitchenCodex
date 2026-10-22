@@ -654,6 +654,7 @@ enum PagePointerAction {
             URLQueryItem(name: "kind", value: pointer.kind.rawValue),
             URLQueryItem(name: "text", value: pointer.text),
         ] + (pointer.target.map { [URLQueryItem(name: "target", value: $0)] } ?? [])
+            + (pointer.name.map { [URLQueryItem(name: "name", value: $0)] } ?? [])
         return components.url
     }
 
@@ -664,7 +665,7 @@ enum PagePointerAction {
         let pages = (value("pages") ?? "").split(separator: ",").compactMap { Int($0) }
         guard !pages.isEmpty, let text = value("text") else { return nil }
         return PagePointer(range: text.startIndex..<text.endIndex, text: text, pages: pages,
-                           kind: value("kind").flatMap(PageCrossReference.Kind.init(rawValue:)) ?? .recipe, target: value("target"))
+                           kind: value("kind").flatMap(PageCrossReference.Kind.init(rawValue:)) ?? .recipe, target: value("target"), name: value("name"))
     }
 
     /// "Open page 17", for VoiceOver.

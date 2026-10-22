@@ -291,7 +291,24 @@ extension Reference {
         if let exact = sections.first(where: { Self.key($0.heading) == key }) { return exact }
         if let within = sections.first(where: { let heading = Self.key($0.heading); return !heading.isEmpty && (heading.contains(key) || key.contains(heading)) }) { return within }
         let best = sections.max { PunchlistMatcher.similarity($0.heading, term) < PunchlistMatcher.similarity($1.heading, term) }
-        return best.flatMap { PunchlistMatcher.similarity($0.heading, term) >= 0.6 ? $0 : nil }
+        if let best, PunchlistMatcher.similarity(best.heading, term) >= 0.6 { return best }
+        // A term the recognizer misread by a letter ("vama-imo"): the nearest heading one letter off.
+        guard key.count >= 5 else { return nil }
+        return sections.first { Self.isOneEditApart(Self.key($0.heading), key) }
+    }
+
+    /// Whether two words differ by at most one letter changed, added or dropped.
+    private static func isOneEditApart(_ a: String, _ b: String) -> Bool {
+        let a = Array(a), b = Array(b)
+        guard abs(a.count - b.count) <= 1 else { return false }
+        var i = 0, j = 0, edits = 0
+        while i < a.count, j < b.count {
+            if a[i] == b[j] { i += 1; j += 1; continue }
+            edits += 1
+            if edits > 1 { return false }
+            if a.count > b.count { i += 1 } else if b.count > a.count { j += 1 } else { i += 1; j += 1 }
+        }
+        return edits + (a.count - i) + (b.count - j) <= 1
     }
 
     /// Letters and digits, folded, with single spaces, for matching a term to a heading.
