@@ -4,9 +4,11 @@ import SwiftData
 import SwiftUI
 
 /// Pantry → Sources (03 §3.17): stores and suppliers grouped Equipment · Food · Drink the way
-/// cookbooks print them, each with what they carry, the book it came from, Call and Website as row
-/// actions, and the Frequented toggle that makes a store a shopping stop (Phase 4's list). Filled
-/// by hand later; now by scanning a book's Sources page (02 Flow C step 8).
+/// cookbooks print them, the cook's favorites first (ux-notes row 129), each with what they carry,
+/// its phone and website as links (Call, Safari; row 128), the book it came from, and a star
+/// labelled Favorite. Call and Website stay as leading swipe actions; tapping a row opens its
+/// detail, with a notes field. Filled by hand later; now by scanning a book's Sources page (02
+/// Flow C step 8).
 struct SourcesPane: View {
     /// One book's suppliers only: a Sources pointer in its recipe opens them.
     var book: Book?
@@ -14,19 +16,25 @@ struct SourcesPane: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.openURL) private var openURL
     @Query(sort: [SortDescriptor(\Source.name, comparator: .localizedStandard)]) private var allSources: [Source]
+    /// The detail, pushed through a binding so it works in the iPhone's typed Pantry stack.
+    @State private var opened: Source?
 
     private var sources: [Source] {
         guard let book else { return allSources }
         return allSources.filter { $0.book == book }
     }
 
+    /// Favorites first, then the rest by what they carry.
     private var groups: [(title: String, sources: [Source])] {
+        let favorites = sources.filter(\.isFrequented)
+        let rest = sources.filter { !$0.isFrequented }
         let named: [(SourceCategory, String)] = [(.equipment, "Equipment"), (.food, "Food"), (.drink, "Drink")]
-        var result = named.compactMap { category, title -> (String, [Source])? in
-            let found = sources.filter { $0.categories.first == category }
+        var result: [(String, [Source])] = favorites.isEmpty ? [] : [("Favorites", favorites)]
+        result += named.compactMap { category, title -> (String, [Source])? in
+            let found = rest.filter { $0.categories.first == category }
             return found.isEmpty ? nil : (title, found)
         }
-        let other = sources.filter { $0.categories.isEmpty }
+        let other = rest.filter { $0.categories.isEmpty }
         if !other.isEmpty { result.append(("Other", other)) }
         return result
     }
@@ -44,7 +52,7 @@ struct SourcesPane: View {
                     ForEach(groups, id: \.title) { group in
                         Section(group.title) {
                             ForEach(group.sources) { source in
-                                SourceRow(source: source)
+                                SourceRow(source: source) { opened = source }
                                     .swipeActions(edge: .trailing) {
                                         Button("Delete", systemImage: "trash", role: .destructive) {
                                             modelContext.delete(source)
@@ -69,6 +77,9 @@ struct SourcesPane: View {
             }
         }
         .navigationTitle(book.map { "Sources from \($0.displayTitle)" } ?? "Sources")
+        .navigationDestination(item: $opened) { source in
+            SourceDetailView(source: source)
+        }
     }
 
     /// "(207) 555-0143" as a `tel:` link.
@@ -76,44 +87,66 @@ struct SourcesPane: View {
         let digits = phone.filter { $0.isNumber || $0 == "+" }
         return digits.isEmpty ? nil : URL(string: "tel:\(digits)")
     }
+
+    /// "example.com" for a site's link.
+    static func host(_ url: URL) -> String {
+        url.host()?.replacingOccurrences(of: "www.", with: "") ?? url.absoluteString
+    }
 }
 
-/// Name, what they carry, the book it came from, and the Frequented toggle.
+/// Name, what they carry, the phone and site as links, the book it came from and the address, and
+/// the Favorite star; the rest of the row opens its detail.
 private struct SourceRow: View {
     let source: Source
+    var onOpen: () -> Void
 
-    @Environment(\.modelContext) private var modelContext
     @Environment(\.openURL) private var openURL
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 6) {
-                    Text(source.name)
-                        .font(.headline)
-                    Image(systemName: symbol)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .accessibilityLabel(kindWord)
+                Button(action: onOpen) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(source.name)
+                            .font(.headline)
+                            .foregroundStyle(.primary)
+                        if !source.carries.isEmpty {
+                            Text(source.carries)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(3)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(.rect)
                 }
-                if !source.carries.isEmpty {
-                    Text(source.carries)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(3)
+                .buttonStyle(.plain)
+                .accessibilityHint("Shows its details and notes.")
+                // The phone and site as links in the row (ux-notes row 128).
+                if source.phone != nil || source.url != nil {
+                    HStack(spacing: 16) {
+                        if let phone = source.phone, let url = SourcesPane.telephone(phone) {
+                            Button(phone) { openURL(url) }
+                                .accessibilityLabel("Call \(phone)")
+                        }
+                        if let url = source.url {
+                            Button(SourcesPane.host(url)) { openURL(url) }
+                                .accessibilityLabel("Website, \(SourcesPane.host(url))")
+                        }
+                    }
+                    .font(.subheadline)
+                    .buttonStyle(.borderless)
+                    .lineLimit(1)
                 }
                 if let detail {
                     Text(detail)
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                         .lineLimit(2)
+                        .onTapGesture(perform: onOpen)
                 }
             }
-            Spacer(minLength: 8)
-            Toggle("Frequented", isOn: Binding { source.isFrequented } set: { source.isFrequented = $0; try? modelContext.save() })
-                .labelsHidden()
-                .accessibilityLabel("Frequented")
-                .accessibilityHint("A store you shop at, offered as a stop on the shopping list.")
+            FavoriteStar(source: source)
         }
         .padding(.vertical, 2)
         .contextMenu {
@@ -129,32 +162,104 @@ private struct SourceRow: View {
         }
     }
 
-    private var symbol: String {
-        switch source.kind {
-        case .store: "storefront"
-        case .online: "shippingbox"
-        case .producer: "leaf"
-        case .other: "mappin"
-        }
-    }
-
-    private var kindWord: String {
-        switch source.kind {
-        case .store: "Store"
-        case .online: "Online"
-        case .producer: "Producer"
-        case .other: "Source"
-        }
-    }
-
-    /// "From Nobu West · Portland, ME · 207-555-0199".
+    /// "From Nobu West · Portland, ME".
     private var detail: String? {
         var parts: [String] = []
         if let book = source.book { parts.append("From \(book.displayTitle)") }
         if let address = source.address { parts.append(address) }
-        if let phone = source.phone { parts.append(phone) }
-        if let host = source.url?.host()?.replacingOccurrences(of: "www.", with: "") { parts.append(host) }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+}
+
+/// The star (ux-notes row 129): filled for a favorite, labelled Favorite; the model's field keeps
+/// its name.
+private struct FavoriteStar: View {
+    let source: Source
+
+    @Environment(\.modelContext) private var modelContext
+
+    var body: some View {
+        Button {
+            source.isFrequented.toggle()
+            try? modelContext.save()
+        } label: {
+            Image(systemName: source.isFrequented ? "star.fill" : "star")
+                .font(.title3)
+                .foregroundStyle(source.isFrequented ? AnyShapeStyle(.yellow) : AnyShapeStyle(.secondary))
+                .frame(width: 44, height: 44)
+                .contentShape(.rect)
+        }
+        .buttonStyle(.borderless)
+        .accessibilityLabel("Favorite")
+        .accessibilityValue(source.isFrequented ? "On" : "Off")
+        .accessibilityAddTraits(source.isFrequented ? .isSelected : [])
+    }
+}
+
+/// A source's detail (ux-notes row 128): its name, what it carries, its phone, site and address,
+/// the books that cite it, the Favorite star, and the cook's notes (`Source.notes`).
+struct SourceDetailView: View {
+    @Bindable var source: Source
+
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.openURL) private var openURL
+    @Query(sort: [SortDescriptor(\Source.name, comparator: .localizedStandard)]) private var allSources: [Source]
+
+    /// The books whose Sources pages list it: its own, and others listing a supplier of its name.
+    private var books: [Book] {
+        let named = allSources.filter { $0.name.localizedCaseInsensitiveCompare(source.name) == .orderedSame }
+        var found: [Book] = []
+        for book in named.compactMap(\.book) where !found.contains(book) { found.append(book) }
+        return found
+    }
+
+    var body: some View {
+        Form {
+            Section {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(source.name)
+                        .font(.title3.bold())
+                        .accessibilityAddTraits(.isHeader)
+                    if !source.carries.isEmpty {
+                        Text(source.carries)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.vertical, 2)
+                Toggle(isOn: Binding { source.isFrequented } set: { source.isFrequented = $0; try? modelContext.save() }) {
+                    Label("Favorite", systemImage: source.isFrequented ? "star.fill" : "star")
+                }
+            }
+            if source.phone != nil || source.url != nil || source.address != nil {
+                Section {
+                    if let phone = source.phone, let url = SourcesPane.telephone(phone) {
+                        Button { openURL(url) } label: { LabeledContent("Phone", value: phone) }
+                            .accessibilityLabel("Call \(phone)")
+                    }
+                    if let url = source.url {
+                        Button { openURL(url) } label: { LabeledContent("Website", value: SourcesPane.host(url)) }
+                    }
+                    if let address = source.address {
+                        LabeledContent("Address", value: address)
+                            .contextMenu {
+                                Button("Copy Address", systemImage: "doc.on.doc") { UIPasteboard.general.string = address }
+                            }
+                    }
+                }
+            }
+            if !books.isEmpty {
+                Section(books.count == 1 ? "From" : "Cited in") {
+                    ForEach(books) { Text($0.displayTitle) }
+                }
+            }
+            Section("Notes") {
+                TextField("Notes", text: $source.notes, prompt: Text("What to order, who to ask for"), axis: .vertical)
+                    .lineLimit(3...10)
+            }
+        }
+        .navigationTitle(source.name)
+        .navigationBarTitleDisplayMode(.inline)
+        .onDisappear { try? modelContext.save() }
     }
 }
 

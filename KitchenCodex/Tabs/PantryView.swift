@@ -36,7 +36,7 @@ struct PantryView: View {
             case .staples: "Ingredients on hand, so the shopping list skips them."
             case .tools: "Ovens, burners and pots, so the schedule plans around them."
             case .cellarAndBar: "Wine and spirits in the house, so pairings know what's here."
-            case .sources: "Stores and suppliers; frequent ones become shopping stops."
+            case .sources: "Stores and suppliers, your favorites first."
             case .references: "Technique chapters and articles, kept beside the recipes they inform."
             }
         }
