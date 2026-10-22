@@ -732,6 +732,8 @@ public enum ContentsReader {
                     pending = nil
                 }
                 if pending == nil {
+                    // Pages left over from a line the reader lost ("190–91"): no entry to close.
+                    if text.allSatisfy({ $0.isNumber || "–-—,. ".contains($0) }) { continue }
                     if text.hasSuffix(":") {
                         headword = finalTitle(String(text.dropLast()))
                         continue

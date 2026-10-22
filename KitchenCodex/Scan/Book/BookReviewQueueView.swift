@@ -146,12 +146,19 @@ struct BookReviewQueueView: View {
         case let .reference(reference): reference.source?.firstPage
         case nil: nil
         }
-        let pageText = Text(page.map { "p. \($0)" } ?? "").italic()
-        return Text("\(target?.title ?? "")  \(pageText)")
-            .font(.footnote)
-            .foregroundStyle(.secondary)
-            .lineLimit(1)
-            .multilineTextAlignment(.center)
+        // The title gives way to the page when the bar is short of room.
+        return HStack(spacing: 6) {
+            Text(target?.title ?? "")
+                .lineLimit(1)
+            if let page {
+                Text("p. \(page)")
+                    .italic()
+                    .fixedSize()
+            }
+        }
+        .font(.footnote)
+        .foregroundStyle(.secondary)
+        .accessibilityElement(children: .combine)
     }
 
     /// Discard Scan: the capture and its recipe go, the entry is listed again, and the queue moves

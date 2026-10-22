@@ -276,8 +276,15 @@ final class BookScanSession: PageCaptureSink {
         state.captures.removeAll { $0.id == id }
         readings[id] = nil
         try? context.save()
+        keepCurrentItem()
         save()
         kick()
+    }
+
+    /// The current item after a capture is taken back: the entry it was, if it is still listed;
+    /// else the next not captured (the entry may have gone with the capture).
+    private func keepCurrentItem() {
+        if currentEntry == nil || currentEntry?.status != .listed { moveToNextUncaptured(after: currentEntry) }
     }
 
     /// A capture made a recipe page or a photo after the fact: what it saved goes and it is read
@@ -821,6 +828,7 @@ final class BookScanSession: PageCaptureSink {
         }
         state.captures.removeAll { $0.id == owner.id || $0.joinedTo == owner.id }
         try? context.save()
+        keepCurrentItem()
         save()
     }
 
