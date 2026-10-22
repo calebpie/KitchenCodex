@@ -100,7 +100,7 @@ Legend for *Source*: **P** = in your proposal, **M** = market parity (competitor
 | Proficiency setting (four tiers ending in Expert) drives concurrency and technique warnings; concurrency is never a separate setting | P | 4 | 04 §5.1 "Proficiency". |
 | Cooking away from home as an event property (Where: Home or Away), with a soft warning and an on-arrival check of ovens, burners and tools | N | 4 | Replaces "multiple kitchens with their own tools" (decided Oct 17, 2026, 04 §5.1 "Kitchens"): nobody inventories a rental before arriving. |
 | Guest profiles: restrictions, dislikes, drink preferences, history | N | 4 | Remembered across events; live under Plan. |
-| Sources: stores you frequent and specialty suppliers for equipment, food and drink; frequented stores become shopping stops | C | 4 | Added by hand, from a URL, or from a cookbook's Sources page. |
+| Sources: stores you frequent and specialty suppliers for equipment, food and drink; favorite stores (how they become shopping stops is revisited in Phase 4, 04 §5.1 "Sources pane") | C | 4 | Added by hand, from a URL, or from a cookbook's Sources page. |
 | Cellar & Bar inventory (wine, spirits, mixers) with bottle counts and open state | C | 4 | Pairings read from it; missing bottles go to the shopping list. |
 | Profile and settings live in the Pantry tab, not behind a profile button | C | 1 | Proficiency, units, voice, kitchen theme toggle, intelligence, export. |
 
