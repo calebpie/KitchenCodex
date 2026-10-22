@@ -29,6 +29,20 @@ public struct ImportedReference: Sendable, Equatable {
         }
     }
 
+    /// A picture in an article (ux-notes row 130): where it is, its caption from the page's alt
+    /// text, and the section it follows in reading order (-1 before the first).
+    public struct Figure: Sendable, Equatable {
+        public var url: URL
+        public var caption: String
+        public var section: Int
+
+        public init(url: URL, caption: String = "", section: Int) {
+            self.url = url
+            self.caption = caption
+            self.section = section
+        }
+    }
+
     public var title: String
     public var author: String?
     public var siteName: String?
@@ -36,6 +50,9 @@ public struct ImportedReference: Sendable, Equatable {
     public var imageURL: URL?
     public var kind: Kind
     public var sections: [Section]
+    /// An article's figures in reading order; none for a scanned page, whose pictures stay on its
+    /// page scan.
+    public var figures: [Figure] = []
     /// Why the page read as reference reading ("a glossary page: 12 entries"), for the processing
     /// sheet; nil for the web.
     public var reason: String?

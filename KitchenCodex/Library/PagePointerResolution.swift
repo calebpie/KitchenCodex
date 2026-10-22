@@ -92,9 +92,79 @@ struct ScanOfferPopover: View {
     }
 }
 
-/// A Reference opened from a pill or Related reading: the term the pointer named opens its entry.
+/// A Reference opened from a pill or Related reading: the words the pointer named open their
+/// entry, tried in turn (ux-notes row 132).
 struct OpenedReference: Identifiable {
     let id = UUID()
     let reference: Reference
-    var term: String?
+    var terms: [String] = []
+}
+
+/// What a pill shows at itself (ux-notes rows 104, 111): Scan Page N where the book holds nothing
+/// from the page, or a glossary's entry, the term and its definition.
+enum PointerPopover: Identifiable {
+    case scan(ScanOffer)
+    case entry(GlossaryEntry)
+
+    var id: UUID {
+        switch self {
+        case let .scan(offer): offer.id
+        case let .entry(entry): entry.id
+        }
+    }
+}
+
+/// A glossary's entry a pill named, and Open Glossary for the rest of it.
+struct GlossaryEntry: Identifiable {
+    let id = UUID()
+    let reference: Reference
+    let section: ReferenceSection
+    /// Open Glossary: the glossary as a sheet, at this entry.
+    let openGlossary: () -> Void
+}
+
+/// The entry alone at the pill (ux-notes row 111, 04 §5.1 "Page pointers"): its term, its
+/// definition, the glossary it is from, and Open Glossary.
+struct GlossaryEntryPopover: View {
+    let entry: GlossaryEntry
+    var onOpen: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(entry.section.displayHeading)
+                .font(.headline)
+            Text(entry.section.body)
+                .font(.body)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(entry.reference.sourceLine)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            Button("Open Glossary", systemImage: "text.book.closed", action: onOpen)
+                .buttonStyle(.bordered)
+        }
+        .padding(16)
+        .frame(minWidth: 220, idealWidth: 320, maxWidth: 360, alignment: .leading)
+    }
+}
+
+/// The popover a pill shows, for whichever it is.
+struct PointerPopoverContent: View {
+    let popover: PointerPopover
+    var onScan: (ScanOffer) -> Void
+    var onDone: () -> Void
+
+    var body: some View {
+        switch popover {
+        case let .scan(offer):
+            ScanOfferPopover(offer: offer) {
+                onDone()
+                onScan(offer)
+            }
+        case let .entry(entry):
+            GlossaryEntryPopover(entry: entry) {
+                onDone()
+                entry.openGlossary()
+            }
+        }
+    }
 }

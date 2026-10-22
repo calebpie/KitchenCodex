@@ -168,8 +168,8 @@ enum CrossReferenceLinking {
     }
 
     /// A to-scan entry's title (ux-notes row 102): the name the pointer gives ("Dashi (see page
-    /// 17)" → "Dashi"), else the name inside its parentheses ("Yama-imo"), else the ingredient it
-    /// sits on without its size and count words ("Mountain yam"), else "Page 17".
+    /// 17)" → "Dashi"), else the name inside its parentheses ("Kombu"), else the ingredient it sits
+    /// on without its size and count words ("Dried kelp"), else "Page 17".
     static func entryTitle(for reference: PageCrossReference, in recipe: Recipe, page: Int) -> String {
         if let target = reference.target, !target.isEmpty { return target }
         let line = recipe.currentVersion?.sortedIngredients.first { $0.rawText.localizedCaseInsensitiveContains(reference.phrase) }

@@ -45,6 +45,31 @@ struct WebReferenceReaderTests {
         #expect(reference.confidence == 0.8)
     }
 
+    /// ux-notes row 130: the article's figures in reading order, each after the section it follows,
+    /// captioned from its alt text or its caption line; icons, avatars and images set small left out.
+    @Test func keepsTheArticlesFiguresBetweenItsSections() throws {
+        let html = Self.page(
+            jsonLD: #"{"@type":"Article","headline":"On Brown Butter"}"#,
+            body: """
+            <img src="/img/avatar-pat.jpg" class="author-avatar" alt="Pat Example">
+            <p>\(Self.paragraph)</p>
+            <figure><img src="/img/pan.jpg" alt="Butter foaming in a steel pan"></figure>
+            <h2>When to stop</h2>
+            <p>\(Self.second)</p>
+            <figure><img data-src="/img/specks.jpg" src="data:image/gif;base64,R0lGOD"><figcaption>The specks the colour of a walnut shell</figcaption></figure>
+            <img src="/img/share-icon.png" alt="Share" width="24" height="24">
+            <figure><img src="/img/jar.jpg" alt="A jar of it, cooled"></figure>
+            <h2>Keeping it</h2>
+            <p>\(Self.paragraph)</p>
+            """
+        )
+        let reference = try #require(WebReferenceReader.read(html: html, url: URL(string: "https://example.test/notes/brown-butter")))
+        #expect(reference.sections.map(\.heading) == ["", "When to stop", "Keeping it"])
+        #expect(reference.figures.map(\.url.lastPathComponent) == ["pan.jpg", "specks.jpg", "jar.jpg"])
+        #expect(reference.figures.map(\.caption) == ["Butter foaming in a steel pan", "The specks the colour of a walnut shell", "A jar of it, cooled"])
+        #expect(reference.figures.map(\.section) == [0, 1, 1])
+    }
+
     @Test func theImporterOffersTheArticleOnlyWhenNoRecipeWasFound() throws {
         let html = Self.page(
             jsonLD: #"{"@type":"Article","headline":"On Brown Butter"}"#,

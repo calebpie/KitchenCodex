@@ -1,7 +1,7 @@
 import Foundation
 
 /// A page pointer where it is printed in a recipe's text (04 §5.1 "Page pointers", ux-notes row
-/// 74): "Dashi (see page 17)", "yama-imo, see page 253", "Herb Butter (page 214)", "(see Sources,
+/// 74): "Dashi (see page 17)", "kombu, see page 253", "Herb Butter (page 214)", "(see Sources,
 /// page 301)". The app draws the words as a pill and resolves the page at display time; the words
 /// themselves never change.
 public struct PagePointer: Sendable, Equatable {
@@ -17,8 +17,8 @@ public struct PagePointer: Sendable, Equatable {
     /// The name the text gives the thing pointed to ("Herb Butter"), when a capitalized name stands
     /// just before the parentheses.
     public var target: String?
-    /// The name inside the parentheses beside the pointer's words ("yama-imo" in "(yama-imo, see
-    /// page 253)"), for a recipe pointer with no capitalized name before them.
+    /// The name inside the parentheses beside the pointer's words ("kombu" in "(kombu, see page
+    /// 253)"), for a recipe pointer with no capitalized name before them.
     public var name: String?
 
     public init(range: Range<String.Index>, text: String, pages: [Int], kind: PageCrossReference.Kind, target: String? = nil, name: String? = nil) {
@@ -31,13 +31,27 @@ public struct PagePointer: Sendable, Equatable {
     }
 
     /// The title a to-scan entry takes from the pointer (ux-notes row 102): the name before the
-    /// parentheses ("Herb Butter"), else the name inside them ("Yama-imo"), else the ingredient it
-    /// sits on without its size and count words ("Mountain yam"), else "Page 253".
+    /// parentheses ("Herb Butter"), else the name inside them ("Kombu"), else the ingredient it
+    /// sits on without its size and count words ("Dried kelp"), else "Page 253".
     public func entryTitle(item: String? = nil) -> String {
         if let target, !target.isEmpty { return target }
         if let name, !name.isEmpty { return Self.capitalized(name) }
         if let item = item.map(PagePointers.itemName), !item.isEmpty { return Self.capitalized(item) }
         return "Page \(pages.first ?? 0)"
+    }
+
+    /// The words a glossary entry may be headed by, to try in turn (ux-notes row 132): the name
+    /// before the parentheses, the ingredient's item name (the words before its parenthetical,
+    /// without its size and count words), then the name inside the parentheses. A book may head the
+    /// entry with either the ingredient's name or the gloss the pointer gives it.
+    public func termCandidates(item: String? = nil) -> [String] {
+        var candidates: [String] = []
+        for candidate in [target, item.map(PagePointers.itemName), name] {
+            guard let candidate = candidate?.trimmingCharacters(in: .whitespaces), !candidate.isEmpty,
+                  !candidates.contains(where: { $0.caseInsensitiveCompare(candidate) == .orderedSame }) else { continue }
+            candidates.append(candidate)
+        }
+        return candidates
     }
 
     static func capitalized(_ text: String) -> String {
@@ -71,9 +85,9 @@ public enum PagePointers {
         return found
     }
 
-    /// The words inside the parentheses other than the pointer's own: "yama-imo" in "(yama-imo, see
-    /// page 253)", "Dashi" in "(or Dashi, page 17)". Nil when nothing but the pointer is there, or
-    /// what is there runs to a clause.
+    /// The words inside the parentheses other than the pointer's own: "kombu" in "(kombu, see page
+    /// 253)", "Dashi" in "(or Dashi, page 17)". Nil when nothing but the pointer is there, or what
+    /// is there runs to a clause.
     static func parentheticalName(in context: Range<String.Index>, pointer: Range<String.Index>, text: String) -> String? {
         let before = text[context.lowerBound..<pointer.lowerBound]
         let after = text[pointer.upperBound..<context.upperBound]

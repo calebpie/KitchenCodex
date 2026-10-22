@@ -79,10 +79,14 @@ struct ImportSummaryView: View {
 }
 
 /// The top of the preview for an article saved as reference reading (02 §4.2): title, source, the
-/// sections it has, and what saving does. Shared by the Share Extension and the in-app sheet.
+/// sections and photos it has ("4 sections · 9 photos", ux-notes row 130), what saving does, and
+/// "Already in References" when a reference has the same link (row 112). Shared by the Share
+/// Extension and the in-app sheet.
 struct ReferenceSummaryView: View {
     let reference: ImportedReference
     var showsTitle = true
+    /// A reference saved from the same link.
+    var isAlreadySaved = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -102,17 +106,21 @@ struct ReferenceSummaryView: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
             }
-            Label("An article, not a recipe. It saves as reference reading in Pantry → References, beside the recipes it informs.", systemImage: "info.circle")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            if isAlreadySaved {
+                Label("Already in References", systemImage: "checkmark.circle.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.tint)
+            } else {
+                Label("An article, not a recipe. It saves as reference reading in Pantry → References, beside the recipes it informs.", systemImage: "info.circle")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var sectionsLine: String {
-        let count = reference.sections.count
-        let words = reference.characterCount / 5
-        return "\(count == 1 ? "1 section" : "\(count) sections"), about \(words.formatted()) words"
+        "\(reference.contentsLine), about \((reference.characterCount / 5).formatted()) words"
     }
 }

@@ -1,5 +1,6 @@
 import Capture
 import Foundation
+import ImageIO
 import RecipeModel
 import SwiftData
 import UIKit
@@ -168,17 +169,31 @@ extension RecipeDraft {
 }
 
 extension ImportedReference {
-    /// Saves an article read from the web as a Reference with its sections and its source (the
-    /// link, the author and the site), kind article (02 §4.2). Shared by Import from Web and the
-    /// Share Extension, as `saveImport` is for recipes.
+    /// Saves an article read from the web as a Reference with its sections, its figures (ux-notes
+    /// row 130) and its source (the link, the author and the site), kind article (02 §4.2). Shared
+    /// by Import from Web and the Share Extension, as `saveImport` is for recipes. The figures are
+    /// downloaded first, so the extension's save has them before it closes.
     @discardableResult
-    func save(in context: ModelContext) -> Reference {
+    func save(in context: ModelContext) async -> Reference {
+        let photos = await Self.figurePhotos(for: self)
         let reference = Reference(title: title, author: author ?? "", kind: referenceKind)
         context.insert(reference)
         for (index, section) in sections.enumerated() {
             let stored = ReferenceSection(heading: section.heading, body: section.body, sortOrder: index)
             context.insert(stored)
             stored.reference = reference
+        }
+        // Each figure in reading order: the section it follows kept as its `pageNumber` (an article
+        // has no pages), its caption from the page's alt text.
+        let start = Date.now
+        for (index, figure) in figures.enumerated() {
+            guard let data = photos[index] else { continue }
+            let image = RecipeImage(role: .photo, imageData: data)
+            context.insert(image)
+            image.caption = figure.caption
+            image.pageNumber = figure.section
+            image.createdAt = start.addingTimeInterval(Double(index) / 1_000)
+            image.reference = reference
         }
         let source = SourceInfo(url: sourceURL, author: author)
         source.siteName = siteName ?? sourceURL?.host()?.replacingOccurrences(of: "www.", with: "")
@@ -188,6 +203,73 @@ extension ImportedReference {
         reference.source = source
         try? context.save()
         return reference
+    }
+
+    /// A figure smaller than this on its short side, once downloaded, is a decoration or a
+    /// tracking image, left out as an icon is.
+    static let figureMinimumSide = 200
+
+    /// The figures as JPEG by their place in `figures`: downloaded four at a time with the article
+    /// as referrer, each re-encoded with its longest side at most 1,600 px; one that fails, is too
+    /// large, or is small once downloaded is left out.
+    static func figurePhotos(for reference: ImportedReference) async -> [Int: Data] {
+        let figures = reference.figures
+        let referrer = reference.sourceURL
+        let limit = RecipeDraft.stepPhotoByteLimit
+        let minimum = figureMinimumSide
+        var photos: [Int: Data] = [:]
+        await withTaskGroup(of: (Int, Data?).self) { group in
+            var next = 0
+            func enqueue() {
+                guard next < figures.count else { return }
+                let index = next
+                let url = figures[index].url
+                next += 1
+                group.addTask {
+                    guard let data = try? await WebPageFetcher().fetchImage(url, referrer: referrer), data.count <= limit,
+                          let size = Self.pixelSize(of: data), min(size.width, size.height) >= minimum else { return (index, nil) }
+                    return (index, await ImageProcessing.jpeg(from: data, maxPixelSize: 1_600, quality: 0.82))
+                }
+            }
+            for _ in 0..<4 { enqueue() }
+            while let (index, data) = await group.next() {
+                if let data { photos[index] = data }
+                enqueue()
+            }
+        }
+        return photos
+    }
+
+    /// An image's pixel size, read from its header without decoding it.
+    nonisolated static func pixelSize(of data: Data) -> (width: Int, height: Int)? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let width = properties[kCGImagePropertyPixelWidth] as? Int,
+              let height = properties[kCGImagePropertyPixelHeight] as? Int else { return nil }
+        return (width, height)
+    }
+
+    /// A reference already saved from the same link (ux-notes row 112), so the preview can say so.
+    func existing(in context: ModelContext) -> Reference? {
+        guard let key = sourceURL.map(Self.linkKey) else { return nil }
+        let references = (try? context.fetch(FetchDescriptor<Reference>())) ?? []
+        return references.first { $0.source?.url.map(Self.linkKey) == key }
+    }
+
+    /// A link as two saves of one page share it: no fragment, no trailing slash, "www." gone.
+    static func linkKey(_ url: URL) -> String {
+        var text = url.absoluteString
+        if let hash = text.firstIndex(of: "#") { text = String(text[..<hash]) }
+        while text.hasSuffix("/") { text.removeLast() }
+        return text.replacingOccurrences(of: "://www.", with: "://").lowercased()
+    }
+
+    /// "4 sections · 9 photos": what the preview says the article holds.
+    var contentsLine: String {
+        let count = sections.count
+        var parts = [count == 1 ? "1 section" : "\(count) sections"]
+        if !figures.isEmpty { parts.append(figures.count == 1 ? "1 photo" : "\(figures.count) photos") }
+        return parts.joined(separator: " · ")
     }
 
     /// The library's kind: a glossary is a chapter of its book.

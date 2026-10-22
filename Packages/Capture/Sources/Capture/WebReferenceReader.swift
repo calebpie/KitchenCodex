@@ -5,9 +5,12 @@ import Foundation
 /// `BlogPosting` and their kin in the page's JSON-LD, or an `og:type` of article, name the page as
 /// one; its title, author and site come from the metadata the recipe path reads; its sections are
 /// the page's visible text under its own headings, in order, from the article's heading to the
-/// furniture that follows it (comments, related stories, the newsletter box); the JSON-LD's
-/// `articleBody` stands in when the text gives too little. A page that holds a recipe never reaches
-/// this reader (`WebRecipeImporter.extract` asks only when no recipe was found).
+/// furniture that follows it (comments, related stories, the newsletter box), and its figures the
+/// content images among them, each after the section it follows, captioned from its alt text
+/// (ux-notes row 130; icons, logos and images set small are left out as the recipe import's step
+/// photos are); the JSON-LD's `articleBody` stands in when the text gives too little. A page that
+/// holds a recipe never reaches this reader (`WebRecipeImporter.extract` asks only when no recipe
+/// was found).
 public enum WebReferenceReader {
     /// The article on the page, or nil when the page carries no Article markup or too little prose.
     public static func read(html: String, url: URL?) -> ImportedReference? {
@@ -25,7 +28,7 @@ public enum WebReferenceReader {
             title = ImportText.cleanTitle(headline, siteName: metadata.siteName, host: metadata.hostName)
         }
         let author = node.flatMap { names(of: $0["author"] ?? $0["creator"]) } ?? metadata.author
-        var sections = sections(in: page.lines, title: title)
+        var (sections, figures) = read(page.lines, title: title, base: metadata.sourceURL)
         var confidence = node == nil ? 0.6 : 0.8
         let characters = sections.reduce(0) { $0 + $1.body.count }
         if characters < minimumCharacters, let body = node.flatMap({ string($0["articleBody"]) }).map(ImportText.paragraphs), body.count >= minimumCharacters {
@@ -35,10 +38,11 @@ public enum WebReferenceReader {
                 .reduce(into: [ImportedReference.Section]()) { result, paragraph in
                     if result.isEmpty { result.append(ImportedReference.Section(body: paragraph)) } else { result[0].body += "\n\n" + paragraph }
                 }
+            figures = []
             confidence = 0.7
         }
         guard sections.reduce(0, { $0 + $1.body.count }) >= minimumCharacters, !title.isEmpty else { return nil }
-        return ImportedReference(
+        var article = ImportedReference(
             title: title,
             author: author,
             siteName: metadata.siteName ?? metadata.hostName,
@@ -48,6 +52,8 @@ public enum WebReferenceReader {
             sections: sections,
             confidence: confidence
         )
+        article.figures = figures
+        return article
     }
 
     /// Prose under the article's title, so a shell page or a page of links is no article.
@@ -136,16 +142,34 @@ public enum WebReferenceReader {
     /// (else the first `<h1>`, else the top), each later heading opens a section, prose lines fill
     /// the one open, and the page's furniture after the article ends it.
     static func sections(in lines: [PageLine], title: String) -> [ImportedReference.Section] {
+        read(lines, title: title, base: nil).sections
+    }
+
+    /// The sections, and the figures among them: each content image before a line follows the
+    /// section open when it appears, its caption its alt text (or the figure's caption line under
+    /// it). An image the page repeats is kept once.
+    static func read(_ lines: [PageLine], title: String, base: URL?) -> (sections: [ImportedReference.Section], figures: [ImportedReference.Figure]) {
         let titleKey = ImportText.normalizedForComparison(title)
         let start = lines.firstIndex { $0.isHeading && ImportText.normalizedForComparison($0.text) == titleKey }
             ?? lines.firstIndex { $0.headingLevel == 1 }
         var sections = [ImportedReference.Section(body: "")]
         var paragraphs: [[String]] = [[]]
+        var figures: [(figure: ImportedReference.Figure, open: Int)] = []
+        var seen = Set<URL>()
         for line in lines[(start.map { $0 + 1 } ?? 0)...] {
             let text = line.text.trimmingCharacters(in: .whitespaces)
             let key = ImportText.normalizedForComparison(text)
-            guard !key.isEmpty else { continue }
             if stopHeadings.contains(key), text.count <= 40 { break }
+            for (index, source) in line.images.enumerated() {
+                guard let url = ImportText.url(source, relativeTo: base), seen.insert(url).inserted else { continue }
+                let alt = line.imageAlts.indices.contains(index) ? line.imageAlts[index] : ""
+                figures.append((ImportedReference.Figure(url: url, caption: alt, section: sections.count - 1), sections.count - 1))
+            }
+            // A figure's own caption line: the caption of the figure just before it when it had none.
+            if line.tag == "figcaption", let last = figures.indices.last, figures[last].figure.caption.isEmpty, !text.isEmpty {
+                figures[last].figure.caption = text
+            }
+            guard !key.isEmpty else { continue }
             if text.count <= 140, text.lowercased().range(of: noisePattern, options: .regularExpression) != nil { continue }
             if isFurniture(text) { continue }
             if let level = line.headingLevel {
@@ -161,7 +185,19 @@ public enum WebReferenceReader {
             paragraphs[paragraphs.count - 1].append(text)
         }
         for index in sections.indices { sections[index].body = paragraphs[index].joined(separator: "\n\n") }
-        return sections.filter { !$0.body.isEmpty }
+        // Sections with no prose go; a figure after one follows the last kept before it.
+        var kept: [Int] = []
+        var place: [Int: Int] = [:]
+        for index in sections.indices {
+            if !sections[index].body.isEmpty { kept.append(index) }
+            place[index] = kept.count - 1
+        }
+        let placed = figures.map { entry in
+            var figure = entry.figure
+            figure.section = place[entry.open] ?? -1
+            return figure
+        }
+        return (kept.map { sections[$0] }, placed)
     }
 
     /// The heading as a section's: no trailing colon, capitals made title case.

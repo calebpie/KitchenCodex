@@ -41,6 +41,9 @@ struct WebImportView: View {
     @State private var imported: ImportedRecipe?
     /// The article on a page that holds no recipe.
     @State private var article: ImportedReference?
+    /// A reference already saved from the article's link (ux-notes row 112).
+    @State private var savedArticle: Reference?
+    @State private var isSavingReference = false
     @State private var draft = RecipeDraft()
     @State private var coverPreview: UIImage?
     @State private var isLoadingCover = false
@@ -115,20 +118,37 @@ struct WebImportView: View {
                 Button("Save", role: .confirm) { save() }
                     .disabled(!draft.canSave || isLoadingCover)
             case .reference:
-                Button("Save", role: .confirm) { saveReference() }
-                    .disabled(article?.title.trimmed.isEmpty != false)
+                Button(savedArticle == nil ? "Save" : "Save Again", role: .confirm) { saveReference() }
+                    .disabled(article?.title.trimmed.isEmpty != false || isSavingReference)
             default:
                 EmptyView()
             }
         }
     }
 
-    /// The article's title, source and sections, read-only; Save keeps it as a Reference.
+    /// The article's title, source and sections, read-only; Save keeps it as a Reference. One saved
+    /// from the same link says so, with Open and Save Again (ux-notes row 112).
     private var referencePreview: some View {
         Form {
             if let article {
                 Section {
-                    ReferenceSummaryView(reference: article)
+                    ReferenceSummaryView(reference: article, isAlreadySaved: savedArticle != nil)
+                    if let savedArticle {
+                        Button("Open", systemImage: "text.book.closed") {
+                            onSavedReference?(savedArticle)
+                            dismiss()
+                        }
+                    }
+                }
+                if isSavingReference {
+                    Section {
+                        Label {
+                            Text(article.figures.isEmpty ? "Saving…" : "Saving its photos…")
+                        } icon: {
+                            ProgressView()
+                        }
+                        .foregroundStyle(.secondary)
+                    }
                 }
                 ForEach(Array(article.sections.enumerated()), id: \.offset) { _, section in
                     Section {
@@ -370,6 +390,7 @@ struct WebImportView: View {
                 if let found = extraction.article {
                     logTiming("article shown", for: ImportedRecipe(title: found.title))
                     article = found
+                    savedArticle = found.existing(in: modelContext)
                     phase = .reference
                     return
                 }
@@ -490,9 +511,12 @@ struct WebImportView: View {
 
     private func saveReference() {
         guard let article else { return }
-        let reference = article.save(in: modelContext)
-        onSavedReference?(reference)
-        dismiss()
+        isSavingReference = true
+        Task {
+            let reference = await article.save(in: modelContext)
+            onSavedReference?(reference)
+            dismiss()
+        }
     }
 
     private func save() {

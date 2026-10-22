@@ -18,9 +18,9 @@ struct ReferenceReaderTests {
                 "A dried kelp sold in stiff, dusty sheets. It is the backbone of the stock in",
                 "this book: soaked in cold water, warmed slowly and lifted out before the boil.",
             ], x: 0.12, y: 0.138),
-            Pages.block([Pages.line("Yama-imo", x: 0.12, y: 0.19)]),
+            Pages.block([Pages.line("Konnyaku", x: 0.12, y: 0.19)]),
             Pages.paragraph([
-                "Mountain yam, a pale tuber that turns slippery when grated. Grate it on the",
+                "A firm grey jelly that turns springy when simmered. Simmer it in the",
                 "finest side of the grater and season it at the last moment.",
             ], x: 0.12, y: 0.208),
             Pages.block([Pages.line("Yuzu", x: 0.12, y: 0.26)]),
@@ -40,8 +40,8 @@ struct ReferenceReaderTests {
         let reference = try #require(reading.reference)
         #expect(reference.kind == .glossary)
         #expect(reference.title == "Glossary")
-        #expect(reference.sections.map(\.heading) == ["Kombu", "Yama-imo", "Yuzu"])
-        #expect(reference.sections[1].body.hasPrefix("Mountain yam, a pale tuber"))
+        #expect(reference.sections.map(\.heading) == ["Kombu", "Konnyaku", "Yuzu"])
+        #expect(reference.sections[1].body.hasPrefix("A firm grey jelly"))
         #expect(reference.reason == "a glossary page: 3 entries")
         // Not a page the stitcher would join to the one before.
         #expect(!reading.isContinuation)
@@ -50,15 +50,15 @@ struct ReferenceReaderTests {
     @Test func readsTermsSetInOneLineWithTheirDefinitions() {
         let lines = [
             "Kombu: A dried kelp sold in stiff, dusty sheets, the backbone of the stock in this book and most others.",
-            "YAMA-IMO Mountain yam, a pale tuber that turns slippery when grated and is seasoned at the last moment.",
+            "KONNYAKU Firm grey jelly that turns springy when simmered and is seasoned at the last moment.",
             "Yuzu — A small, knobbly citrus with a fragrance between a mandarin and a grapefruit, used for its zest.",
             "Shiso: A broad, jagged leaf of the mint family, green or purple, eaten raw with fish and in pickles.",
         ]
         let blocks = lines.enumerated().map { Pages.block([Pages.line($0.element, x: 0.12, y: 0.12 + Double($0.offset) * 0.03)]) }
         let reading = PageStructurer().read(Pages.scan(blocks))
         #expect(reading.reference?.kind == .glossary)
-        #expect(reading.reference?.sections.map(\.heading) == ["Kombu", "Yama-Imo", "Yuzu", "Shiso"])
-        #expect(reading.reference?.sections[1].body.hasPrefix("Mountain yam") == true)
+        #expect(reading.reference?.sections.map(\.heading) == ["Kombu", "Konnyaku", "Yuzu", "Shiso"])
+        #expect(reading.reference?.sections[1].body.hasPrefix("Firm grey jelly") == true)
     }
 
     /// Terms set in lowercase over their definitions, in two columns, each column one block, as
@@ -76,9 +76,9 @@ struct ReferenceReaderTests {
                 "mirin",
                 "A sweet rice wine for cooking, syrupy and golden;",
                 "it gives glazes their shine.",
-                "yama-imo",
-                "Mountain yam, a pale tuber that turns slippery",
-                "when grated. Season it at the last moment.",
+                "konnyaku",
+                "A firm grey jelly that turns springy",
+                "when simmered. Season it at the last moment.",
             ]),
             column(0.55, [
                 "shiso",
@@ -93,8 +93,8 @@ struct ReferenceReaderTests {
         let reference = try #require(reading.reference)
         #expect(reference.kind == .glossary)
         #expect(reference.title == "Glossary")
-        #expect(reference.sections.map(\.heading) == ["kombu", "mirin", "yama-imo", "shiso", "yuzu"])
-        #expect(reference.sections[2].body == "Mountain yam, a pale tuber that turns slippery when grated. Season it at the last moment.")
+        #expect(reference.sections.map(\.heading) == ["kombu", "mirin", "konnyaku", "shiso", "yuzu"])
+        #expect(reference.sections[2].body == "A firm grey jelly that turns springy when simmered. Season it at the last moment.")
     }
 
     @Test func readsAChapterOpenerAndATechnique() throws {

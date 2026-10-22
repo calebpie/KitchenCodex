@@ -13,6 +13,8 @@ struct PageLine: Sendable, Equatable {
     var segments: [String] = []
     /// `src` of content images that appear after the previous line and up to this one.
     var images: [String] = []
+    /// Each of `images`' alt text, "" where it has none: an article figure's caption.
+    var imageAlts: [String] = []
 
     var isHeading: Bool { headingLevel != nil }
 }
@@ -136,6 +138,7 @@ private struct Builder {
     /// Character offsets in `currentLine` where one inline element ended and a sibling began.
     private var segmentBreaks: [Int] = []
     private var pendingImages: [String] = []
+    private var pendingAlts: [String] = []
 
     mutating func consume(_ token: HTMLTokenizer.Token) {
         switch token {
@@ -206,6 +209,7 @@ private struct Builder {
             }
             if name == "img", let src = Self.contentImageSource(attributes) {
                 pendingImages.append(src)
+                pendingAlts.append(HTMLEntities.decode(attributes["alt"] ?? "").collapsingWhitespace)
             }
         }
         lastTokenWasInlineEnd = false
@@ -328,8 +332,9 @@ private struct Builder {
         currentLine = ""
         segmentBreaks = []
         guard !text.isEmpty else { return }
-        lines.append(PageLine(text: text, tag: currentTag, headingLevel: currentHeading, listID: currentList, segments: segments, images: pendingImages))
+        lines.append(PageLine(text: text, tag: currentTag, headingLevel: currentHeading, listID: currentList, segments: segments, images: pendingImages, imageAlts: pendingAlts))
         pendingImages = []
+        pendingAlts = []
     }
 
     /// An `<img>` that shows content: a real source (`src`, or a lazy loader's `data-src`), not an

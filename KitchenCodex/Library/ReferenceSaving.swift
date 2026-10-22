@@ -280,6 +280,12 @@ extension Reference {
         (sections ?? []).sorted { $0.sortOrder < $1.sortOrder }
     }
 
+    /// An article's figures in reading order (ux-notes row 130): each keeps the section it follows
+    /// as its `pageNumber`, -1 before the first.
+    var figures: [RecipeImage] {
+        (images ?? []).filter { $0.role == .photo }.sorted { ($0.pageNumber ?? -1, $0.createdAt) < ($1.pageNumber ?? -1, $1.createdAt) }
+    }
+
     /// Its page scans in page order.
     var pageScans: [RecipeImage] {
         (images ?? []).filter { $0.role == .pageScan }.sorted { ($0.pageNumber ?? .max, $0.createdAt) < ($1.pageNumber ?? .max, $1.createdAt) }
@@ -290,19 +296,23 @@ extension Reference {
         (recipes ?? []).sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
     }
 
-    /// The section a pointer's term names ("yama-imo"): the entry headed by it, or the nearest.
-    func section(matching term: String?) -> ReferenceSection? {
-        guard let term, !term.isEmpty else { return nil }
-        let key = Self.key(term)
-        guard !key.isEmpty else { return nil }
+    /// The section a pointer names, trying each of its words in turn (ux-notes row 132,
+    /// `PagePointer.termCandidates`): an entry headed by one of them, or holding it, before a near
+    /// match on any. Nil when none matches: the reference opens at its top with nothing marked.
+    func section(matching terms: [String]) -> ReferenceSection? {
         let sections = sortedSections.filter { !$0.heading.isEmpty }
-        if let exact = sections.first(where: { Self.key($0.heading) == key }) { return exact }
-        if let within = sections.first(where: { let heading = Self.key($0.heading); return !heading.isEmpty && (heading.contains(key) || key.contains(heading)) }) { return within }
-        let best = sections.max { PunchlistMatcher.similarity($0.heading, term) < PunchlistMatcher.similarity($1.heading, term) }
-        if let best, PunchlistMatcher.similarity(best.heading, term) >= 0.6 { return best }
-        // A term the recognizer misread by a letter ("vama-imo"): the nearest heading one letter off.
-        guard key.count >= 5 else { return nil }
-        return sections.first { Self.isOneEditApart(Self.key($0.heading), key) }
+        let keys = terms.map(Self.key).filter { !$0.isEmpty }
+        for key in keys {
+            if let exact = sections.first(where: { Self.key($0.heading) == key }) { return exact }
+            if let within = sections.first(where: { let heading = Self.key($0.heading); return !heading.isEmpty && (heading.contains(key) || key.contains(heading)) }) { return within }
+        }
+        for (term, key) in zip(terms.filter { !Self.key($0).isEmpty }, keys) {
+            let best = sections.max { PunchlistMatcher.similarity($0.heading, term) < PunchlistMatcher.similarity($1.heading, term) }
+            if let best, PunchlistMatcher.similarity(best.heading, term) >= 0.6 { return best }
+            // A term the recognizer misread by a letter: the nearest heading one letter off.
+            if key.count >= 5, let near = sections.first(where: { Self.isOneEditApart(Self.key($0.heading), key) }) { return near }
+        }
+        return nil
     }
 
     /// Whether two words differ by at most one letter changed, added or dropped.
@@ -344,5 +354,14 @@ extension ReferenceKind {
         case .chapter: "chapters"
         case .clipping: "clippings"
         }
+    }
+}
+
+extension ReferenceSection {
+    /// The heading as shown (ux-notes row 108): its first letter a capital, the term stored as
+    /// the book prints it.
+    var displayHeading: String {
+        guard let first = heading.first else { return heading }
+        return first.uppercased() + heading.dropFirst()
     }
 }

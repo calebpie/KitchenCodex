@@ -3,13 +3,15 @@ import SwiftData
 import SwiftUI
 
 /// A Reference, read-only (02 §4.2, 03 §3.17 References): where it came from, its sections (a
-/// glossary's entries, each headed by its term) and the recipes it informs. Pushed from the
-/// References pane, a book's detail and Search; a sheet from a pointer's pill or a recipe's Related
-/// reading, opened at the entry the pointer named. More holds Edit and Delete.
+/// glossary's entries, each headed by its term, its first letter a capital, ux-notes row 108), an
+/// article's figures between them (row 130), and the recipes it informs. Pushed from the
+/// References pane, a book's detail and Search; a sheet from a pointer's pill (Open Glossary) or a
+/// recipe's Related reading, opened at the entry the pointer named. More holds Edit and Delete.
 struct ReferencePageView: View {
     let reference: Reference
-    /// The term a pointer named ("yama-imo"): its entry is scrolled to and marked.
-    var term: String?
+    /// The words a pointer named, tried in turn (ux-notes row 132): the entry they head is scrolled
+    /// to and marked; with none, the page opens at its top with nothing marked.
+    var terms: [String] = []
     /// Opening one of its recipes: from a sheet, the sheet closes first.
     var onOpenRecipe: ((Recipe) -> Void)?
 
@@ -23,7 +25,7 @@ struct ReferencePageView: View {
     /// The bar takes the title once the header has scrolled under it, as recipe detail does.
     @State private var showsNavigationTitle = false
 
-    private var highlighted: ReferenceSection? { reference.section(matching: term) }
+    private var highlighted: ReferenceSection? { reference.section(matching: terms) }
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -33,15 +35,25 @@ struct ReferencePageView: View {
                         .listRowBackground(Color.clear)
                         .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
                 }
+                let figures = reference.figures
+                // Figures before the article's first section.
+                let leading = figures.filter { ($0.pageNumber ?? -1) < 0 }
+                if !leading.isEmpty {
+                    Section {
+                        ForEach(leading) { ReferenceFigure(image: $0) }
+                    }
+                }
                 ForEach(reference.sortedSections) { section in
                     Section {
                         Text(section.body)
                             .textSelection(.enabled)
                             .fixedSize(horizontal: false, vertical: true)
                             .id(section.id)
+                        // An article's figures after the section they follow (ux-notes row 130).
+                        ForEach(figures.filter { $0.pageNumber == section.sortOrder }) { ReferenceFigure(image: $0) }
                     } header: {
                         if !section.heading.isEmpty {
-                            Text(section.heading)
+                            Text(section.displayHeading)
                                 .foregroundStyle(section == highlighted ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
                                 .fontWeight(section == highlighted ? .semibold : .regular)
                         }
@@ -166,18 +178,55 @@ struct ReferencePageView: View {
     }
 }
 
+/// One of an article's figures (ux-notes row 130): the picture at the column's width, its caption
+/// under it.
+private struct ReferenceFigure: View {
+    let image: RecipeImage
+
+    @State private var picture: UIImage?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Group {
+                if let picture {
+                    Image(uiImage: picture)
+                        .resizable()
+                        .scaledToFit()
+                } else {
+                    Color(.secondarySystemFill)
+                        .aspectRatio(4 / 3, contentMode: .fit)
+                }
+            }
+            .clipShape(.rect(cornerRadius: 8))
+            .accessibilityLabel(image.caption.isEmpty ? "Photo" : image.caption)
+            if !image.caption.isEmpty {
+                Text(image.caption)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityHidden(true)
+            }
+        }
+        .padding(.vertical, 4)
+        .task(id: image.id) {
+            guard let data = image.imageData else { return }
+            picture = await ImageProcessing.thumbnail(from: data, maxPixelSize: 1_400)
+        }
+    }
+}
+
 /// The page as a sheet, from a pill or Related reading: Done closes it, and a recipe row closes it
 /// and opens the recipe in Recipes.
 struct ReferenceSheet: View {
     let reference: Reference
-    var term: String?
+    var terms: [String] = []
 
     @Environment(\.dismiss) private var dismiss
     @Environment(AppRouter.self) private var router
 
     var body: some View {
         NavigationStack {
-            ReferencePageView(reference: reference, term: term) { recipe in
+            ReferencePageView(reference: reference, terms: terms) { recipe in
                 dismiss()
                 router.openRecipe(id: recipe.id)
             }

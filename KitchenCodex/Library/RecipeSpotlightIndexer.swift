@@ -141,7 +141,7 @@ final class RecipeSpotlightIndexer {
         attributes.title = title
         attributes.displayName = title
         attributes.contentDescription = "\(reference.kind.word) · \(reference.sourceLine)"
-        let headings = reference.sortedSections.map(\.heading).filter { !$0.isEmpty }
+        let headings = reference.sortedSections.filter { !$0.heading.isEmpty }.map(\.displayHeading)
         attributes.alternateNames = headings
         attributes.keywords = unique(headings + ingredientWords(headings) + [reference.author, reference.book?.title, reference.source?.siteName].compactMap(\.self))
         attributes.textContent = ([title] + reference.sortedSections.map { "\($0.heading)\n\($0.body)" }).joined(separator: "\n")

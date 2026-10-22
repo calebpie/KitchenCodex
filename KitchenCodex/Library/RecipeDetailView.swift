@@ -194,7 +194,7 @@ struct RecipeDetailView: View {
             RecipeDetailView(recipe: linked)
         }
         .sheet(item: $openedReference) { opened in
-            ReferenceSheet(reference: opened.reference, term: opened.term)
+            ReferenceSheet(reference: opened.reference, terms: opened.terms)
         }
         .sheet(isPresented: $isShowingSources) {
             NavigationStack {
@@ -397,11 +397,12 @@ struct RecipeDetailView: View {
 
     // MARK: - Page pointers
 
-    /// A pill's page pointer, from a recipe in a book: what the book holds from that page opens (a
-    /// reference at the entry the pointer names); with nothing there yet, Scan Page N comes back
-    /// for the pill to show (04 §5.1 "Page pointers", ux-notes row 104). `item` is the ingredient
-    /// the pointer sits on, for the entry's title and the glossary entry.
-    private func open(_ pointer: PagePointer, item: String? = nil) -> ScanOffer? {
+    /// A pill's page pointer, from a recipe in a book: what the book holds from that page opens; a
+    /// glossary's entry the pointer names comes back for the pill to show, with Open Glossary
+    /// (ux-notes row 111), the glossary opening at its top when no entry matches (row 132); with
+    /// nothing there yet, Scan Page N comes back (04 §5.1 "Page pointers", ux-notes row 104).
+    /// `item` is the ingredient the pointer sits on, for the entry's title and the glossary entry.
+    private func open(_ pointer: PagePointer, item: String? = nil) -> PointerPopover? {
         guard let book = recipe.book else { return nil }
         // The book's Sources page is captured: its suppliers (ux-notes row 103).
         if pointer.kind == .sources, !book.sourcesPages.isEmpty {
@@ -412,9 +413,15 @@ struct RecipeDetailView: View {
         case let .recipe(linked):
             openedRecipe = linked
         case let .reference(reference):
-            openedReference = OpenedReference(reference: reference, term: pointer.target ?? pointer.name ?? item.map(PagePointers.itemName))
+            let terms = pointer.termCandidates(item: item)
+            if reference.isGlossary, let section = reference.section(matching: terms) {
+                return .entry(GlossaryEntry(reference: reference, section: section) {
+                    openedReference = OpenedReference(reference: reference, terms: [section.heading])
+                })
+            }
+            openedReference = OpenedReference(reference: reference, terms: terms)
         case let .nothing(page, entry):
-            return ScanOffer(page: page, title: entry?.title ?? pointer.entryTitle(item: item), pointer: pointer, bookTitle: book.displayTitle)
+            return .scan(ScanOffer(page: page, title: entry?.title ?? pointer.entryTitle(item: item), pointer: pointer, bookTitle: book.displayTitle))
         }
         return nil
     }
@@ -440,13 +447,20 @@ struct RecipeDetailView: View {
     }
 
     /// The pill handler where pointers can open something: a recipe from a book.
-    private var pointerHandler: ((PagePointer) -> ScanOffer?)? {
+    private var pointerHandler: ((PagePointer) -> PointerPopover?)? {
         recipe.book == nil ? nil : { open($0) }
     }
 
     /// VoiceOver's "Open page N": what the book holds opens; nothing there puts up the dialog.
     private var spokenPointerHandler: ((PagePointer) -> Void)? {
-        recipe.book == nil ? nil : { pointer in offeredScan = open(pointer) }
+        recipe.book == nil ? nil : { pointer in
+            switch open(pointer) {
+            case let .scan(offer): offeredScan = offer
+            // No pill to show it at: the glossary at the entry.
+            case let .entry(entry): entry.openGlossary()
+            case nil: break
+            }
+        }
     }
 
     /// The references that inform this recipe (02 §4.2), by title.
@@ -461,7 +475,7 @@ struct RecipeDetailView: View {
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(relatedReading) { reference in
                     Button {
-                        openedReference = OpenedReference(reference: reference, term: nil)
+                        openedReference = OpenedReference(reference: reference)
                     } label: {
                         HStack(spacing: 12) {
                             VStack(alignment: .leading, spacing: 2) {
@@ -960,11 +974,12 @@ private struct IngredientLine: View {
     /// The unit temperatures are shown in; nil keeps them as written.
     let temperatureScale: TemperatureScale?
     /// A page pointer's pill in the note ("Dashi (see page 17)"): what the book holds opens, or Scan
-    /// Page N comes back to show at the row (ux-notes row 104); nil leaves pointers as words.
-    var onPointer: ((PagePointer) -> ScanOffer?)?
+    /// Page N or a glossary's entry comes back to show at the row (ux-notes rows 104, 111); nil
+    /// leaves pointers as words.
+    var onPointer: ((PagePointer) -> PointerPopover?)?
     var onScan: ((ScanOffer) -> Void)?
 
-    @State private var offeredScan: ScanOffer?
+    @State private var offeredScan: PointerPopover?
 
     var body: some View {
         Group {
@@ -985,13 +1000,11 @@ private struct IngredientLine: View {
             offeredScan = onPointer?(pointer)
             return .handled
         })
-        // Scan Page N at the line, as the As Written popover sits at a step's pill.
-        .popover(item: $offeredScan) { offer in
-            ScanOfferPopover(offer: offer) {
-                offeredScan = nil
-                onScan?(offer)
-            }
-            .presentationCompactAdaptation(.popover)
+        // Scan Page N or the glossary's entry at the line, as the As Written popover sits at a
+        // step's pill.
+        .popover(item: $offeredScan) { popover in
+            PointerPopoverContent(popover: popover) { onScan?($0) } onDone: { offeredScan = nil }
+                .presentationCompactAdaptation(.popover)
         }
         .accessibilityActions {
             ForEach(Array(pointers.enumerated()), id: \.offset) { _, pointer in

@@ -137,6 +137,9 @@ final class ShareImportModel {
     var recipe: ImportedRecipe?
     /// The article on a page that holds no recipe.
     var reference: ImportedReference?
+    /// A reference already saved from the article's link (ux-notes row 112): the preview says so,
+    /// and Save becomes Save Again. The extension has no way to open the app (slice 7), so no Open.
+    var isReferenceSaved = false
     var cover: UIImage?
     var isLoadingCover = false
     /// The preview shows a page reading while the model reads the page (ux-notes row 44).
@@ -192,6 +195,9 @@ final class ShareImportModel {
                 if let article = extraction.article {
                     log.info("Article found: \(article.sections.count) sections")
                     reference = article
+                    if let container = try? RecipeStore.makeContainer() {
+                        isReferenceSaved = article.existing(in: ModelContext(container)) != nil
+                    }
                     phase = .readyReference
                     return
                 }
@@ -256,22 +262,25 @@ final class ShareImportModel {
         modelWork?.cancel()
         modelWork = nil
         phase = .saving
-        do {
-            // The same App Group store as the app, without CloudKit; the app syncs what lands here.
-            let container = try RecipeStore.makeContainer()
-            let context = ModelContext(container)
-            if let recipe {
-                var draft = RecipeDraft(imported: recipe)
-                draft.photo = photo
-                draft.saveImport(recipe, in: context)
-            } else if let reference {
-                reference.save(in: context)
+        Task {
+            do {
+                // The same App Group store as the app, without CloudKit; the app syncs what lands here.
+                let container = try RecipeStore.makeContainer()
+                let context = ModelContext(container)
+                if let recipe {
+                    var draft = RecipeDraft(imported: recipe)
+                    draft.photo = photo
+                    draft.saveImport(recipe, in: context)
+                } else if let reference {
+                    // Its photos are downloaded first, so they are saved before the sheet closes.
+                    await reference.save(in: context)
+                }
+                // `saveImport` saves quietly; a second save surfaces a failure instead of losing the recipe.
+                try context.save()
+                onFinish?(true)
+            } catch {
+                phase = .failed("Couldn't save to your library. \(error.localizedDescription)")
             }
-            // `saveImport` saves quietly; a second save surfaces a failure instead of losing the recipe.
-            try context.save()
-            onFinish?(true)
-        } catch {
-            phase = .failed("Couldn't save to your library. \(error.localizedDescription)")
         }
     }
 
@@ -325,11 +334,26 @@ struct SharePreviewView: View {
                             }
                             .padding()
                         }
+                    } else if let reference = model.reference {
+                        // A reference saving: its photos download first.
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 12) {
+                                ReferenceSummaryView(reference: reference, isAlreadySaved: model.isReferenceSaved)
+                                Label {
+                                    Text(reference.figures.isEmpty ? "Saving…" : "Saving its photos…")
+                                } icon: {
+                                    ProgressView()
+                                }
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                            }
+                            .padding()
+                        }
                     }
                 case .readyReference:
                     if let reference = model.reference {
                         ScrollView {
-                            ReferenceSummaryView(reference: reference)
+                            ReferenceSummaryView(reference: reference, isAlreadySaved: model.isReferenceSaved)
                                 .padding()
                         }
                     }
@@ -348,7 +372,7 @@ struct SharePreviewView: View {
                     Button("Cancel", role: .cancel) { model.cancel() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save", role: .confirm) { model.save() }
+                    Button(model.phase == .readyReference && model.isReferenceSaved ? "Save Again" : "Save", role: .confirm) { model.save() }
                         .disabled(!(model.phase == .ready || model.phase == .readyReference) || model.isLoadingCover)
                 }
             }

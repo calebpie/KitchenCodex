@@ -214,16 +214,17 @@ struct StepTextView: View {
     let scale: TemperatureScale?
     /// The thumbnail the text flows around, or nil for none.
     var exclusion: CGSize?
-    /// A tap on a page pointer's pill: what the book holds opens, or Scan Page N comes back to be
-    /// shown at the pill (ux-notes row 104); nil leaves pointers as words (a recipe from no book).
-    var onPointer: ((PagePointer) -> ScanOffer?)?
+    /// A tap on a page pointer's pill: what the book holds opens, or Scan Page N or a glossary's
+    /// entry comes back to be shown at the pill (ux-notes rows 104, 111); nil leaves pointers as
+    /// words (a recipe from no book).
+    var onPointer: ((PagePointer) -> PointerPopover?)?
     /// Scan Page N, tapped in the popover.
     var onScan: ((ScanOffer) -> Void)?
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var tappedPill: TappedPill?
-    /// Scan Page N, anchored at the pill that was tapped.
-    @State private var offeredScan: ScanOffer?
+    /// Scan Page N or the glossary's entry, anchored at the pill that was tapped.
+    @State private var offeredScan: PointerPopover?
     @State private var offerRect: CGRect = .zero
 
     /// The pill a tap landed on, and where it sits in this view.
@@ -250,12 +251,9 @@ struct StepTextView: View {
             AsWrittenPopover(shown: pill.shown, original: pill.original)
                 .presentationCompactAdaptation(.popover)
         }
-        .popover(item: $offeredScan, attachmentAnchor: .rect(.rect(offerRect))) { offer in
-            ScanOfferPopover(offer: offer) {
-                offeredScan = nil
-                onScan?(offer)
-            }
-            .presentationCompactAdaptation(.popover)
+        .popover(item: $offeredScan, attachmentAnchor: .rect(.rect(offerRect))) { popover in
+            PointerPopoverContent(popover: popover) { onScan?($0) } onDone: { offeredScan = nil }
+                .presentationCompactAdaptation(.popover)
         }
     }
 }

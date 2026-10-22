@@ -17,7 +17,7 @@ struct PagePointerTests {
     }
 
     @Test func readsWhatThePointerSaysThePageHolds() {
-        let text = "1 cup mountain yam (yama-imo, see page 253), salt (see Sources, page 301), and truss the bird (see page 88 for a quicker method). Herb Butter (page 214) or see pages 31 and 97."
+        let text = "1 cup dried kelp (kombu, see page 253), salt (see Sources, page 301), and truss the bird (see page 88 for a quicker method). Herb Butter (page 214) or see pages 31 and 97."
         let pointers = PagePointers.find(in: text)
         #expect(pointers.map(\.text) == ["see page 253", "page 301", "see page 88", "page 214", "see pages 31 and 97"])
         #expect(pointers.map(\.kind) == [.recipe, .sources, .technique, .recipe, .recipe])
@@ -28,12 +28,12 @@ struct PagePointerTests {
 
     /// ux-notes row 102: the to-scan entry's title from the pointer.
     @Test func titlesTheEntryFromTheNameInTheParenthesesElseTheItem() throws {
-        let yam = try #require(PagePointers.find(in: "1 12-inch piece of mountain yam (yama-imo, see page 253)").first)
-        #expect(yam.name == "yama-imo")
-        #expect(yam.entryTitle(item: "12-inch piece of mountain yam") == "Yama-imo")
-        let plain = try #require(PagePointers.find(in: "1 12-inch piece of mountain yam (see page 253)").first)
+        let kelp = try #require(PagePointers.find(in: "1 4-inch piece of dried kelp (kombu, see page 253)").first)
+        #expect(kelp.name == "kombu")
+        #expect(kelp.entryTitle(item: "4-inch piece of dried kelp") == "Kombu")
+        let plain = try #require(PagePointers.find(in: "1 4-inch piece of dried kelp (see page 253)").first)
         #expect(plain.name == nil)
-        #expect(plain.entryTitle(item: "12-inch piece of mountain yam") == "Mountain yam")
+        #expect(plain.entryTitle(item: "4-inch piece of dried kelp") == "Dried kelp")
         #expect(plain.entryTitle(item: "2 large onions, sliced") == "Onions, sliced")
         #expect(plain.entryTitle(item: nil) == "Page 253")
         // A capitalized name before the parentheses still comes first.
@@ -43,6 +43,17 @@ struct PagePointerTests {
         #expect(PagePointers.find(in: "2 cups water (or Dashi, see page 17)").first?.name == "Dashi")
         #expect(PagePointers.find(in: "salt (see Sources, page 301)").first?.name == nil)
         #expect(PagePointers.itemName("one 3-pound chicken") == "chicken")
+    }
+
+    /// ux-notes row 132: the words a glossary entry may be headed by, in the order to try them.
+    @Test func triesTheTargetTheItemThenTheNameInTheParentheses() throws {
+        let kelp = try #require(PagePointers.find(in: "1 4-inch piece of kombu (dried kelp, see page 253)").first)
+        #expect(kelp.termCandidates(item: "4-inch piece of kombu") == ["kombu", "dried kelp"])
+        let butter = try #require(PagePointers.find(in: "2 tablespoons Herb Butter (page 214)").first)
+        #expect(butter.termCandidates(item: "Herb Butter") == ["Herb Butter"])
+        // In a step there is no ingredient line: the target, then the parentheses.
+        let step = try #require(PagePointers.find(in: "Brush with the glaze (miso glaze, see page 40).").first)
+        #expect(step.termCandidates() == ["miso glaze"])
     }
 
     @Test func leavesPhotographPointersOut() {
