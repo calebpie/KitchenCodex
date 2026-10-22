@@ -34,7 +34,7 @@
 
 ## Slices
 
-Each slice follows the Phase 1 pattern: a brief with groups and a verification list, work in this checkout on `main` with commits and no push, a section in `Docs/Specs/phase2-notes.md`, ux-notes rows moved to Done, findings as Proposed rows, independent verification by the coordinator, Caleb's review on the simulators before the next card.
+Each slice follows the Phase 1 pattern: a brief with groups and a verification list, work in this checkout on `main` with commits and no push, a section in `Docs/Specs/phase2-notes.md`, ux-notes rows moved to Done, findings as Proposed rows, independent verification by the coordinator, Caleb's review on the simulators before the next card, and his walk on the devices guided by the slice's device checklist in phase2-notes. From Oct 22, 2026 (after slice 7's walk turned up sixteen findings, most in the slice 5 and 6 flows it passed through): the checklist names every surface the slice added or changed **and** walks the flows that pass through them end to end from where a cook starts (the Add menu, the shelf, a book's detail), each step with what to look for, so the walk is a prompt for notes rather than a list of the slice's own features.
 
 ### Slice 1 — Shelf, book identity, and the Phase 1 carry-overs
 
