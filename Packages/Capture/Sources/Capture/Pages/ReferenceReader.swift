@@ -8,8 +8,8 @@ import Foundation
 /// - A page with an ingredient run (two lines or more) is a recipe, never reference reading.
 /// - A glossary is three or more term-and-definition pairs that make up most of the page: a term
 ///   set on its own line over its definition, a term and its definition on one line parted by a
-///   colon or a dash ("Yuzu — A Japanese citrus…"), or a term in capitals opening its paragraph
-///   ("YUZU A Japanese citrus…"). Each pair is a section headed by the term.
+///   colon or a dash ("Sumac — A tart red spice…"), or a term in capitals opening its paragraph
+///   ("SUMAC A tart red spice…"). Each pair is a section headed by the term.
 /// - A page with no title whose paragraphs read as instructions continues a recipe's method: it is
 ///   left for the stitcher. A titled page whose paragraphs read as instructions is a technique only
 ///   when its title says so ("How to…", "…Technique", "Making…"); otherwise it is a recipe whose
@@ -80,7 +80,7 @@ enum ReferenceReader {
         return block.kind == .heading && block.role == nil && block.lines.count <= 2 && block.text.count <= 60 && block.text.first?.isUppercase == true
     }
 
-    /// "How to Fillet a Flat Fish", "The Braising Technique", "Making Dashi", "Notes on Knives".
+    /// "How to Fillet a Flat Fish", "The Braising Technique", "Making Stock", "Notes on Knives".
     static func readsAsTechnique(_ title: String) -> Bool {
         let lower = title.lowercased()
         if lower.range(of: #"\b(how to|technique|techniques|method|methods|basics|the basics|guide|primer|notes? on|a word on|a note on|about)\b"#, options: .regularExpression) != nil { return true }
@@ -243,7 +243,7 @@ enum ReferenceReader {
         return block.text.first?.isLowercase == true || block.rect.minY - previous.rect.maxY < previous.typeSize * 1.2
     }
 
-    /// "Yuzu: A Japanese citrus…", "Yuzu — A Japanese citrus…", "YUZU A Japanese citrus…": the term
+    /// "Sumac: A tart red spice…", "Sumac — A tart red spice…", "SUMAC A tart red spice…": the term
     /// and what follows it.
     static func termAndDefinition(_ text: String) -> (String, String)? {
         let trimmed = text.trimmingCharacters(in: .whitespaces)

@@ -12,7 +12,7 @@ import Units
 /// original wording is kept; tapping the pill or the edit menu shows the whole mention as written
 /// (04 §5.1 Step pills).
 /// The headnote and the notes use the same parts; ingredient lines take only the temperatures.
-/// A page pointer in a book's recipe ("Dashi (see page 17)") is a pill too, its printed words
+/// A page pointer in a book's recipe ("Broth (see page 17)") is a pill too, its printed words
 /// unchanged, which opens what the book holds from that page (04 §5.1 "Page pointers").
 /// `StepTextView` lays the text out; this type finds the mentions and what they read. A nil
 /// scale (Units → As Written) keeps every temperature as written, still marked as a pill.

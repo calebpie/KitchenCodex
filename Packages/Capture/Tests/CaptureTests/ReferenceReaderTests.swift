@@ -23,10 +23,10 @@ struct ReferenceReaderTests {
                 "A firm grey jelly that turns springy when simmered. Simmer it in the",
                 "finest side of the grater and season it at the last moment.",
             ], x: 0.12, y: 0.208),
-            Pages.block([Pages.line("Yuzu", x: 0.12, y: 0.26)]),
+            Pages.block([Pages.line("Quince", x: 0.12, y: 0.26)]),
             Pages.paragraph([
-                "A small, knobbly citrus with a fragrance somewhere between a mandarin and a",
-                "grapefruit. The zest is used far more than the juice.",
+                "A hard, golden fruit related to the apple, fragrant when ripe and sour when",
+                "raw. It is cooked long, until it turns a rosy amber.",
             ], x: 0.12, y: 0.278),
             Pages.block([Pages.line("252", x: 0.12, y: 0.92, size: 0.009)]),
         ])
@@ -40,7 +40,7 @@ struct ReferenceReaderTests {
         let reference = try #require(reading.reference)
         #expect(reference.kind == .glossary)
         #expect(reference.title == "Glossary")
-        #expect(reference.sections.map(\.heading) == ["Kombu", "Konnyaku", "Yuzu"])
+        #expect(reference.sections.map(\.heading) == ["Kombu", "Konnyaku", "Quince"])
         #expect(reference.sections[1].body.hasPrefix("A firm grey jelly"))
         #expect(reference.reason == "a glossary page: 3 entries")
         // Not a page the stitcher would join to the one before.
@@ -51,13 +51,13 @@ struct ReferenceReaderTests {
         let lines = [
             "Kombu: A dried kelp sold in stiff, dusty sheets, the backbone of the stock in this book and most others.",
             "KONNYAKU Firm grey jelly that turns springy when simmered and is seasoned at the last moment.",
-            "Yuzu — A small, knobbly citrus with a fragrance between a mandarin and a grapefruit, used for its zest.",
-            "Shiso: A broad, jagged leaf of the mint family, green or purple, eaten raw with fish and in pickles.",
+            "Quince — A hard, golden fruit related to the apple, cooked long until it turns a rosy amber.",
+            "Sorrel: A sharp, lemony leaf, green or red-veined, eaten raw in salads and cooked into sauces.",
         ]
         let blocks = lines.enumerated().map { Pages.block([Pages.line($0.element, x: 0.12, y: 0.12 + Double($0.offset) * 0.03)]) }
         let reading = PageStructurer().read(Pages.scan(blocks))
         #expect(reading.reference?.kind == .glossary)
-        #expect(reading.reference?.sections.map(\.heading) == ["Kombu", "Konnyaku", "Yuzu", "Shiso"])
+        #expect(reading.reference?.sections.map(\.heading) == ["Kombu", "Konnyaku", "Quince", "Sorrel"])
         #expect(reading.reference?.sections[1].body.hasPrefix("Firm grey jelly") == true)
     }
 
@@ -73,27 +73,27 @@ struct ReferenceReaderTests {
                 "kombu",
                 "A dried kelp sold in stiff, dusty sheets, the",
                 "backbone of the stock in this book.",
-                "mirin",
-                "A sweet rice wine for cooking, syrupy and golden;",
-                "it gives glazes their shine.",
+                "verjuice",
+                "The sour juice of unripe grapes, pressed young;",
+                "it sharpens a sauce gently.",
                 "konnyaku",
                 "A firm grey jelly that turns springy",
                 "when simmered. Season it at the last moment.",
             ]),
             column(0.55, [
-                "shiso",
-                "A broad, jagged leaf of the mint family, eaten",
-                "raw with fish and in pickles.",
-                "yuzu",
-                "A small, knobbly citrus; the zest is used far",
-                "more than the juice.",
+                "sorrel",
+                "A sharp, lemony leaf, green or red-veined, eaten",
+                "raw in salads and cooked into sauces.",
+                "quince",
+                "A hard, golden fruit related to the apple, cooked",
+                "long until it turns rosy.",
             ]),
         ])
         let reading = PageStructurer().read(page)
         let reference = try #require(reading.reference)
         #expect(reference.kind == .glossary)
         #expect(reference.title == "Glossary")
-        #expect(reference.sections.map(\.heading) == ["kombu", "mirin", "konnyaku", "shiso", "yuzu"])
+        #expect(reference.sections.map(\.heading) == ["kombu", "verjuice", "konnyaku", "sorrel", "quince"])
         #expect(reference.sections[2].body == "A firm grey jelly that turns springy when simmered. Season it at the last moment.")
     }
 

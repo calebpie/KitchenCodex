@@ -7,13 +7,13 @@ import Testing
 @Suite("Page pointers")
 struct PagePointerTests {
     @Test func coversTheWordsThatPointAndKeepsTheRest() throws {
-        let line = "2 cups Dashi (see page 17)"
+        let line = "2 cups Broth (see page 17)"
         let pointer = try #require(PagePointers.find(in: line).first)
         #expect(pointer.text == "see page 17")
         #expect(String(line[pointer.range]) == "see page 17")
         #expect(pointer.pages == [17])
         #expect(pointer.kind == .recipe)
-        #expect(pointer.target == "Dashi")
+        #expect(pointer.target == "Broth")
     }
 
     @Test func readsWhatThePointerSaysThePageHolds() {
@@ -39,8 +39,8 @@ struct PagePointerTests {
         // A capitalized name before the parentheses still comes first.
         let butter = try #require(PagePointers.find(in: "2 tablespoons Herb Butter (page 214)").first)
         #expect(butter.entryTitle(item: "Herb Butter") == "Herb Butter")
-        // "or Dashi" names dashi; a Sources pointer names nothing.
-        #expect(PagePointers.find(in: "2 cups water (or Dashi, see page 17)").first?.name == "Dashi")
+        // "or Broth" names broth; a Sources pointer names nothing.
+        #expect(PagePointers.find(in: "2 cups water (or Broth, see page 17)").first?.name == "Broth")
         #expect(PagePointers.find(in: "salt (see Sources, page 301)").first?.name == nil)
         #expect(PagePointers.itemName("one 3-pound chicken") == "chicken")
     }
@@ -52,8 +52,8 @@ struct PagePointerTests {
         let butter = try #require(PagePointers.find(in: "2 tablespoons Herb Butter (page 214)").first)
         #expect(butter.termCandidates(item: "Herb Butter") == ["Herb Butter"])
         // In a step there is no ingredient line: the target, then the parentheses.
-        let step = try #require(PagePointers.find(in: "Brush with the glaze (miso glaze, see page 40).").first)
-        #expect(step.termCandidates() == ["miso glaze"])
+        let step = try #require(PagePointers.find(in: "Brush with the glaze (honey glaze, see page 40).").first)
+        #expect(step.termCandidates() == ["honey glaze"])
     }
 
     @Test func leavesPhotographPointersOut() {

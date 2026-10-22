@@ -23,7 +23,7 @@ struct SourcesPageReaderTests {
             "Lamb, eggs and the first asparagus of the year; they ship to the Northeast.",
             "Sakura Pantry",
             "www.sakurapantry.com",
-            "Kombu, bonito flakes, yuzu kosho and the rice we use for everything.",
+            "Kombu, smoked salt, sumac and the rice we use for everything.",
             "DRINK",
             "Cellar & Co.",
             "88 Water Street, Portland, ME 04101",

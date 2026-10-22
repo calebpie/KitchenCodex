@@ -235,7 +235,7 @@ struct ContentsReaderTests {
             ("Seared Scallops with Charred Leeks and Smoked", 0.20, nil),
             ("Butter Sauce", 0.22, "41"),
             ("Pickled Plums", 0.24, nil),
-            ("Chilled Melon Soup with Shiso and Lime Granita", 0.26, "45"),
+            ("Chilled Melon Soup with Sumac and Lime Granita", 0.26, "45"),
             ("Duck Breast with Sour Cherries and Five-Spice", 0.28, nil),
             ("Glaze and Crisp Shallots", 0.30, "48"),
         ]
@@ -246,7 +246,7 @@ struct ContentsReaderTests {
         #expect(contents.entries == [
             BookContents.Entry(title: "Seared Scallops with Charred Leeks and Smoked Butter Sauce", page: 41),
             BookContents.Entry(title: "Pickled Plums", page: nil),
-            BookContents.Entry(title: "Chilled Melon Soup with Shiso and Lime Granita", page: 45),
+            BookContents.Entry(title: "Chilled Melon Soup with Sumac and Lime Granita", page: 45),
             BookContents.Entry(title: "Duck Breast with Sour Cherries and Five-Spice Glaze and Crisp Shallots", page: 48),
         ])
 

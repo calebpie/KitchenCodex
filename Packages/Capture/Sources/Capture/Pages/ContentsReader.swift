@@ -705,8 +705,8 @@ public enum ContentsReader {
     /// An index page (ux-notes row 117): "Leek soup, 16, 42" and "Leeks: braised, 30" by their
     /// first page; a headword ending in a colon ("chard:") heads the indented lines under it
     /// ("Chard, in spring gratin"); a line that runs over ("with brown butter and toasted" over
-    /// "hazelnuts, 63–64") is one entry; "see also" lines and letter headings ("D") are not entries. Column by
-    /// column, outside the page's outline dropped as on a contents page.
+    /// "hazelnuts, 63–64") is one entry; "see also" lines and letter headings ("D") are not
+    /// entries. Column by column, outside the page's outline dropped as on a contents page.
     static func readIndex(_ reading: PageReading) -> BookContents {
         let lines = printedLines(of: reading).compactMap { line -> Line? in
             let text = line.text.trimmingCharacters(in: .whitespaces)

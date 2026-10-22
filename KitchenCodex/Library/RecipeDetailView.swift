@@ -973,7 +973,7 @@ private struct IngredientLine: View {
     let preferred: MeasurementSystem
     /// The unit temperatures are shown in; nil keeps them as written.
     let temperatureScale: TemperatureScale?
-    /// A page pointer's pill in the note ("Dashi (see page 17)"): what the book holds opens, or Scan
+    /// A page pointer's pill in the note ("Broth (see page 17)"): what the book holds opens, or Scan
     /// Page N or a glossary's entry comes back to show at the row (ux-notes rows 104, 111); nil
     /// leaves pointers as words.
     var onPointer: ((PagePointer) -> PointerPopover?)?

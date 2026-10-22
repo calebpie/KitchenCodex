@@ -1,7 +1,7 @@
 import Foundation
 
 /// A page pointer where it is printed in a recipe's text (04 §5.1 "Page pointers", ux-notes row
-/// 74): "Dashi (see page 17)", "kombu, see page 253", "Herb Butter (page 214)", "(see Sources,
+/// 74): "Broth (see page 17)", "kombu, see page 253", "Herb Butter (page 214)", "(see Sources,
 /// page 301)". The app draws the words as a pill and resolves the page at display time; the words
 /// themselves never change.
 public struct PagePointer: Sendable, Equatable {
@@ -86,7 +86,7 @@ public enum PagePointers {
     }
 
     /// The words inside the parentheses other than the pointer's own: "kombu" in "(kombu, see page
-    /// 253)", "Dashi" in "(or Dashi, page 17)". Nil when nothing but the pointer is there, or what
+    /// 253)", "Broth" in "(or Broth, page 17)". Nil when nothing but the pointer is there, or what
     /// is there runs to a clause.
     static func parentheticalName(in context: Range<String.Index>, pointer: Range<String.Index>, text: String) -> String? {
         let before = text[context.lowerBound..<pointer.lowerBound]
