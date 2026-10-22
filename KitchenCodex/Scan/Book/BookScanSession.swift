@@ -800,6 +800,30 @@ final class BookScanSession: PageCaptureSink {
         Self.logger.info("Book session: capture \(id) joined capture \(offer.previous), \(saved.count) recipes read again")
     }
 
+    // MARK: - Discard Scan, from the review queue (ux-notes row 136)
+
+    /// The recipe goes, its entry listed again, and with it the capture that saved it and the pages
+    /// joined to it, when that capture saved nothing else; otherwise the recipe alone.
+    func discardScan(of recipe: Recipe) {
+        guard let owner = state.captures.first(where: { $0.recipes.contains(recipe.id) }), owner.recipes.count == 1, owner.references.isEmpty else {
+            for index in state.captures.indices { state.captures[index].recipes.removeAll { $0 == recipe.id } }
+            CrossReferenceLinking.forget(recipes: [recipe.id], in: book, state: &state, context: context)
+            recipe.releaseBookEntry()
+            context.delete(recipe)
+            try? context.save()
+            save()
+            return
+        }
+        undo(owner)
+        for page in state.captures where page.id == owner.id || page.joinedTo == owner.id {
+            try? FileManager.default.removeItem(at: url(of: page))
+            readings[page.id] = nil
+        }
+        state.captures.removeAll { $0.id == owner.id || $0.joinedTo == owner.id }
+        try? context.save()
+        save()
+    }
+
     // MARK: - A contents page shot in the session (ux-notes row 114)
 
     /// The captures sheet's answer: Add to the Recipe List reads the page's chapters and recipes

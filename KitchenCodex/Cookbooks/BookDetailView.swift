@@ -199,12 +199,18 @@ struct BookDetailView: View {
                 PunchlistEditorView(book: book) { isEditingList = false }
             }
         }
-        .sheet(isPresented: $isReviewing) {
-            BookReviewQueueView(book: book)
+        .reviewPresentation(isPresented: $isReviewing) {
+            // Rescan: the book session's camera at the recipe's entry, once the queue has gone.
+            BookReviewQueueView(book: book) { entry in
+                isReviewing = false
+                Task {
+                    try? await Task.sleep(for: .milliseconds(450))
+                    scanning = ScanStart(entry: entry)
+                }
+            }
         }
-        .sheet(isPresented: $isScanningSources) {
+        .reviewPresentation(isPresented: $isScanningSources) {
             ScanPageView(book: book, expectsSources: true) { _ in }
-                .presentationSizing(.page)
         }
         .fullScreenCover(item: $scanning) { start in
             BookScanView(book: book, startAt: start.entry, firstPages: start.pages)

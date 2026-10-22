@@ -39,10 +39,15 @@ extension Book {
 /// confirms it, and the captures the cook flagged or that read with low confidence, one after
 /// another in scan review over their stored pages; a reference the session marked for a look
 /// shows its page beside its title and sections (slice 7). Save reviews one (its entry
-/// `reviewed`, its layout confirmed) and moves to the next; Skip leaves it in the queue. Opened at
-/// the end of a session or from Book detail's "N need review".
+/// `reviewed`, its layout confirmed) and moves to the next; Skip leaves it in the queue and is off
+/// on the last, so the end comes only through Save (ux-notes row 137). More holds Rescan, back to
+/// the camera at the recipe's page, and Discard Scan, the capture and its recipe gone and the entry
+/// listed again (row 136). Under the page, the title as a plain centred caption with its page in
+/// italics (row 138). Opened at the end of a session or from Book detail's "N need review".
 struct BookReviewQueueView: View {
     let book: Book
+    /// Rescan: the book session's camera at the recipe's entry (nil when it is on no list).
+    var onRescan: (BookEntry?) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
@@ -68,8 +73,9 @@ struct BookReviewQueueView: View {
     var body: some View {
         NavigationStack {
             Group {
-                if let model, current != nil {
-                    ScanReviewView(model: model, book: book, stored: current, offersSkip: false)
+                if let model, let current {
+                    ScanReviewView(model: model, book: book, stored: current, onRescan: { onRescan(current.bookEntry) }, rescansWithCamera: true,
+                                   onDiscard: { discard(current) }, offersSkip: false)
                         .id(ObjectIdentifier(model))
                         .disabled(isSaving)
                 } else if case let .reference(reference) = target {
@@ -105,17 +111,22 @@ struct BookReviewQueueView: View {
                         Button(position + 1 < queue.count ? "Save & Next" : "Save", role: .confirm) { save() }
                             .disabled(isSaving || !canSave)
                     }
-                    ToolbarItemGroup(placement: .bottomBar) {
+                    ToolbarItem(placement: .bottomBar) {
                         Button("Previous", systemImage: "chevron.backward") { go(to: position - 1) }
                             .disabled(position == 0)
-                        Spacer()
-                        Text(target?.title ?? "")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                        Spacer()
+                    }
+                    ToolbarSpacer(.flexible, placement: .bottomBar)
+                    // A plain caption, no bubble (ux-notes row 138).
+                    ToolbarItem(placement: .bottomBar) {
+                        caption
+                    }
+                    .sharedBackgroundVisibility(.hidden)
+                    ToolbarSpacer(.flexible, placement: .bottomBar)
+                    ToolbarItem(placement: .bottomBar) {
+                        // Nothing after the last: the end comes through Save (ux-notes row 137).
                         Button("Skip", systemImage: "chevron.forward") { go(to: position + 1) }
                             .labelStyle(.titleAndIcon)
+                            .disabled(position + 1 >= queue.count)
                     }
                 }
             }
@@ -126,6 +137,29 @@ struct BookReviewQueueView: View {
             queue = book.reviewTargets
             load()
         }
+    }
+
+    /// The title in footnote text, its page after it in italics: "Leek Soup *p. 90*".
+    private var caption: some View {
+        let page: Int? = switch target {
+        case let .recipe(recipe): recipe.pageNumber
+        case let .reference(reference): reference.source?.firstPage
+        case nil: nil
+        }
+        let pageText = Text(page.map { "p. \($0)" } ?? "").italic()
+        return Text("\(target?.title ?? "")  \(pageText)")
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .multilineTextAlignment(.center)
+    }
+
+    /// Discard Scan: the capture and its recipe go, the entry is listed again, and the queue moves
+    /// on to the next.
+    private func discard(_ recipe: Recipe) {
+        BookScanStore.shared.session(for: book, context: modelContext).discardScan(of: recipe)
+        if queue.indices.contains(position) { queue.remove(at: position) }
+        load()
     }
 
     private var canSave: Bool {

@@ -174,9 +174,8 @@ struct RecipeDetailView: View {
         .sheet(isPresented: $isReviewing) {
             RecipeEditorView(recipe: recipe, isReviewing: true)
         }
-        .sheet(isPresented: $isReviewingScan) {
+        .reviewPresentation(isPresented: $isReviewingScan) {
             StoredScanReview(recipe: recipe)
-                .presentationSizing(.page)
         }
         .sheet(isPresented: $isShowingHistory) {
             CookingHistoryView(recipe: recipe)

@@ -79,8 +79,12 @@ struct BookScanView: View {
                 }
             }
         }
-        .sheet(isPresented: $isReviewing) {
-            BookReviewQueueView(book: book)
+        .reviewPresentation(isPresented: $isReviewing) {
+            // Rescan: back to this camera at the recipe's entry.
+            BookReviewQueueView(book: book) { entry in
+                isReviewing = false
+                if let entry { session?.select(entry) }
+            }
         }
         .alert("Clean the Lens?", isPresented: Binding { session?.asksToCleanLens == true && cameraState != .ready } set: { session?.asksToCleanLens = $0 }) {
             Button("Continue Anyway", role: .cancel) {}

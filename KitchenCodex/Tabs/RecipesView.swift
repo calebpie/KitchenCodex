@@ -175,11 +175,11 @@ struct RecipesView: View {
                 // iPad: the recipe list and its corrections want the room.
                 .presentationSizing(.page)
         }
-        .sheet(isPresented: $isScanningPage, onDismiss: openImportedRecipe) {
+        // The review its own full-screen page on iPhone; on iPad the page beside the recipe in
+        // review wants the room (03 §3.6, ux-notes row 139).
+        .reviewPresentation(isPresented: $isScanningPage, onDismiss: openImportedRecipe) {
             // One recipe saved opens it; several leave the library to show them.
             ScanPageView { recipes in importedRecipe = recipes.count == 1 ? recipes.first : nil }
-                // iPad: the page beside the recipe in review wants the room (03 §3.6).
-                .presentationSizing(.page)
         }
         .sheet(isPresented: $isShowingSync) {
             NavigationStack {

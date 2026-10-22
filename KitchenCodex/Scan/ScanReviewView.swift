@@ -2,12 +2,15 @@ import Capture
 import RecipeModel
 import SwiftUI
 
-/// Scan review (03 §3.6): the structured recipe and the page it came from. On iPhone two stacked
-/// panes with a draggable divider, the recipe above and the page below; on iPad side by side, the
-/// page on the left. Tap a region and assign it from the floating control (a popover on iPad, where
-/// a lasso picks several and hovering previews a region's text); tap an item and its source region
-/// flashes, tap it again to correct its wording. Undo steps back through every change. The sheet
-/// around it holds Cancel and Save.
+/// Scan review (03 §3.6): the structured recipe and the page it came from. On iPhone its own
+/// full-screen page (ux-notes row 139): the structure fills the screen, and the page opens from a
+/// thumbnail as a sheet with detents, kept at half height while a region is assigned (tapping a
+/// region needs the page). On iPad side by side, the page on the left. Tap a region and assign it
+/// from the floating control (a popover on iPad, where a lasso picks several and hovering previews
+/// a region's text); tap an item and its source region flashes, tap it again to correct its
+/// wording. Why review was asked reads as a warning with its detail; tapping it shows the part it
+/// concerns (row 136). Undo steps back through every change; More holds Rescan and Discard Scan
+/// where the container offers them. The container holds Cancel and Save.
 struct ScanReviewView: View {
     @Bindable var model: ScanReviewModel
     /// The book the page is from, for the line that says why review was asked and for its
@@ -16,33 +19,39 @@ struct ScanReviewView: View {
     /// A stored recipe under review again, which its pointers don't link to itself.
     var stored: Recipe?
     var bookTitle: String? { book?.displayTitle }
-    /// More → Rescan: read the photo again. Nil hides it.
+    /// More → Rescan: read the photo again, or (the book's queue) back to the camera at the page.
+    /// Nil hides it.
     var onRescan: (() -> Void)?
+    /// Rescan opens the camera rather than reading the photo again.
+    var rescansWithCamera = false
+    /// More → Discard Scan (the book's queue, ux-notes row 136): the capture and its recipe go and
+    /// the entry is listed again. Nil hides it.
+    var onDiscard: (() -> Void)?
     /// A page scanned on its own offers Skip for each recipe on it (ux-notes row 60).
     var offersSkip = true
 
     @AppStorage("scan.explainedFirstReview") private var hasExplainedFirstReview = false
-    /// The width the review has: side by side from 700 pt (an iPad sheet), stacked under it.
+    /// The width the review has: side by side from 700 pt (an iPad sheet), the page a sheet under it.
     @State private var width: CGFloat = 0
     @State private var showsExplanation = false
     @State private var images: [Int: UIImage] = [:]
     @State private var shownPage = 0
-    /// iPhone: the recipe pane's share of the height, set by the divider.
-    @State private var topShare: CGFloat = 0.5
-    @GestureState private var dividerDrag: CGFloat = 0
+    /// iPhone: the page's sheet, and its height.
+    @State private var isShowingPage = false
+    @State private var pageDetent = PresentationDetent.medium
     @State private var focusRect: CGRect?
     @State private var lastTapped: ReviewItem.ID?
     @State private var editingText = ""
     @FocusState private var editingFocus: ReviewItem.ID?
     @State private var popoverRegion: Int?
     @State private var isConfirmingRescan = false
+    @State private var isConfirmingDiscard = false
     @State private var isSplitting = false
     /// Select More: taps on the page add regions to the selection, for Combine or to assign them
     /// together (the lasso's counterpart where there is no lasso).
     @State private var isSelectingMore = false
 
     private var isWide: Bool { width >= 700 }
-    private static let dividerHeight: CGFloat = 22
 
     var body: some View {
         Group {
@@ -55,18 +64,19 @@ struct ScanReviewView: View {
                         .frame(width: min(440, width * 0.42))
                 }
             } else {
-                GeometryReader { geometry in
-                    let share = min(0.8, max(0.2, topShare + dividerDrag / max(1, geometry.size.height)))
-                    VStack(spacing: 0) {
-                        // The divider is a bar the recipe scrolls under, with the system's scroll
-                        // edge, so the pane reads as scrollable where it cuts off (ux-notes row 71).
-                        structurePane
-                            .safeAreaBar(edge: .bottom, spacing: 0) { divider(height: geometry.size.height) }
-                            .scrollEdgeEffectStyle(.soft, for: .bottom)
-                            .frame(height: geometry.size.height * share + Self.dividerHeight)
-                        pagePane
+                structurePane
+                    // Room under the last step for the page's thumbnail.
+                    .contentMargins(.bottom, 96, for: .scrollContent)
+                    .overlay(alignment: .bottomTrailing) {
+                        pageThumbnail
+                            .padding(16)
                     }
-                }
+                    .sheet(isPresented: $isShowingPage) {
+                        pagePane
+                            .presentationDetents([.medium, .large], selection: $pageDetent)
+                            .presentationBackgroundInteraction(.enabled(upThrough: .medium))
+                            .presentationDragIndicator(.visible)
+                    }
             }
         }
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
@@ -79,10 +89,19 @@ struct ScanReviewView: View {
         .onChange(of: editingFocus) { old, new in
             if let old, new != old { commitEdit(old) }
         }
-        .confirmationDialog("Read the photo again?", isPresented: $isConfirmingRescan, titleVisibility: .visible) {
+        // A region being assigned keeps the page at half height, the structure in view.
+        .onChange(of: model.selectedRegion) { _, region in
+            if region != nil, !isWide { pageDetent = .medium }
+        }
+        .confirmationDialog(rescansWithCamera ? "Shoot the page again?" : "Read the photo again?", isPresented: $isConfirmingRescan, titleVisibility: .visible) {
             Button("Rescan", role: .destructive) { onRescan?() }
         } message: {
-            Text("Your changes to this page are dropped.")
+            Text(rescansWithCamera ? "Your changes to this page are dropped; the new capture takes its place." : "Your changes to this page are dropped.")
+        }
+        .confirmationDialog("Discard this scan?", isPresented: $isConfirmingDiscard, titleVisibility: .visible) {
+            Button("Discard Scan", role: .destructive) { onDiscard?() }
+        } message: {
+            Text("The recipe and its page scan are deleted, and its entry is listed again.")
         }
     }
 
@@ -97,7 +116,7 @@ struct ScanReviewView: View {
             .disabled(!model.hasChanges)
             .keyboardShortcut("z")
         }
-        if (offersSkip && model.recipes.count > 1) || onRescan != nil {
+        if (offersSkip && model.recipes.count > 1) || onRescan != nil || onDiscard != nil {
         ToolbarItem(placement: .primaryAction) {
             Menu {
                 if offersSkip, model.recipes.count > 1 {
@@ -107,9 +126,12 @@ struct ScanReviewView: View {
                     }
                 }
                 if onRescan != nil {
-                    Button("Rescan", systemImage: "arrow.clockwise") {
+                    Button("Rescan", systemImage: rescansWithCamera ? "camera" : "arrow.clockwise") {
                         if model.hasChanges { isConfirmingRescan = true } else { onRescan?() }
                     }
+                }
+                if onDiscard != nil {
+                    Button("Discard Scan", systemImage: "trash", role: .destructive) { isConfirmingDiscard = true }
                 }
             } label: {
                 Label("More", systemImage: "ellipsis")
@@ -118,32 +140,32 @@ struct ScanReviewView: View {
         }
     }
 
-    // MARK: - The divider
+    // MARK: - The page's thumbnail (iPhone)
 
-    private func divider(height: CGFloat) -> some View {
-        Capsule()
-            .fill(.tertiary)
-            .frame(width: 40, height: 5)
-            .frame(maxWidth: .infinity)
-            .frame(height: Self.dividerHeight)
-            .contentShape(.rect)
-            .gesture(
-                DragGesture()
-                    .updating($dividerDrag) { value, state, _ in state = value.translation.height }
-                    .onEnded { value in
-                        topShare = min(0.8, max(0.2, topShare + value.translation.height / max(1, height)))
-                    }
-            )
-            .accessibilityElement()
-            .accessibilityLabel("Divider")
-            .accessibilityValue("\(Int(topShare * 100)) percent recipe")
-            .accessibilityAdjustableAction { direction in
-                switch direction {
-                case .increment: topShare = min(0.8, topShare + 0.1)
-                case .decrement: topShare = max(0.2, topShare - 0.1)
-                @unknown default: break
+    /// The page, small, over the structure's corner: it opens the page as a sheet.
+    private var pageThumbnail: some View {
+        Button {
+            pageDetent = .medium
+            isShowingPage = true
+        } label: {
+            Group {
+                if let image = images[shownPage] ?? images.values.first {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFill()
+                } else {
+                    Color(.secondarySystemFill)
+                        .overlay { Image(systemName: "doc.text.image").foregroundStyle(.secondary) }
                 }
             }
+            .frame(width: 56, height: 74)
+            .clipShape(.rect(cornerRadius: 8))
+            .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(.separator, lineWidth: 0.5) }
+            .shadow(color: .black.opacity(0.2), radius: 6, y: 3)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Show the Page")
+        .accessibilityHint("Opens the page with its regions, to compare or reassign them.")
     }
 
     // MARK: - The page
@@ -381,6 +403,7 @@ struct ScanReviewView: View {
     // MARK: - The recipe
 
     private var structurePane: some View {
+        ScrollViewReader { proxy in
         List {
             Section {
                 if model.recipes.count > 1 {
@@ -393,7 +416,7 @@ struct ScanReviewView: View {
                     .listRowBackground(Color.clear)
                     .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
                 }
-                reasonLine
+                reasonLines(proxy)
                 if model.recipe.isSkipped {
                     Label("Skipped: this recipe won't be saved. More → Include This Recipe brings it back.", systemImage: "minus.circle")
                         .font(.subheadline)
@@ -463,6 +486,7 @@ struct ScanReviewView: View {
                     itemRow(item)
                 }
             }
+            .id(ReasonDetail.Part.ingredients)
             Section("Steps") {
                 if model.recipe.steps.isEmpty {
                     emptyRow("No steps read. Tap a paragraph of the method and choose Step.")
@@ -471,6 +495,7 @@ struct ScanReviewView: View {
                     itemRow(item, number: index + 1, photoCount: model.recipe.stepPhotos.values.count { $0 == item.id })
                 }
             }
+            .id(ReasonDetail.Part.steps)
             if !model.recipe.notes.isEmpty {
                 Section("Notes") {
                     ForEach(model.recipe.notes) { itemRow($0, font: .subheadline) }
@@ -491,6 +516,7 @@ struct ScanReviewView: View {
         .listStyle(.insetGrouped)
         .opacity(model.recipe.isSkipped ? 0.5 : 1)
         .animation(.default, value: model.recipe)
+        }
     }
 
     /// The course it is saved with (ux-notes row 73): the last chosen for the book to begin with.
@@ -519,30 +545,101 @@ struct ScanReviewView: View {
         return parts.joined(separator: " and ")
     }
 
-    /// Why review was asked: the one-time sentence for a book's first recipe or a new layout (03
-    /// §3.6), else the reasons in a few words.
+    /// Why review was asked, each reason a warning with its detail (ux-notes row 136): which line,
+    /// which count. Tapping one scrolls to the part it concerns and highlights its regions on the
+    /// page (the whole page for a new layout). The book's first recipe or a new layout also says,
+    /// once, why it is checked (03 §3.6).
     @ViewBuilder
-    private var reasonLine: some View {
+    private func reasonLines(_ proxy: ScrollViewProxy) -> some View {
         let reasons = model.recipe.reasons
         if showsExplanation, reasons.contains(where: ScanGate.forcing.contains) {
             Label("Check this one so Codex learns how this book lays out a recipe.", systemImage: "graduationcap")
                 .font(.subheadline)
-        } else if !reasons.isEmpty {
-            Label(reasonText(reasons), systemImage: "checkmark.rectangle.stack")
+        }
+        ForEach(reasonDetails(reasons)) { detail in
+            Button {
+                show(detail, proxy: proxy)
+            } label: {
+                Label {
+                    Text(detail.text)
+                        .foregroundStyle(.primary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                }
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("Shows it on the page.")
         }
     }
 
-    private func reasonText(_ reasons: [ReviewReason]) -> String {
-        reasons.map { reason in
+    /// One reason for review, said with its detail, and what it concerns.
+    struct ReasonDetail: Identifiable {
+        enum Part: Hashable {
+            case ingredients, steps
+        }
+
+        let id: ReviewReason
+        let text: String
+        /// The list's part to scroll to; nil for the page as a whole.
+        var part: Part?
+        /// The regions to highlight; empty for the whole page.
+        var regions: [Int] = []
+    }
+
+    private func reasonDetails(_ reasons: [ReviewReason]) -> [ReasonDetail] {
+        let recipe = model.recipe
+        return reasons.map { reason in
             switch reason {
-            case .firstRecipeOfBook: "The first recipe from \(bookTitle ?? "this book")"
-            case .unseenLayout: bookTitle == nil ? "A page from no book is always checked" : "A layout not yet confirmed for \(bookTitle!)"
-            default: reason.label.prefix(1).uppercased() + reason.label.dropFirst()
+            case .firstRecipeOfBook:
+                return ReasonDetail(id: reason, text: "The first recipe from \(bookTitle ?? "this book"): check it against the page.")
+            case .unseenLayout:
+                return ReasonDetail(id: reason, text: bookTitle.map { "A layout not yet confirmed for \($0): check it against the page." } ?? "A page from no book is always checked.")
+            case .lowOCRConfidence:
+                return ReasonDetail(id: reason, text: "The print read faintly: check the words against the page.")
+            case .unparsedIngredients:
+                let unread = recipe.ingredients.filter { PageRegionText.isUnreadIngredient($0.text) }
+                let text = unread.count == 1
+                    ? "An amount didn't read in “\(unread[0].text)”."
+                    : "Amounts didn't read in \(unread.count) ingredient lines."
+                return ReasonDetail(id: reason, text: unread.isEmpty ? "An ingredient line didn't read." : text, part: .ingredients, regions: unread.flatMap(\.regions))
+            case .stepCountDisagrees:
+                let count = recipe.steps.count
+                return ReasonDetail(id: reason, text: "\(count == 1 ? "1 step" : "\(count) steps") read, which the page numbers differently: check them against it.",
+                                    part: .steps, regions: recipe.steps.flatMap(\.regions))
+            case .unassignedRegion:
+                let loose = model.regions.filter { $0.role == nil && !$0.isPhoto && ($0.recipe == nil || $0.recipe == model.current) }.map(\.id)
+                return ReasonDetail(id: reason, text: loose.count == 1 ? "A piece of text on the page went nowhere." : "\(loose.count) pieces of text on the page went nowhere.", regions: loose)
             }
         }
-        .joined(separator: "; ") + "."
+    }
+
+    /// A reason tapped: its part of the list in view, its regions flashing on the page, the page
+    /// shown (at half height on iPhone).
+    private func show(_ detail: ReasonDetail, proxy: ScrollViewProxy) {
+        model.selectedRegion = nil
+        lastTapped = nil
+        if let part = detail.part {
+            withAnimation { proxy.scrollTo(part, anchor: .top) }
+        }
+        let regions = detail.regions.compactMap(model.region)
+        if let first = regions.first {
+            shownPage = first.page
+            let rects = regions.filter { $0.page == first.page }.map(\.rect)
+            focusRect = rects.dropFirst().reduce(rects[0]) { $0.union($1) }
+            model.flashing = Set(regions.map(\.id))
+        } else {
+            // The whole page.
+            focusRect = nil
+            model.flashing = Set(model.regions.filter { model.isInCurrentRecipe($0) }.map(\.id))
+        }
+        if !isWide {
+            pageDetent = .medium
+            isShowingPage = true
+        }
     }
 
     private func emptyRow(_ text: String) -> some View {
@@ -622,6 +719,11 @@ struct ScanReviewView: View {
             shownPage = first.page
             let rects = item.regions.compactMap(model.region).filter { $0.page == first.page }.map(\.rect)
             focusRect = rects.dropFirst().reduce(rects[0]) { $0.union($1) }
+            // iPhone: the page comes up at half height, the item still in view.
+            if !isWide {
+                pageDetent = .medium
+                isShowingPage = true
+            }
         }
     }
 
@@ -649,5 +751,32 @@ struct ScanReviewView: View {
                 images[page.id] = UIImage(cgImage: image)
             }
         }
+    }
+}
+
+extension View {
+    /// Scan review's container (ux-notes row 139): its own full-screen page on iPhone, a page-sized
+    /// sheet on iPad, where the page sits beside the structure.
+    func reviewPresentation<Review: View>(isPresented: Binding<Bool>, onDismiss: (() -> Void)? = nil, @ViewBuilder content: @escaping () -> Review) -> some View {
+        modifier(ReviewPresentation(isPresented: isPresented, onDismiss: onDismiss, review: content))
+    }
+}
+
+private struct ReviewPresentation<Review: View>: ViewModifier {
+    @Binding var isPresented: Bool
+    var onDismiss: (() -> Void)?
+    let review: () -> Review
+
+    @Environment(\.horizontalSizeClass) private var sizeClass
+
+    func body(content: Content) -> some View {
+        let compact = sizeClass == .compact
+        content
+            .sheet(isPresented: Binding { isPresented && !compact } set: { isPresented = $0 }, onDismiss: onDismiss) {
+                review().presentationSizing(.page)
+            }
+            .fullScreenCover(isPresented: Binding { isPresented && compact } set: { isPresented = $0 }, onDismiss: onDismiss) {
+                review()
+            }
     }
 }
