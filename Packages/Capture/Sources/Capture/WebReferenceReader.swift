@@ -8,7 +8,9 @@ import Foundation
 /// furniture that follows it (comments, related stories, the newsletter box), and its figures the
 /// content images among them, each after the section it follows, captioned from its alt text
 /// (ux-notes row 130; icons, logos and images set small are left out as the recipe import's step
-/// photos are); the JSON-LD's `articleBody` stands in when the text gives too little. A page that
+/// photos are). Cards set among the article (a linked recipe's thumbnail, title and blurb) are
+/// furniture too, text and image. The JSON-LD's `articleBody` stands in when the text gives too
+/// little. A page that
 /// holds a recipe never reaches this reader (`WebRecipeImporter.extract` asks only when no recipe
 /// was found).
 public enum WebReferenceReader {
@@ -29,6 +31,10 @@ public enum WebReferenceReader {
         }
         let author = node.flatMap { names(of: $0["author"] ?? $0["creator"]) } ?? metadata.author
         var (sections, figures) = read(page.lines, title: title, base: metadata.sourceURL)
+        if sections.reduce(0, { $0 + $1.body.count }) < minimumCharacters {
+            // A page that wraps its whole article in a "card" class: read it with the cards.
+            (sections, figures) = read(page.lines, title: title, base: metadata.sourceURL, skipsTeasers: false)
+        }
         var confidence = node == nil ? 0.6 : 0.8
         let characters = sections.reduce(0) { $0 + $1.body.count }
         if characters < minimumCharacters, let body = node.flatMap({ string($0["articleBody"]) }).map(ImportText.paragraphs), body.count >= minimumCharacters {
@@ -136,7 +142,7 @@ public enum WebReferenceReader {
         "advertisement", "newsletter", "subscribe", "sign up", "about the author", "read more", "read next", "up next",
         "next", "previous", "categories", "sponsored", "explore more", "keep reading", "footer", "in this article",
     ]
-    private static let noisePattern = #"newsletter|subscribe|sign up|signup|advertisement|affiliate|cookie|©|copyright|all rights reserved|privacy policy|terms of (use|service)"#
+    private static let noisePattern = #"newsletter|subscribe|sign up|signup|advertisement|affiliate|cookie|©|copyright|all rights reserved|privacy policy|terms of (use|service)|members?['’]? (feature|only|exclusive)"#
 
     /// The article's headed sections from its visible text: from the heading that matches the title
     /// (else the first `<h1>`, else the top), each later heading opens a section, prose lines fill
@@ -147,8 +153,9 @@ public enum WebReferenceReader {
 
     /// The sections, and the figures among them: each content image before a line follows the
     /// section open when it appears, its caption its alt text (or the figure's caption line under
-    /// it). An image the page repeats is kept once.
-    static func read(_ lines: [PageLine], title: String, base: URL?) -> (sections: [ImportedReference.Section], figures: [ImportedReference.Figure]) {
+    /// it). An image the page repeats is kept once. Lines and images in a card, teaser or
+    /// related-content block are left out unless `skipsTeasers` is off.
+    static func read(_ lines: [PageLine], title: String, base: URL?, skipsTeasers: Bool = true) -> (sections: [ImportedReference.Section], figures: [ImportedReference.Figure]) {
         let titleKey = ImportText.normalizedForComparison(title)
         let start = lines.firstIndex { $0.isHeading && ImportText.normalizedForComparison($0.text) == titleKey }
             ?? lines.firstIndex { $0.headingLevel == 1 }
@@ -160,6 +167,7 @@ public enum WebReferenceReader {
             // A line's pictures come before it on the page: the article's last figure sits before
             // the furniture's heading that ends it.
             for (index, source) in line.images.enumerated() {
+                if skipsTeasers, line.imageTeasers.indices.contains(index), line.imageTeasers[index] { continue }
                 guard let url = ImportText.url(source, relativeTo: base), seen.insert(url).inserted else { continue }
                 let alt = line.imageAlts.indices.contains(index) ? line.imageAlts[index] : ""
                 figures.append((ImportedReference.Figure(url: url, caption: alt, section: sections.count - 1), sections.count - 1))
@@ -167,6 +175,7 @@ public enum WebReferenceReader {
             let text = line.text.trimmingCharacters(in: .whitespaces)
             let key = ImportText.normalizedForComparison(text)
             if stopHeadings.contains(key), text.count <= 40 { break }
+            if skipsTeasers, line.isTeaser { continue }
             // A figure's own caption line: the caption of the figure just before it when it had none.
             if line.tag == "figcaption", let last = figures.indices.last, figures[last].figure.caption.isEmpty, !text.isEmpty {
                 figures[last].figure.caption = text
