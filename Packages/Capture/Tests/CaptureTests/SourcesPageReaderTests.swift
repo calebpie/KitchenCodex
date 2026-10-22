@@ -80,7 +80,7 @@ struct SourcesPageReaderTests {
             "207-555-0199",
             "lamb and eggs",
         ])
-        #expect(sources.map(\.name) == ["HARBOR KITCHEN SUPPLY COMPANY", "TWO RIVERS FARM"])
+        #expect(sources.map(\.name) == ["Harbor Kitchen Supply Company", "Two Rivers Farm"])
         #expect(sources.map(\.categories) == [["equipment"], ["food"]])
         #expect(sources[0].phone == "866-PANSHOP (72674671)")
         #expect(sources[1].carries == "lamb and eggs")

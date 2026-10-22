@@ -8,9 +8,17 @@ import SwiftUI
 /// actions, and the Frequented toggle that makes a store a shopping stop (Phase 4's list). Filled
 /// by hand later; now by scanning a book's Sources page (02 Flow C step 8).
 struct SourcesPane: View {
+    /// One book's suppliers only: a Sources pointer in its recipe opens them.
+    var book: Book?
+
     @Environment(\.modelContext) private var modelContext
     @Environment(\.openURL) private var openURL
-    @Query(sort: [SortDescriptor(\Source.name, comparator: .localizedStandard)]) private var sources: [Source]
+    @Query(sort: [SortDescriptor(\Source.name, comparator: .localizedStandard)]) private var allSources: [Source]
+
+    private var sources: [Source] {
+        guard let book else { return allSources }
+        return allSources.filter { $0.book == book }
+    }
 
     private var groups: [(title: String, sources: [Source])] {
         let named: [(SourceCategory, String)] = [(.equipment, "Equipment"), (.food, "Food"), (.drink, "Drink")]
@@ -60,7 +68,7 @@ struct SourcesPane: View {
                 .listStyle(.insetGrouped)
             }
         }
-        .navigationTitle("Sources")
+        .navigationTitle(book.map { "Sources from \($0.displayTitle)" } ?? "Sources")
     }
 
     /// "(207) 555-0143" as a `tel:` link.
@@ -153,6 +161,21 @@ private struct SourceRow: View {
 /// Saving a Sources page's suppliers (02 Flow C step 8).
 @MainActor
 enum SourceSaving {
+    /// The page a Sources page reading is (02 Flow C step 8): its folio, else the page the book's
+    /// Sources pointers name, else its Sources entry's.
+    static func pageNumber(of reading: PageReading, book: Book, pointers: [BookScanState.PointerEntry]) -> Int? {
+        reading.pageNumber
+            ?? pointers.first { $0.kind == PageCrossReference.Kind.sources.rawValue }?.page
+            ?? book.sourcesEntry?.page
+    }
+
+    /// The page kept as the book's one Sources page scan (an earlier one gives way), at `page`
+    /// when its folio didn't read.
+    static func keepSourcesPage(_ model: ScanReviewModel, page: Int?, book: Book, images: ScanSaving.PageImages, in context: ModelContext) async {
+        for scan in book.sourcesPages where scan.pageNumber == nil || scan.pageNumber == page { context.delete(scan) }
+        await ScanSaving.keepPageScan(model, kind: .sources, book: book, images: images, fallbackPage: page, in: context)
+    }
+
     /// Each supplier as a `Source` linked to `book`; one the book already has with the same name
     /// takes the new details instead of a second row.
     @discardableResult
@@ -168,6 +191,7 @@ enum SourceSaving {
                 context.insert(source)
                 source.book = book
             }
+            source.name = supplier.name
             source.kind = kind(of: supplier.kind)
             source.categories = supplier.categories.compactMap(SourceCategory.init(rawValue:))
             if !supplier.carries.isEmpty { source.carries = supplier.carries }

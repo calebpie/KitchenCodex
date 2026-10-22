@@ -58,6 +58,8 @@ public enum SourcesPageReader {
         func finish() {
             if var source = current {
                 source.carries = source.carries.trimmingCharacters(in: CharacterSet.whitespaces.union(CharacterSet(charactersIn: ",;")))
+                // Names set in small capitals read in title case, as recipe titles do.
+                source.name = PageLines.titleText(source.name)
                 source.kind = kind(of: source)
                 sources.append(source)
             }

@@ -622,10 +622,11 @@ final class ScanSession: PageCaptureSink {
     func saveSources(on book: Book) async {
         guard let review, let reading else { return }
         isSaving = true
-        await ScanSaving.keepPageScan(review, kind: .sources, book: book, images: images, in: modelContext)
+        let page = SourceSaving.pageNumber(of: reading, book: book, pointers: BookScanStore.shared.state(for: book)?.pointerEntries ?? [])
+        await SourceSaving.keepSourcesPage(review, page: page, book: book, images: images, in: modelContext)
         let saved = SourceSaving.save(SourcesPageReader.read(reading), book: book, in: modelContext)
         BookScanStore.shared.updateState(for: book) { state in
-            CrossReferenceLinking.captureSourcesPage(pages: [reading.pageNumber].compactMap(\.self), in: book, state: &state, context: modelContext)
+            CrossReferenceLinking.captureSourcesPage(pages: [page].compactMap(\.self), in: book, state: &state, context: modelContext)
         }
         savedSources += saved.count
         keptPages += 1

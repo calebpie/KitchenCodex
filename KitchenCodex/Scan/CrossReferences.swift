@@ -96,6 +96,16 @@ enum CrossReferenceLinking {
         recipe.references = (recipe.references ?? []) + [reference]
     }
 
+    /// The same, and the recipe joins the page's pointer entry, so the reference captured again
+    /// (after a delete) or a page shot again still finds it.
+    static func relate(_ recipe: Recipe, to reference: Reference, page: Int, state: inout BookScanState) {
+        relate(recipe, to: reference)
+        if let index = state.pointerEntries.firstIndex(where: { $0.page == page && $0.kind != PageCrossReference.Kind.sources.rawValue }),
+           !state.pointerEntries[index].recipes.contains(recipe.id) {
+            state.pointerEntries[index].recipes.append(recipe.id)
+        }
+    }
+
     /// The page holds a recipe: one is captured from it, a page scan of it read as one, or the
     /// contents list has a recipe there (not an entry a reference pointer put on the list).
     static func isRecipePage(_ page: Int, in book: Book, state: BookScanState?) -> Bool {
@@ -132,15 +142,21 @@ enum CrossReferenceLinking {
     static func addToList(_ reference: PageCrossReference, from recipe: Recipe, in book: Book, state: inout BookScanState, context: ModelContext) -> BookEntry? {
         let reading = read(reference, from: recipe, in: book, state: state)
         guard let page = reading.page else { return nil }
-        // The page is captured as reference reading already: related reading, nothing to list.
+        // The page is captured as reference reading already: related reading, nothing new to list.
         if let captured = reading.reference {
-            relate(recipe, to: captured)
+            relate(recipe, to: captured, page: page, state: &state)
             return nil
         }
         // The book's Sources page is captured: its suppliers are in Pantry → Sources (row 103).
         if reference.kind == .sources, !book.sourcesPages.isEmpty { return nil }
         // A page of its own is a page turn; "recipe follows" needs the name to list it by.
         if reference.pages.isEmpty ? reference.target == nil : ownPages(of: recipe).contains(page) { return nil }
+        // One pointer entry per page: a second pointer to it joins the first.
+        if let index = state.pointerEntries.firstIndex(where: { $0.page == page && ($0.kind == PageCrossReference.Kind.sources.rawValue) == (reference.kind == .sources) }),
+           let listed = book.orderedEntries.first(where: { $0.id == state.pointerEntries[index].entry }) {
+            if !state.pointerEntries[index].recipes.contains(recipe.id) { state.pointerEntries[index].recipes.append(recipe.id) }
+            return listed
+        }
         let (entry, isNew) = book.toScanEntry(page: page, title: entryTitle(for: reference, in: recipe, page: page), in: context)
         if let index = state.pointerEntries.firstIndex(where: { $0.entry == entry.id }) {
             if !state.pointerEntries[index].recipes.contains(recipe.id) { state.pointerEntries[index].recipes.append(recipe.id) }
@@ -208,11 +224,51 @@ enum CrossReferenceLinking {
     /// a pointer made goes with its last pointing recipe while nothing was captured for it. Run when
     /// the book's detail or session opens, as `reconcilePunchlist` is.
     static func prune(in book: Book, state: inout BookScanState, context: ModelContext) {
+        mergeDuplicatePointerEntries(in: book, state: &state, context: context)
+        relateCapturedReferences(in: book)
         let alive = Set((book.recipes ?? []).filter { !$0.isDeleted }.map(\.id))
         let gone = Set(state.pointerEntries.flatMap(\.recipes)).subtracting(alive)
-        guard !gone.isEmpty else { return }
+        guard !gone.isEmpty else { try? context.save(); return }
         forget(recipes: gone, in: book, state: &state, context: context)
         try? context.save()
+    }
+
+    /// Two pointer entries for one page (an older session made one per pointer) become one: the
+    /// first whose entry is still on the list keeps every pointing recipe; a later one's entry
+    /// that a pointer made, and nothing captured, goes.
+    static func mergeDuplicatePointerEntries(in book: Book, state: inout BookScanState, context: ModelContext) {
+        let entries = Dictionary(book.orderedEntries.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        var kept: [BookScanState.PointerEntry] = []
+        for pointer in state.pointerEntries {
+            let sources = pointer.kind == PageCrossReference.Kind.sources.rawValue
+            guard let index = kept.firstIndex(where: { $0.page == pointer.page && ($0.kind == PageCrossReference.Kind.sources.rawValue) == sources }) else {
+                kept.append(pointer)
+                continue
+            }
+            // Keep the one whose entry still exists, preferring the list's own over a made one.
+            var survivor = kept[index], other = pointer
+            if entries[survivor.entry] == nil || (survivor.madeEntry && !other.madeEntry && entries[other.entry] != nil) { swap(&survivor, &other) }
+            for id in other.recipes where !survivor.recipes.contains(id) { survivor.recipes.append(id) }
+            survivor.isReference = survivor.isReference && other.isReference
+            kept[index] = survivor
+            if other.madeEntry, other.entry != survivor.entry, let entry = entries[other.entry],
+               entry.recipe == nil, entry.reference == nil, entry.status == .listed {
+                context.delete(entry)
+            }
+        }
+        state.pointerEntries = kept
+    }
+
+    /// Every pointer in the book's recipes to a page captured as reference reading relates the
+    /// recipe to it (02 §4.2), so a recipe saved, or shot again, before the page was captured
+    /// still reads it.
+    static func relateCapturedReferences(in book: Book) {
+        guard !(book.references ?? []).isEmpty else { return }
+        for recipe in book.recipes ?? [] where !recipe.isDeleted {
+            for pointer in pointers(of: recipe) where pointer.kind != .sources {
+                if let captured = read(pointer, from: recipe, in: book, state: nil).reference { relate(recipe, to: captured) }
+            }
+        }
     }
 
     /// What review's cards say, applied once the recipe is saved: Link, Add, Ignore; a pointer left
@@ -255,8 +311,8 @@ enum CrossReferenceLinking {
             let reading = read(reference, from: recipe, in: book, state: state)
             if reading.isPlain, let component = reading.suggested {
                 link(recipe, to: component, phrase: reference.phrase, in: context)
-            } else if let captured = reading.reference {
-                relate(recipe, to: captured)
+            } else if let captured = reading.reference, let page = reading.page {
+                relate(recipe, to: captured, page: page, state: &state)
             } else if !reference.pages.isEmpty, let page = reading.page, book.recipes(onPage: page).filter({ $0 != recipe }).isEmpty {
                 addToList(reference, from: recipe, in: book, state: &state, context: context)
             }

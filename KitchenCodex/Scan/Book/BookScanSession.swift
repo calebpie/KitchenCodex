@@ -315,6 +315,10 @@ final class BookScanSession: PageCaptureSink {
                 context.delete(source)
             }
         }
+        // A Sources page taken back takes its page scan with it.
+        if !capture.sources.isEmpty {
+            for scan in book.sourcesPages where scan.pageNumber == capture.pageNumber { context.delete(scan) }
+        }
         for entry in book.orderedEntries where created.contains(entry.id) && entry.reference == nil {
             context.delete(entry)
         }
@@ -636,7 +640,12 @@ final class BookScanSession: PageCaptureSink {
         for index in state.captures.indices where state.captures[index].recipes.contains(earlier.id) {
             state.captures[index].recipes.removeAll { $0 == earlier.id }
         }
-        CrossReferenceLinking.forget(recipes: [earlier.id], in: book, state: &state, context: context)
+        // The new copy points where the earlier did: it takes the earlier's place on the pointer
+        // entries, so a page captured later links it (ux-notes row 105).
+        for index in state.pointerEntries.indices where state.pointerEntries[index].recipes.contains(earlier.id) {
+            state.pointerEntries[index].recipes.removeAll { $0 == earlier.id }
+            if !state.pointerEntries[index].recipes.contains(new.id) { state.pointerEntries[index].recipes.append(new.id) }
+        }
         earlier.bookEntry = nil
         context.delete(earlier)
         PunchlistLinking.link(new, to: entry, reviewed: false)
@@ -823,12 +832,12 @@ final class BookScanSession: PageCaptureSink {
                 $0.detail = "Saved “\(reference.title)” as reference reading" + (joined ? " · joined the glossary" : "")
             }
         case .sources:
-            await ScanSaving.keepPageScan(model, kind: .sources, book: book, images: images, in: context)
-            let suppliers = SourcesPageReader.read(reading)
-            let saved = SourceSaving.save(suppliers, book: book, in: context)
-            CrossReferenceLinking.captureSourcesPage(pages: [reading.pageNumber].compactMap(\.self), in: book, state: &state, context: context)
+            let page = SourceSaving.pageNumber(of: reading, book: book, pointers: state.pointerEntries)
+            await SourceSaving.keepSourcesPage(model, page: page, book: book, images: images, in: context)
+            let saved = SourceSaving.save(SourcesPageReader.read(reading), book: book, in: context)
+            CrossReferenceLinking.captureSourcesPage(pages: [page].compactMap(\.self), in: book, state: &state, context: context)
             finish(id) {
-                $0.pageNumber = reading.pageNumber
+                $0.pageNumber = page
                 $0.sources = saved.map(\.id)
                 $0.detail = saved.isEmpty ? "A Sources page, kept with the book" : "A Sources page: \(saved.count == 1 ? "1 supplier" : "\(saved.count) suppliers") to Pantry"
             }

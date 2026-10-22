@@ -67,8 +67,12 @@ extension Book {
     /// schema's nullify leaves its status as it was). An entry captured as the book's Sources page
     /// (a page scan, no recipe) stays captured while the scan does.
     func reconcilePunchlist() {
-        let sourcesPages = Set(sourcesPages.compactMap(\.pageNumber))
+        let scans = self.sourcesPages
+        let sourcesPages = Set(scans.compactMap(\.pageNumber))
+        // A Sources page scan whose page didn't read still captures the book's Sources entry.
+        let sourcesEntry = scans.contains { $0.pageNumber == nil } ? self.sourcesEntry : nil
         for entry in orderedEntries where entry.status != .listed && entry.recipe == nil && entry.reference == nil {
+            if entry == sourcesEntry { continue }
             if let page = entry.page, sourcesPages.contains(page) || !references(onPage: page).isEmpty { continue }
             entry.status = .listed
         }

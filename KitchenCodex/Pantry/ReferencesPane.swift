@@ -11,6 +11,9 @@ struct ReferencesPane: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: [SortDescriptor(\Reference.title, comparator: .localizedStandard)]) private var references: [Reference]
     @State private var requested: Reference?
+    /// The page pushed from a row. A binding, not a `NavigationLink(value:)`: the iPhone's Pantry
+    /// stack has a typed path (`PantryView.Destination`), which ignores a value of another type.
+    @State private var opened: Reference?
 
     private var books: [(book: Book, references: [Reference])] {
         let grouped = Dictionary(grouping: references.filter { $0.book != nil }, by: { $0.book! })
@@ -51,7 +54,7 @@ struct ReferencesPane: View {
             }
         }
         .navigationTitle("References")
-        .navigationDestination(for: Reference.self) { reference in
+        .navigationDestination(item: $opened) { reference in
             ReferencePageView(reference: reference) { recipe in router.openRecipe(id: recipe.id) }
         }
         .sheet(item: $requested) { reference in
@@ -65,15 +68,27 @@ struct ReferencesPane: View {
     }
 
     private func row(_ reference: Reference) -> some View {
-        NavigationLink(value: reference) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(reference.title.isEmpty ? "Reference" : reference.title)
-                Text(subtitle(reference))
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+        Button {
+            opened = reference
+        } label: {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(reference.title.isEmpty ? "Reference" : reference.title)
+                    Text(subtitle(reference))
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.forward")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
             }
+            .contentShape(.rect)
         }
+        .tint(.primary)
+        .accessibilityHint("Opens the reference.")
         .swipeActions(edge: .trailing) {
             Button("Delete", systemImage: "trash", role: .destructive) {
                 ReferenceSaving.delete(reference, in: modelContext)

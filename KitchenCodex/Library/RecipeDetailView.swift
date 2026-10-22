@@ -50,6 +50,8 @@ struct RecipeDetailView: View {
     @State private var openedReference: OpenedReference?
     @State private var offeredScan: ScanOffer?
     @State private var scanning: ScanStart?
+    /// A pointer to the book's Sources page, once it is captured: the book's suppliers.
+    @State private var isShowingSources = false
 
     struct ScanStart: Identifiable {
         let id = UUID()
@@ -194,6 +196,17 @@ struct RecipeDetailView: View {
         }
         .sheet(item: $openedReference) { opened in
             ReferenceSheet(reference: opened.reference, term: opened.term)
+        }
+        .sheet(isPresented: $isShowingSources) {
+            NavigationStack {
+                SourcesPane(book: recipe.book)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done", role: .confirm) { isShowingSources = false }
+                                .keyboardShortcut(.cancelAction)
+                        }
+                    }
+            }
         }
         // VoiceOver's "Open page N" action has no pill to anchor at: a dialog instead.
         .confirmationDialog(offeredScan.map { "Nothing from page \($0.page) yet" } ?? "", isPresented: Binding { offeredScan != nil } set: { if !$0 { offeredScan = nil } }, titleVisibility: .visible) {
@@ -390,6 +403,11 @@ struct RecipeDetailView: View {
     /// the pointer sits on, for the entry's title and the glossary entry.
     private func open(_ pointer: PagePointer, item: String? = nil) -> ScanOffer? {
         guard let book = recipe.book else { return nil }
+        // The book's Sources page is captured: its suppliers (ux-notes row 103).
+        if pointer.kind == .sources, !book.sourcesPages.isEmpty {
+            isShowingSources = true
+            return nil
+        }
         switch book.holding(pages: pointer.pages, named: pointer.target ?? item, from: recipe) {
         case let .recipe(linked):
             openedRecipe = linked

@@ -319,12 +319,12 @@ enum ScanSaving {
 
     /// Keeps a page that is not a recipe (a contents, index or Sources page, a photo plate) on its
     /// book as a page scan, with its regions and no recipe.
-    static func keepPageScan(_ model: ScanReviewModel, kind: PageKind, book: Book, images: PageImages, in context: ModelContext) async {
+    static func keepPageScan(_ model: ScanReviewModel, kind: PageKind, book: Book, images: PageImages, fallbackPage: Int? = nil, in context: ModelContext) async {
         for page in model.pages {
             guard let data = await images.jpeg(page) else { continue }
             let scan = RecipeImage(role: .pageScan, imageData: data)
             context.insert(scan)
-            scan.pageNumber = page.pageNumber
+            scan.pageNumber = page.pageNumber ?? fallbackPage
             scan.pageKind = ScanPageKind(kind)
             scan.regions = try? model.scanRegions(page: page.id).encoded()
             scan.book = book

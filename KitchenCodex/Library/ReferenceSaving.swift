@@ -238,6 +238,14 @@ extension Book {
     var sourcesPages: [RecipeImage] {
         (pageScans ?? []).filter { $0.pageKind == .sources }
     }
+
+    /// The entry on the list for the Sources page: titled Sources, Resources or Suppliers (a
+    /// pointer's entry is retitled Sources once the page is captured).
+    var sourcesEntry: BookEntry? {
+        orderedEntries.first { entry in
+            ["sources", "resources", "suppliers", "sources and resources"].contains(entry.title.trimmingCharacters(in: .whitespaces).lowercased())
+        }
+    }
 }
 
 extension Reference {
