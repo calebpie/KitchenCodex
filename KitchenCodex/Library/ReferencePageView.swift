@@ -20,6 +20,8 @@ struct ReferencePageView: View {
     @State private var isConfirmingDelete = false
     @State private var isDeleting = false
     @State private var isViewingPages = false
+    /// The bar takes the title once the header has scrolled under it, as recipe detail does.
+    @State private var showsNavigationTitle = false
 
     private var highlighted: ReferenceSection? { reference.section(matching: term) }
 
@@ -62,11 +64,16 @@ struct ReferencePageView: View {
                 }
             }
             .listStyle(.insetGrouped)
+            .onScrollGeometryChange(for: Bool.self) { geometry in
+                geometry.contentOffset.y + geometry.contentInsets.top > 80
+            } action: { _, isPast in
+                showsNavigationTitle = isPast
+            }
             .onAppear {
                 if let highlighted { proxy.scrollTo(highlighted.id, anchor: .top) }
             }
         }
-        .navigationTitle(reference.title.isEmpty ? "Reference" : reference.title)
+        .navigationTitle(showsNavigationTitle ? (reference.title.isEmpty ? "Reference" : reference.title) : "")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {

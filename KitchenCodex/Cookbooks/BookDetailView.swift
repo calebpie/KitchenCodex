@@ -347,7 +347,8 @@ private struct EntryRow: View {
     var body: some View {
         if let recipe = entry.recipe {
             NavigationLink(value: LibraryRoute.recipe(recipe.persistentModelID)) { PunchlistEntryLine(entry: entry) }
-        } else if let reference = entry.reference {
+        } else if let reference = entry.reference ?? entry.page.flatMap({ page in entry.section?.book?.references(onPage: page).first }) {
+            // Reference reading captured from the entry's page opens it.
             NavigationLink(value: LibraryRoute.reference(reference.persistentModelID)) { PunchlistEntryLine(entry: entry) }
         } else if showsScanNow {
             HStack {

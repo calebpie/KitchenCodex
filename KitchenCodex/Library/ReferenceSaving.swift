@@ -20,10 +20,33 @@ enum ReferenceSaving {
     static func save(_ imported: ImportedReference, model: ScanReviewModel, book: Book, images: ScanSaving.PageImages, reviewed: Bool, in context: ModelContext) async -> Reference {
         let pages = model.pages.compactMap(\.pageNumber)
         let reference: Reference
-        if imported.kind == .glossary, let glossary = book.glossary(adjacentTo: pages) {
+        /// A page shot again: its earlier page scans give way to the new ones.
+        var shotAgain = false
+        if imported.kind != .glossary, let page = pages.first,
+           let earlier = book.references(onPage: page).first(where: { !$0.isGlossary && $0.title.localizedCaseInsensitiveCompare(imported.title) == .orderedSame }) {
+            // The same chapter or technique shot again: read again in place, the cook's title,
+            // kind and links kept.
+            reference = earlier
+            for section in earlier.sortedSections { context.delete(section) }
+            add(imported.sections, to: reference, from: 0, in: context)
+            shotAgain = true
+        } else if imported.kind == .glossary, let glossary = book.glossary(adjacentTo: pages) {
             reference = glossary
-            let next = (reference.sections ?? []).map(\.sortOrder).max().map { $0 + 1 } ?? 0
-            add(imported.sections, to: reference, from: next, in: context)
+            // A page captured before the ones already there goes first; its entries keep the
+            // book's order either way. A page the glossary already spans was shot again: its
+            // entries are there, so only the page scan is added.
+            let existing = reference.sortedSections
+            let first = reference.source?.firstPage ?? .max
+            let last = reference.source?.lastPage ?? first
+            if pages.allSatisfy({ first...last ~= $0 }) {
+                // Shot again: its entries are there already.
+                shotAgain = true
+            } else if let page = pages.min(), page < first {
+                for section in existing { section.sortOrder += imported.sections.count }
+                add(imported.sections, to: reference, from: 0, in: context)
+            } else {
+                add(imported.sections, to: reference, from: (existing.map(\.sortOrder).max() ?? -1) + 1, in: context)
+            }
             if let source = reference.source, let first = pages.min(), let last = pages.max() {
                 let low = min(source.firstPage ?? first, first)
                 let high = max(source.lastPage ?? source.firstPage ?? last, last)
@@ -44,7 +67,11 @@ enum ReferenceSaving {
             context.insert(source)
             reference.source = source
         }
+        if shotAgain {
+            for scan in reference.pageScans where pages.contains(scan.pageNumber ?? -1) { context.delete(scan) }
+        }
         await attachPageScans(model, to: reference, book: book, images: images, in: context)
+        if imported.kind == .glossary { mergeAdjacentGlossaries(into: reference, in: book, context: context) }
         try? context.save()
         link(reference, pages: pages, in: book, context: context)
         if reference.title.isEmpty {
@@ -52,6 +79,55 @@ enum ReferenceSaving {
         }
         try? context.save()
         return reference
+    }
+
+    /// A page that bridges two glossaries (pp. 250–252 and p. 253) makes them one: the other's
+    /// entries, page scans and recipes move over in page order, its entry and captures follow, and
+    /// it goes.
+    private static func mergeAdjacentGlossaries(into reference: Reference, in book: Book, context: ModelContext) {
+        // A deleted reference stays in the book's array until the context saves: each is merged once.
+        var merged = Set<PersistentIdentifier>()
+        while let first = reference.source?.firstPage,
+              let other = (book.references ?? []).first(where: { other in
+                  guard other != reference, !other.isDeleted, !merged.contains(other.persistentModelID),
+                        other.isGlossary, let start = other.source?.firstPage else { return false }
+                  let end = other.source?.lastPage ?? start
+                  let last = reference.source?.lastPage ?? first
+                  return start <= last + 1 && end >= first - 1
+              }) {
+            let otherFirst = other.source?.firstPage ?? first
+            let otherLast = other.source?.lastPage ?? otherFirst
+            let mine = reference.sortedSections, theirs = other.sortedSections
+            let ordered = otherFirst < first ? theirs + mine : mine + theirs
+            for (index, section) in ordered.enumerated() {
+                section.sortOrder = index
+                section.reference = reference
+            }
+            for image in other.images ?? [] { image.reference = reference }
+            for recipe in other.recipes ?? [] where !(reference.recipes ?? []).contains(recipe) {
+                reference.recipes = (reference.recipes ?? []) + [recipe]
+            }
+            if let entry = other.bookEntry {
+                other.bookEntry = nil
+                if reference.bookEntry == nil { entry.reference = reference }
+            }
+            if let source = reference.source {
+                let low = min(first, otherFirst), high = max(source.lastPage ?? first, otherLast)
+                source.firstPage = low
+                source.lastPage = high == low ? nil : high
+            }
+            let gone = other.id, kept = reference.id
+            BookScanStore.shared.updateState(for: book) { state in
+                for index in state.captures.indices where state.captures[index].references.contains(gone) {
+                    state.captures[index].references = state.captures[index].references.map { $0 == gone ? kept : $0 }
+                }
+            }
+            merged.insert(other.persistentModelID)
+            other.recipes = []
+            other.sections = []
+            other.images = []
+            context.delete(other)
+        }
     }
 
     private static func add(_ sections: [ImportedReference.Section], to reference: Reference, from start: Int, in context: ModelContext) {
@@ -77,6 +153,8 @@ enum ReferenceSaving {
                 if reference.bookEntry == nil, entry.reference == nil, entry.recipe == nil {
                     entry.reference = reference
                     entry.status = .captured
+                    // An entry a pointer made took the pointer's words; the page is the reference's.
+                    if pointer.madeEntry, !reference.title.isEmpty { entry.title = reference.title }
                 } else if pointer.madeEntry, entry.recipe == nil, entry.reference == nil {
                     context.delete(entry)
                 } else if entry.recipe == nil {
@@ -150,8 +228,7 @@ extension Book {
     func glossary(adjacentTo pages: [Int]) -> Reference? {
         guard let low = pages.min(), let high = pages.max() else { return nil }
         return (references ?? []).first { reference in
-            guard reference.kind == .chapter, reference.title.localizedCaseInsensitiveCompare("Glossary") == .orderedSame,
-                  let first = reference.source?.firstPage else { return false }
+            guard reference.isGlossary, let first = reference.source?.firstPage else { return false }
             let last = reference.source?.lastPage ?? first
             return (first - 1)...(last + 1) ~= low || (first - 1)...(last + 1) ~= high
         }
@@ -164,6 +241,11 @@ extension Book {
 }
 
 extension Reference {
+    /// A book's glossary: a chapter titled Glossary, its sections the entries.
+    var isGlossary: Bool {
+        kind == .chapter && title.localizedCaseInsensitiveCompare("Glossary") == .orderedSame
+    }
+
     /// Where it came from, as the page and the pane show it: "Nobu West, pp. 250–253", "A scanned
     /// page", or the site and author.
     var sourceLine: String {

@@ -569,10 +569,15 @@ final class BookScanSession: PageCaptureSink {
             capture.photographPages = photographs
             capture.duplicates = duplicates
             capture.joinOffer = joinOffer
-            capture.detail = Self.savedLine(saved, skipped: model.recipes.first?.isSkipped == true && saved.isEmpty)
-                + (replaced == 0 ? "" : replaced == 1 ? " · replaced the earlier copy" : " · replaced the earlier copies")
-                + (duplicates.isEmpty ? "" : " · already captured")
-                + (joinOffer.map { " · continues “\($0.title)”, which was reviewed or edited since" } ?? "")
+            let continues = joinOffer.map { "continues “\($0.title)”, which was reviewed or edited since" }
+            if let continues, saved.isEmpty {
+                capture.detail = continues.prefix(1).uppercased() + continues.dropFirst()
+            } else {
+                capture.detail = Self.savedLine(saved, skipped: model.recipes.first?.isSkipped == true && saved.isEmpty)
+                    + (replaced == 0 ? "" : replaced == 1 ? " · replaced the earlier copy" : " · replaced the earlier copies")
+                    + (duplicates.isEmpty ? "" : " · already captured")
+                    + (continues.map { " · \($0)" } ?? "")
+            }
         }
         if owner != id { finish(id) { $0.detail = "Continues the page before" } }
 
@@ -724,7 +729,7 @@ final class BookScanSession: PageCaptureSink {
             if existing.indices.contains(recipeIndex) {
                 let recipe = existing[recipeIndex]
                 await ScanSaving.saveAgain(model, recipe: recipeIndex, into: recipe, book: book, images: images,
-                                           changeSummary: "Joined with \(ScanSaving.pagesText(book: nil, pages: single.pageNumbers.compactMap { $0 }).replacingOccurrences(of: "a photo", with: "the next page")), read again", in: context)
+                                           changeSummary: "Joined with the next page, read again", in: context)
                 saved.append(recipe)
             } else {
                 let recipe = await ScanSaving.saveNew(model, recipe: recipeIndex, book: book, reviewed: false, images: images, appliesPointers: false, in: context)
@@ -770,9 +775,10 @@ final class BookScanSession: PageCaptureSink {
         ((try? context.fetchCount(FetchDescriptor<RecipeImage>(predicate: #Predicate { $0.id == id }))) ?? 0) > 0
     }
 
-    /// The recipe capture before `id` in capture order.
+    /// The recipe capture before `id` in capture order whose recipes are still in the library (a
+    /// recipe deleted since leaves nothing for a page to continue).
     private func previousRecipeCapture(before id: Int) -> BookScanState.StoredCapture? {
-        state.captures.filter { $0.id < id && $0.mode == .recipe && $0.status == .processed && $0.joinedTo == nil && !$0.recipes.isEmpty }.max { $0.id < $1.id }
+        state.captures.filter { $0.id < id && $0.mode == .recipe && $0.status == .processed && $0.joinedTo == nil && !$0.recipes.isEmpty && !recipes(of: $0).isEmpty }.max { $0.id < $1.id }
     }
 
     /// A Photo capture, or a page that reads as a photo plate: a cover candidate for the recipe that

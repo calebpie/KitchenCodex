@@ -69,7 +69,7 @@ extension Book {
     func reconcilePunchlist() {
         let sourcesPages = Set(sourcesPages.compactMap(\.pageNumber))
         for entry in orderedEntries where entry.status != .listed && entry.recipe == nil && entry.reference == nil {
-            if let page = entry.page, sourcesPages.contains(page) || references(onPage: page).contains(where: { $0.bookEntry == nil }) { continue }
+            if let page = entry.page, sourcesPages.contains(page) || !references(onPage: page).isEmpty { continue }
             entry.status = .listed
         }
     }

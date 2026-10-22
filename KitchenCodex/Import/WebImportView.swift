@@ -336,7 +336,8 @@ struct WebImportView: View {
             let page = try await WebPageFetcher().fetchPage(url)
             fallbackURL = page.url
             var extraction = await Self.extract(page)
-            if extraction.recipe == nil, let rendered = await render(page) {
+            // An article found in the fetched HTML needs no rendering.
+            if extraction.recipe == nil, extraction.article == nil, let rendered = await render(page) {
                 extraction = rendered
             }
             fallbackTitle = extraction.pageTitle
@@ -422,7 +423,7 @@ struct WebImportView: View {
             _ = try await RenderedPageLoader.render(page.url) { rendered in
                 let extraction = await Self.extract(html: rendered.html, url: rendered.url)
                 reading = extraction
-                return extraction.recipe != nil
+                return extraction.recipe != nil || extraction.article != nil
             }
         } catch {
             return nil

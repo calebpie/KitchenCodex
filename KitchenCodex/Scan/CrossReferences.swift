@@ -42,6 +42,9 @@ enum CrossReferenceLinking {
         var isPlain = false
         var isReference: Bool
         var listed: BookEntry?
+        /// Reference reading already captured from the page (a glossary, a chapter): the recipe
+        /// reads it as related reading rather than listing the page again.
+        var reference: Reference?
     }
 
     /// The pointers worth a card: every kind but photographs, which go to their recipe as covers.
@@ -82,7 +85,15 @@ enum CrossReferenceLinking {
         }
         let isReference = reference.kind != .recipe || !isRecipePage(page, in: book, state: state)
         let listed = book.orderedEntries.first { $0.page == page && $0.recipe == nil && $0.reference == nil }
-        return Reading(page: page, suggested: named ?? onPage.first, isPlain: named != nil, isReference: isReference, listed: listed)
+        let captured = onPage.isEmpty && reference.kind != .sources ? book.references(onPage: page).first : nil
+        return Reading(page: page, suggested: named ?? onPage.first, isPlain: named != nil, isReference: isReference, listed: listed, reference: captured)
+    }
+
+    /// A pointer to a page captured as reference reading: the recipe reads it as related reading
+    /// (02 §4.2), both ways.
+    static func relate(_ recipe: Recipe, to reference: Reference) {
+        guard !(recipe.references ?? []).contains(reference) else { return }
+        recipe.references = (recipe.references ?? []) + [reference]
     }
 
     /// The page holds a recipe: one is captured from it, a page scan of it read as one, or the
@@ -121,6 +132,13 @@ enum CrossReferenceLinking {
     static func addToList(_ reference: PageCrossReference, from recipe: Recipe, in book: Book, state: inout BookScanState, context: ModelContext) -> BookEntry? {
         let reading = read(reference, from: recipe, in: book, state: state)
         guard let page = reading.page else { return nil }
+        // The page is captured as reference reading already: related reading, nothing to list.
+        if let captured = reading.reference {
+            relate(recipe, to: captured)
+            return nil
+        }
+        // The book's Sources page is captured: its suppliers are in Pantry → Sources (row 103).
+        if reference.kind == .sources, !book.sourcesPages.isEmpty { return nil }
         // A page of its own is a page turn; "recipe follows" needs the name to list it by.
         if reference.pages.isEmpty ? reference.target == nil : ownPages(of: recipe).contains(page) { return nil }
         let (entry, isNew) = book.toScanEntry(page: page, title: entryTitle(for: reference, in: recipe, page: page), in: context)
@@ -220,6 +238,7 @@ enum CrossReferenceLinking {
     /// The link the page makes plain: its one recipe (or the one the pointer names).
     static func linkIfOne(_ reference: PageCrossReference, from recipe: Recipe, in book: Book, state: BookScanState?, context: ModelContext) {
         let reading = read(reference, from: recipe, in: book, state: state)
+        if let captured = reading.reference { relate(recipe, to: captured) }
         guard reading.isPlain, let component = reading.suggested else { return }
         link(recipe, to: component, phrase: reference.phrase, in: context)
     }
@@ -233,6 +252,8 @@ enum CrossReferenceLinking {
             let reading = read(reference, from: recipe, in: book, state: state)
             if reading.isPlain, let component = reading.suggested {
                 link(recipe, to: component, phrase: reference.phrase, in: context)
+            } else if let captured = reading.reference {
+                relate(recipe, to: captured)
             } else if !reference.pages.isEmpty, let page = reading.page, book.recipes(onPage: page).filter({ $0 != recipe }).isEmpty {
                 addToList(reference, from: recipe, in: book, state: &state, context: context)
             }

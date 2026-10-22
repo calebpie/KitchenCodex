@@ -68,9 +68,15 @@ struct PointerCard: View {
         if let suggested = reading.suggested {
             return "Page \(page) is “\(suggested.title)” in \(book.displayTitle)."
         }
+        if pointer.reference.kind == .sources, !book.sourcesPages.isEmpty {
+            return "\(book.displayTitle)'s Sources page is captured: its suppliers are in Pantry → Sources."
+        }
+        if let captured = reading.reference {
+            return "Page \(page) is “\(captured.title)” in \(book.displayTitle), reference reading: it shows under Related Reading."
+        }
         if reading.isReference {
             switch pointer.reference.kind {
-            case .sources: return "Page \(page) is the book's Sources page: reference reading for the to-scan list."
+            case .sources: return "Page \(page) is the book's Sources page: it goes on the to-scan list, and scanning it fills Pantry → Sources."
             case .technique: return "Page \(page) describes a technique: reference reading for the to-scan list."
             default: return "Page \(page) isn't a recipe on \(book.displayTitle)'s list, so it goes on the to-scan list as reference reading."
             }
@@ -101,7 +107,7 @@ struct PointerCard: View {
         // A page whose recipe the book already has needs no place on the list.
         if book != nil, let reading, reading.page != nil, reading.suggested == nil {
             Button { onChoose(.addToList) } label: {
-                chip(reading.isReference ? "Add to To-Scan List as Reference" : "Add to To-Scan List", isSelected: pointer.choice == .addToList)
+                chip(reading.isReference && pointer.reference.kind != .sources ? "Add to To-Scan List as Reference" : "Add to To-Scan List", isSelected: pointer.choice == .addToList)
             }
             .buttonStyle(.plain)
         }
