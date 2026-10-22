@@ -61,13 +61,15 @@ struct WebReferenceReaderTests {
             <figure><img src="/img/jar.jpg" alt="A jar of it, cooled"></figure>
             <h2>Keeping it</h2>
             <p>\(Self.paragraph)</p>
+            <figure><img src="/img/toast.jpg" alt="On toast"></figure>
             """
         )
         let reference = try #require(WebReferenceReader.read(html: html, url: URL(string: "https://example.test/notes/brown-butter")))
         #expect(reference.sections.map(\.heading) == ["", "When to stop", "Keeping it"])
-        #expect(reference.figures.map(\.url.lastPathComponent) == ["pan.jpg", "specks.jpg", "jar.jpg"])
-        #expect(reference.figures.map(\.caption) == ["Butter foaming in a steel pan", "The specks the colour of a walnut shell", "A jar of it, cooled"])
-        #expect(reference.figures.map(\.section) == [0, 1, 1])
+        // The last figure, just before the comments, is the article's.
+        #expect(reference.figures.map(\.url.lastPathComponent) == ["pan.jpg", "specks.jpg", "jar.jpg", "toast.jpg"])
+        #expect(reference.figures.map(\.caption) == ["Butter foaming in a steel pan", "The specks the colour of a walnut shell", "A jar of it, cooled", "On toast"])
+        #expect(reference.figures.map(\.section) == [0, 1, 1, 2])
     }
 
     @Test func theImporterOffersTheArticleOnlyWhenNoRecipeWasFound() throws {

@@ -157,14 +157,16 @@ public enum WebReferenceReader {
         var figures: [(figure: ImportedReference.Figure, open: Int)] = []
         var seen = Set<URL>()
         for line in lines[(start.map { $0 + 1 } ?? 0)...] {
-            let text = line.text.trimmingCharacters(in: .whitespaces)
-            let key = ImportText.normalizedForComparison(text)
-            if stopHeadings.contains(key), text.count <= 40 { break }
+            // A line's pictures come before it on the page: the article's last figure sits before
+            // the furniture's heading that ends it.
             for (index, source) in line.images.enumerated() {
                 guard let url = ImportText.url(source, relativeTo: base), seen.insert(url).inserted else { continue }
                 let alt = line.imageAlts.indices.contains(index) ? line.imageAlts[index] : ""
                 figures.append((ImportedReference.Figure(url: url, caption: alt, section: sections.count - 1), sections.count - 1))
             }
+            let text = line.text.trimmingCharacters(in: .whitespaces)
+            let key = ImportText.normalizedForComparison(text)
+            if stopHeadings.contains(key), text.count <= 40 { break }
             // A figure's own caption line: the caption of the figure just before it when it had none.
             if line.tag == "figcaption", let last = figures.indices.last, figures[last].figure.caption.isEmpty, !text.isEmpty {
                 figures[last].figure.caption = text

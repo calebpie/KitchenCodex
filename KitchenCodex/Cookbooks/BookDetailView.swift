@@ -183,8 +183,12 @@ struct BookDetailView: View {
                     isBuildingList = false
                     isEditingList = true
                 } onScanRecipes: { pages in
+                    // The session once the sheet has gone, the pages its first captures.
                     isBuildingList = false
-                    scanning = ScanStart(pages: pages)
+                    Task {
+                        try? await Task.sleep(for: .milliseconds(450))
+                        scanning = ScanStart(pages: pages)
+                    }
                 }
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
@@ -457,7 +461,7 @@ private struct CompletenessRow: View {
     private var line: String {
         guard total > 0 else { return "No recipes listed yet" }
         let base = "\(captured) of \(total) captured"
-        return needReview > 0 ? "\(base), \(needReview) need review" : base
+        return needReview > 0 ? "\(base), \(needReview == 1 ? "1 needs review" : "\(needReview) need review")" : base
     }
 }
 

@@ -114,6 +114,14 @@ final class BookScanSession: PageCaptureSink {
         return kept
     }
 
+    /// The same sitting again: its view came back after a moment away (a sheet over it, a
+    /// presentation settling), so nothing is let go and no new sitting starts.
+    func resume() {
+        isOpen = true
+        save()
+        kick()
+    }
+
     /// Done: nothing is lost. Captures still reading finish in the queue.
     func pause() {
         isOpen = false
@@ -230,7 +238,7 @@ final class BookScanSession: PageCaptureSink {
                         needsReview: capture.mode == .recipe && (!capture.recipes.isEmpty || !capture.references.isEmpty) ? needsReview(capture) : nil,
                         keepWhich: capture.duplicates.isEmpty ? nil : keepQuestion(capture),
                         joinWhich: capture.joinOffer.map { "This page continues “\($0.title)”, which was reviewed or edited since. Join it, reading the recipe again as a new version, or keep it apart?" },
-                        contentsWhich: capture.contentsOffer ? "This looks like a contents page, not a recipe page." : nil)
+                        contentsWhich: capture.contentsOffer ? "Add what it lists to the book's recipe list, or retake the page?" : nil)
         }
     }
 

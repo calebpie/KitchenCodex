@@ -20,9 +20,15 @@ struct ScanCookbookView: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var step = Step.barcode
-    @State private var scanning: Book?
-    /// Recipe pages offered as contents pages, which the session takes as its first captures.
-    @State private var firstPages: [URL] = []
+    /// The session, with any recipe pages offered as contents pages, which it takes as its first
+    /// captures (carried in the item, so the cover gets them as they are when it opens).
+    @State private var scanning: Scanning?
+
+    struct Scanning: Identifiable {
+        let id = UUID()
+        let book: Book
+        var pages: [URL] = []
+    }
 
     enum Step {
         case barcode
@@ -38,13 +44,12 @@ struct ScanCookbookView: View {
                 AddCookbookView(title: "Scan Cookbook", continuesToScanning: true) { book in arrive(book) }
             case let .start(book):
                 NavigationStack {
-                    CookbookStartView(book: book) { step = .contents(book) } onScanInstead: { scanning = book } onDone: { finish(book) }
+                    CookbookStartView(book: book) { step = .contents(book) } onScanInstead: { scanning = Scanning(book: book) } onDone: { finish(book) }
                 }
             case let .contents(book):
                 NavigationStack {
                     BuildRecipeListView(book: book) { step = .list(book) } onScanRecipes: { pages in
-                        firstPages = pages
-                        scanning = book
+                        scanning = Scanning(book: book, pages: pages)
                     }
                         .toolbar {
                             ToolbarItem(placement: .cancellationAction) {
@@ -54,12 +59,12 @@ struct ScanCookbookView: View {
                 }
             case let .list(book):
                 NavigationStack {
-                    PunchlistEditorView(book: book) { scanning = book } onDone: { finish(book) }
+                    PunchlistEditorView(book: book) { scanning = Scanning(book: book) } onDone: { finish(book) }
                 }
             }
         }
-        .fullScreenCover(item: $scanning, onDismiss: { if let book = currentBook { finish(book) } }) { book in
-            BookScanView(book: book, firstPages: firstPages)
+        .fullScreenCover(item: $scanning, onDismiss: { if let book = currentBook { finish(book) } }) { start in
+            BookScanView(book: start.book, firstPages: start.pages)
         }
     }
 
@@ -78,7 +83,7 @@ struct ScanCookbookView: View {
         guard !book.orderedSections.isEmpty else { return }
         Task {
             try? await Task.sleep(for: .milliseconds(400))
-            scanning = book
+            scanning = Scanning(book: book)
         }
     }
 
@@ -345,8 +350,8 @@ struct BuildRecipeListView: View {
             pages[number].line = !read.index.isEmpty
                 ? "Index, \(read.index.count) entries"
                 : count == 0
-                ? (read.sections.isEmpty ? "No recipes found" : "\(read.sections.count) chapters")
-                : "\(read.sections.count) chapters, \(count) recipes" + (read.method == .model ? " (Apple Intelligence)" : "")
+                ? (read.sections.isEmpty ? "No recipes found" : Self.chapters(read.sections.count))
+                : "\(Self.chapters(read.sections.count)), \(count == 1 ? "1 recipe" : "\(count) recipes")" + (read.method == .model ? " (Apple Intelligence)" : "")
             pages[number].isDone = true
             // The contents page stays with the book, as a page scan.
             await ScanSaving.keepPageScan(ScanReviewModel(reading: reading, urls: [url]), kind: reading.kind == .index ? .index : .contents, book: book, images: images, in: modelContext)
@@ -364,6 +369,11 @@ struct BuildRecipeListView: View {
         } else {
             onRead()
         }
+    }
+
+    /// "1 chapter", "14 chapters".
+    private static func chapters(_ count: Int) -> String {
+        count == 1 ? "1 chapter" : "\(count) chapters"
     }
 
     /// A page's reading and its contents; nil contents for a page that reads as a recipe page.

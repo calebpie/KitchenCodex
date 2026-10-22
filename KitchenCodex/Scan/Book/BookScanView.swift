@@ -52,7 +52,8 @@ struct BookScanView: View {
         .background(cameraState == .ready ? Color.black : Color(.systemGroupedBackground))
         .task {
             let session = BookScanStore.shared.session(for: book, context: modelContext)
-            session.open(at: startAt)
+            // One sitting per presentation: the view coming back resumes it.
+            if self.session == nil { session.open(at: startAt) } else { session.resume() }
             self.session = session
             if !firstPages.isEmpty, !hasTakenFirstPages {
                 hasTakenFirstPages = true
