@@ -131,7 +131,8 @@ struct SplitOfferRow: View {
             }
         } else {
             Button(action: onOffer) {
-                Label("Split into \(plan.defaultRecipeCount) Recipes…", systemImage: "square.split.2x1")
+                // Every part may start off (row 101): the offer then names no count.
+                Label(plan.defaultRecipeCount > 1 ? "Split into \(plan.defaultRecipeCount) Recipes…" : "Split into Recipes…", systemImage: "square.split.2x1")
             }
             .accessibilityHint("Makes its components recipes of their own, linked from this one. Asks first.")
         }
