@@ -265,14 +265,17 @@ struct BuildRecipeListView: View {
         .navigationTitle("Build the Recipe List")
         .navigationBarTitleDisplayMode(.inline)
         .photosPicker(isPresented: $isChoosingPhotos, selection: $photoItems, maxSelectionCount: 20, selectionBehavior: .ordered, matching: .images, preferredItemEncoding: .current, photoLibrary: .shared())
-        .fileImporter(isPresented: $isChoosingFiles, allowedContentTypes: [.image], allowsMultipleSelection: true) { result in
+        .fileImporter(isPresented: $isChoosingFiles, allowedContentTypes: [.image, .pdf], allowsMultipleSelection: true) { result in
             guard case let .success(urls) = result else { return }
-            let files = urls.compactMap { url -> (Data, String)? in
-                let scoped = url.startAccessingSecurityScopedResource()
-                defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-                return (try? Data(contentsOf: url)).map { ($0, url.pathExtension.isEmpty ? "jpg" : url.pathExtension) }
+            Task {
+                var files: [(Data, String)] = []
+                for url in urls {
+                    let scoped = url.startAccessingSecurityScopedResource()
+                    defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                    files += await ScanSession.pageFiles(of: url)
+                }
+                await read(files)
             }
-            Task { await read(files) }
         }
         .onChange(of: photoItems) { _, items in
             guard !items.isEmpty else { return }

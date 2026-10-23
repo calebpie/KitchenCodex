@@ -155,6 +155,27 @@ public enum PageCleanup {
     /// The most two opposite sides may differ: about a 25° tilt of the phone.
     public static let maximumSideRatio = 1.3
 
+    /// A cover candidate cropped to the page (ux-notes row 86): the outline whenever Vision finds a
+    /// page-shaped one, with no edge-clearance test, then trimmed to the printed picture's bounds
+    /// when the page holds one large picture (a plate bleeding to the page's edge keeps the page).
+    /// Nil when nothing was found to crop to.
+    public static func cropToPicture(_ image: CGImage) async -> CGImage? {
+        var cropped = image
+        if let quad = await detectOutline(in: image, quarterTurns: 0), let page = clean(image, page: quad, enhances: false, sharpens: false) {
+            cropped = page
+        } else if !(await detectOutline(in: image, quarterTurns: 0) == nil) {
+            return nil
+        }
+        // The picture's bounds: the largest printed photo on the page, when it takes a good share.
+        if let layout = PaperLayout.measure(cropped, quarterTurns: 0, text: []), let picture = layout.photos.max(by: { $0.area < $1.area }),
+           picture.area >= 0.2, picture.area < 0.95 {
+            let rect = CGRect(x: picture.minX * Double(cropped.width), y: picture.minY * Double(cropped.height),
+                              width: picture.width * Double(cropped.width), height: picture.height * Double(cropped.height)).integral
+            if let trimmed = cropped.cropping(to: rect) { return trimmed }
+        }
+        return cropped === image ? nil : cropped
+    }
+
     /// `image` deskewed and cropped to `page` (the whole frame when nil), with levels and sharpening
     /// when `enhances`. Nil only when Core Image can't render it.
     public static func clean(_ image: CGImage, page: PageQuad?, enhances: Bool, sharpens: Bool = true, margin: Double = margin) -> CGImage? {

@@ -153,11 +153,13 @@ final class ScanSession: PageCaptureSink {
     /// the Mac reads the full one; a device reads the photo at full size, as the harness does.
     private var pipeline: PagePipeline { Self.makePipeline() }
 
-    static func makePipeline() -> PagePipeline {
+    /// `languages`: the recognizer's, the reader's own by default and a book's second beside it
+    /// (ux-notes row 126).
+    static func makePipeline(languages: [Locale.Language] = PageReader.defaultLanguages) -> PagePipeline {
         #if targetEnvironment(simulator)
-        let reader = PageReader(maxPixelSize: 4_096)
+        let reader = PageReader(maxPixelSize: 4_096, languages: languages)
         #else
-        let reader = PageReader()
+        let reader = PageReader(languages: languages)
         #endif
         return PagePipeline(reader: reader, model: OnDevicePageStructurer())
     }
@@ -184,7 +186,8 @@ final class ScanSession: PageCaptureSink {
         }
     }
 
-    /// Image files chosen in Files.
+    /// Image files chosen in Files, and PDFs, each page of which is rendered and read as a
+    /// photographed page is (phase2-plan "Slice 8": PDF import through the same pipeline).
     func start(with fileURLs: [URL]) {
         guard !fileURLs.isEmpty else { return }
         phase = .loading
@@ -193,11 +196,22 @@ final class ScanSession: PageCaptureSink {
             for url in fileURLs {
                 let scoped = url.startAccessingSecurityScopedResource()
                 defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-                guard let data = try? Data(contentsOf: url) else { continue }
-                files.append((data, url.pathExtension.isEmpty ? "jpg" : url.pathExtension))
+                files += await Self.pageFiles(of: url)
             }
             await read(files)
         }
+    }
+
+    /// A file's pages as image data: the image itself, or each page of a PDF rendered.
+    static func pageFiles(of url: URL) async -> [(Data, String)] {
+        if PDFPageImages.isPDF(url) {
+            let folder = FileManager.default.temporaryDirectory.appending(path: "pdf-\(UUID().uuidString)")
+            defer { try? FileManager.default.removeItem(at: folder) }
+            let pages = await Task.detached { PDFPageImages.render(url, into: folder) }.value
+            return pages.compactMap { page in (try? Data(contentsOf: page)).map { ($0, "jpg") } }
+        }
+        guard let data = try? Data(contentsOf: url) else { return [] }
+        return [(data, url.pathExtension.isEmpty ? "jpg" : url.pathExtension)]
     }
 
     private func read(_ files: [(Data, String)]) async {

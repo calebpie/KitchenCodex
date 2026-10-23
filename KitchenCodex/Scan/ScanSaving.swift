@@ -346,15 +346,20 @@ enum ScanSaving {
         }
     }
 
-    /// Photo-mode captures (04 §5.1 "Printed photos", ux-notes row 62): each kept on the recipe as a
-    /// cover candidate, and the first made the cover when the recipe has none. No question asked.
+    /// Photo-mode captures (04 §5.1 "Printed photos", ux-notes row 62): each cropped to the page's
+    /// outline and the printed picture's bounds when they are found (row 86), kept on the recipe
+    /// as a cover candidate, the first made the cover when the recipe has none, and the best by
+    /// Vision's aesthetic score made the cover once there are several (`CoverSelection`). No
+    /// question asked.
     @discardableResult
     static func attachCoverCandidates(_ urls: [URL], to recipe: Recipe, in context: ModelContext) async -> [RecipeImage] {
         guard !urls.isEmpty else { return [] }
         var attached: [RecipeImage] = []
         for url in urls {
-            guard let file = try? Data(contentsOf: url),
-                  let photo = await ImageProcessing.jpeg(from: file, maxPixelSize: 2_400, quality: 0.85) else { continue }
+            guard let file = try? Data(contentsOf: url) else { continue }
+            var candidate = await croppedCandidate(file)
+            if candidate == nil { candidate = await ImageProcessing.jpeg(from: file, maxPixelSize: 2_400, quality: 0.85) }
+            guard let photo = candidate else { continue }
             let image = RecipeImage(role: .photo, imageData: photo)
             context.insert(image)
             image.recipe = recipe
@@ -367,7 +372,16 @@ enum ScanSaving {
             attached.append(image)
         }
         try? context.save()
+        await CoverSelection.choose(for: recipe, in: context)
         return attached
+    }
+
+    /// The photo cropped to the page and its picture (ux-notes row 86), as a 2,400-pixel JPEG; nil
+    /// when no page outline is found, so the photo stays as taken.
+    @concurrent
+    nonisolated private static func croppedCandidate(_ data: Data) async -> Data? {
+        guard let image = try? PageImage.load(data: data, maxPixelSize: 2_400), let cropped = await PageCleanup.cropToPicture(image) else { return nil }
+        return ScanImage.jpeg(cropped, quality: 0.85)
     }
 
     /// Printed photos the cook made step photos, cropped from the page and attached to their steps.

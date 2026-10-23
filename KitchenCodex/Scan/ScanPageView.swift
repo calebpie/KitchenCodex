@@ -45,7 +45,7 @@ struct ScanPageView: View {
         .interactiveDismissDisabled(session.phase != .choosing && session.phase != .finished)
         // The photos as taken (HEIC, full size), not a converted copy: page text is small.
         .photosPicker(isPresented: $isChoosingPhotos, selection: $photoItems, maxSelectionCount: 20, selectionBehavior: .ordered, matching: .images, preferredItemEncoding: .current, photoLibrary: .shared())
-        .fileImporter(isPresented: $isChoosingFiles, allowedContentTypes: [.image], allowsMultipleSelection: true) { result in
+        .fileImporter(isPresented: $isChoosingFiles, allowedContentTypes: [.image, .pdf], allowsMultipleSelection: true) { result in
             if case let .success(urls) = result { session.start(with: urls) }
         }
         .onChange(of: photoItems) { _, items in
