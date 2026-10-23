@@ -18,6 +18,8 @@ struct SourcesPane: View {
     @Query(sort: [SortDescriptor(\Source.name, comparator: .localizedStandard)]) private var allSources: [Source]
     /// The detail, pushed through a binding so it works in the iPhone's typed Pantry stack.
     @State private var opened: Source?
+    /// The source a swipe's Delete asks about (ux-notes row 149).
+    @State private var deleting: Source?
 
     private var sources: [Source] {
         guard let book else { return allSources }
@@ -54,10 +56,18 @@ struct SourcesPane: View {
                             ForEach(group.sources) { source in
                                 SourceRow(source: source) { opened = source }
                                     .swipeActions(edge: .trailing) {
-                                        Button("Delete", systemImage: "trash", role: .destructive) {
+                                        // Asks first, as Delete Cookbook does (ux-notes row 149); a
+                                        // swipe all the way across asks too.
+                                        Button("Delete", systemImage: "trash", role: .destructive) { deleting = source }
+                                    }
+                                    .confirmationDialog("Delete “\(source.name)”?", isPresented: Binding { deleting == source } set: { if !$0 { deleting = nil } }, titleVisibility: .visible) {
+                                        Button("Delete Source", role: .destructive) {
                                             modelContext.delete(source)
                                             try? modelContext.save()
+                                            deleting = nil
                                         }
+                                    } message: {
+                                        Text(source.notes.isEmpty ? "Its details go with it." : "Its details and your notes go with it.")
                                     }
                                     .swipeActions(edge: .leading) {
                                         if let phone = source.phone, let url = Self.telephone(phone) {

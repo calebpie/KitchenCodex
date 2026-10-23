@@ -76,7 +76,9 @@ struct PageCameraView: View {
         } message: {
             Text("The last three pages looked hazy and read poorly. Wipe the camera lens with a soft cloth, then carry on.")
         }
-        .confirmationDialog(closeQuestion.title, isPresented: $isConfirmingClose, titleVisibility: .visible) {
+        // An alert, not a confirmation dialog: over the camera's cover with the system overlays
+        // hidden, iOS 27 draws the dialog as a card and drops its cancel button (ux-notes row 158).
+        .alert(closeQuestion.title, isPresented: $isConfirmingClose) {
             Button("Discard", role: .destructive, action: onClose)
             Button("Keep Scanning", role: .cancel) {}
         } message: {
@@ -197,17 +199,18 @@ struct PageCameraView: View {
         session.discardQuestion ?? (camera.pageCount == 1 ? "Discard the page?" : "Discard \(camera.pageCount) pages?", nil)
     }
 
-    /// The quality pill (advisory: it never stops the shutter), or what to change when no page can
-    /// be found (ux-notes row 133), and the book the barcode named.
+    /// The session's card directly under the top bar (ux-notes row 154), then the quality pill
+    /// (advisory: it never stops the shutter), or what to change when no page can be found (row
+    /// 133), and the book the barcode named.
     private var statusLine: some View {
         VStack(spacing: 8) {
+            if let header {
+                header
+            }
             if let hint = camera.hint {
                 HintPill(hint: hint)
             } else if let quality = camera.liveQuality {
                 QualityPill(quality: quality)
-            }
-            if let header {
-                header
             }
             if let title = camera.scannedTitle {
                 HStack(spacing: 8) {

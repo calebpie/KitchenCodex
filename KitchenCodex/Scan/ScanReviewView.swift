@@ -41,6 +41,9 @@ struct ScanReviewView: View {
     @State private var pageDetent = PresentationDetent.medium
     @State private var focusRect: CGRect?
     @State private var lastTapped: ReviewItem.ID?
+    /// The structure list's scroll proxy, so a tapped row can be kept above the half-height page
+    /// (ux-notes row 162) and an editing row just above it (row 163).
+    @State private var scrollProxy: ScrollViewProxy?
     @State private var editingText = ""
     @FocusState private var editingFocus: ReviewItem.ID?
     @State private var popoverRegion: Int?
@@ -405,6 +408,11 @@ struct ScanReviewView: View {
     private var structurePane: some View {
         ScrollViewReader { proxy in
         List {
+            Section {}
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets())
+                .frame(height: 0)
+                .onAppear { scrollProxy = proxy }
             Section {
                 if model.recipes.count > 1 {
                     Picker("Recipe", selection: $model.current) {
@@ -572,6 +580,7 @@ struct ScanReviewView: View {
                 .contentShape(.rect)
             }
             .buttonStyle(.plain)
+            .id(detail.id)
             .accessibilityHint("Shows it on the page.")
         }
     }
@@ -624,6 +633,9 @@ struct ScanReviewView: View {
         lastTapped = nil
         if let part = detail.part {
             withAnimation { proxy.scrollTo(part, anchor: .top) }
+        } else if !isWide {
+            // The tapped warning kept above the half-height page (ux-notes row 162).
+            withAnimation { proxy.scrollTo(detail.id, anchor: UnitPoint(x: 0.5, y: 0.12)) }
         }
         let regions = detail.regions.compactMap(model.region)
         if let first = regions.first {
@@ -694,6 +706,7 @@ struct ScanReviewView: View {
                 .contentShape(.rect)
             }
             .buttonStyle(.plain)
+            .id(item.id)
             .listRowBackground(lastTapped == item.id && !model.flashing.isEmpty ? Color.accentColor.opacity(0.12) : nil)
             .accessibilityHint("Shows where it is on the page. Tap again to correct the wording.")
             .contextMenu {
@@ -719,20 +732,31 @@ struct ScanReviewView: View {
             shownPage = first.page
             let rects = item.regions.compactMap(model.region).filter { $0.page == first.page }.map(\.rect)
             focusRect = rects.dropFirst().reduce(rects[0]) { $0.union($1) }
-            // iPhone: the page comes up at half height, the item still in view.
+            // iPhone: the page comes up at half height, the tapped row kept in the upper half
+            // above it (ux-notes rows 139, 162).
             if !isWide {
                 pageDetent = .medium
                 isShowingPage = true
+                keepAbovePage(item.id)
             }
         }
     }
 
+    /// The row scrolled into the screen's upper half, where the half-height page doesn't cover it.
+    private func keepAbovePage(_ id: ReviewItem.ID, anchorY: CGFloat = 0.15) {
+        guard let scrollProxy else { return }
+        withAnimation { scrollProxy.scrollTo(id, anchor: UnitPoint(x: 0.5, y: anchorY)) }
+    }
+
+    /// A second tap edits the wording in place; the page keeps the line's region framed in whatever
+    /// height it has above the keyboard and the editing row sits just above it (ux-notes row 163).
     private func beginEdit(_ item: ReviewItem) {
         editingText = item.text
         model.editingItem = item.id
         Task {
             await Task.yield()
             editingFocus = item.id
+            if !isWide, isShowingPage { keepAbovePage(item.id, anchorY: 0.08) }
         }
     }
 

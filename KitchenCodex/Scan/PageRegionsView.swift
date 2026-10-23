@@ -262,15 +262,30 @@ struct ZoomablePage<Content: View>: View {
             .onTapGesture(count: 2) {
                 withAnimation { zoom = zoom > 1.2 ? 1 : 2.5 }
             }
-            .onChange(of: focus) { _, rect in
-                guard let rect else { return }
-                if zoom < 1.8 { zoom = 2.2 }
-                let width = fitted.width * zoom, height = fitted.height * zoom
-                let x = max(0, rect.midX * width - geometry.size.width / 2)
-                let y = max(0, rect.midY * height - geometry.size.height / 2)
-                withAnimation { position.scrollTo(point: CGPoint(x: x, y: y)) }
+            // The region framed when it changes, when the page first appears with one set (the
+            // first tap, ux-notes row 161), and again when the page's size changes (the sheet
+            // shrinking above the keyboard, row 163).
+            .onChange(of: focus) { _, rect in frame(rect, in: geometry.size) }
+            .onChange(of: geometry.size) { _, size in frame(focus, in: size) }
+            .onAppear {
+                guard focus != nil else { return }
+                Task { @MainActor in
+                    await Task.yield()
+                    frame(focus, in: geometry.size)
+                }
             }
         }
+    }
+
+    /// Scrolls the region into the middle of the view, zoomed in enough to read.
+    private func frame(_ rect: CGRect?, in size: CGSize) {
+        guard let rect, size.width > 0, size.height > 0 else { return }
+        let fitted = fittedSize(in: size)
+        if zoom < 1.8 { zoom = 2.2 }
+        let width = fitted.width * zoom, height = fitted.height * zoom
+        let x = max(0, rect.midX * width - size.width / 2)
+        let y = max(0, rect.midY * height - size.height / 2)
+        withAnimation { position.scrollTo(point: CGPoint(x: x, y: y)) }
     }
 
     private func fittedSize(in size: CGSize) -> CGSize {

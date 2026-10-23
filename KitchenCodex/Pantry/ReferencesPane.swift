@@ -14,6 +14,8 @@ struct ReferencesPane: View {
     /// The page pushed from a row. A binding, not a `NavigationLink(value:)`: the iPhone's Pantry
     /// stack has a typed path (`PantryView.Destination`), which ignores a value of another type.
     @State private var opened: Reference?
+    /// The reference a swipe's Delete asks about (ux-notes row 149).
+    @State private var deleting: Reference?
 
     private var books: [(book: Book, references: [Reference])] {
         let grouped = Dictionary(grouping: references.filter { $0.book != nil }, by: { $0.book! })
@@ -90,10 +92,29 @@ struct ReferencesPane: View {
         .tint(.primary)
         .accessibilityHint("Opens the reference.")
         .swipeActions(edge: .trailing) {
-            Button("Delete", systemImage: "trash", role: .destructive) {
-                ReferenceSaving.delete(reference, in: modelContext)
-            }
+            // Asks first, as Delete Cookbook does, naming what goes (ux-notes row 149).
+            Button("Delete", systemImage: "trash", role: .destructive) { deleting = reference }
         }
+        .confirmationDialog("Delete “\(reference.title.isEmpty ? "Reference" : reference.title)”?", isPresented: Binding { deleting == reference } set: { if !$0 { deleting = nil } }, titleVisibility: .visible) {
+            Button("Delete Reference", role: .destructive) {
+                ReferenceSaving.delete(reference, in: modelContext)
+                deleting = nil
+            }
+        } message: {
+            Text(deleteMessage(reference))
+        }
+    }
+
+    /// "Its 3 page images and 12 entries go with it."
+    private func deleteMessage(_ reference: Reference) -> String {
+        var parts: [String] = []
+        let pages = reference.pageScans.count + reference.figures.count
+        if pages > 0 { parts.append(pages == 1 ? "1 page image" : "\(pages) page images") }
+        let sections = reference.sortedSections.count
+        let entries = reference.sortedSections.allSatisfy { !$0.heading.isEmpty }
+        if sections > 0 { parts.append(sections == 1 ? (entries ? "1 entry" : "1 section") : "\(sections) \(entries ? "entries" : "sections")") }
+        guard !parts.isEmpty else { return "Its text goes with it." }
+        return "Its " + parts.joined(separator: " and ") + " go with it."
     }
 
     /// "Chapter · p. 250", "Chapter · pp. 250–253 · 12 entries", "Article · seriouseats.com".

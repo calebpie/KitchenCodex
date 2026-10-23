@@ -184,8 +184,14 @@ private struct CaptureRow: View {
             .overlay { RoundedRectangle(cornerRadius: 4).strokeBorder(item.mode == .photo ? Color.yellow : Color(.separator), lineWidth: item.mode == .photo ? 1.5 : 0.5) }
             .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 6) {
-                Text(item.note)
-                    .font(.headline)
+                // The app's own flag in the title's row (ux-notes rows 135, 157): a warning pill
+                // after a spacer, never a toggle, and never over the title.
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(item.note)
+                        .font(.headline)
+                    Spacer(minLength: 0)
+                    if item.needsReview == true { NeedsReviewPill() }
+                }
                 if let detail = item.detail {
                     Text(detail)
                         .font(.subheadline)
@@ -240,13 +246,9 @@ private struct CaptureRow: View {
                     .font(.subheadline)
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.vertical, 4)
-        // The app's own flag, never a setting (ux-notes row 135): a cook who wants a second look
-        // opens the capture's recipe.
-        .overlay(alignment: .topTrailing) {
-            if item.needsReview == true { NeedsReviewPill() }
-        }
         .task(id: item.url) { thumbnail = await Self.thumbnail(item.url).map(UIImage.init(cgImage:)) }
     }
 
