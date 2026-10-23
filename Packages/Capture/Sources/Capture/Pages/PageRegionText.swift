@@ -6,7 +6,7 @@ public enum PageRegionText {
     /// A title: its lines joined, capitals in title case, a second-language name after it left out
     /// (ux-notes row 59).
     public static func title(_ lines: [String]) -> String {
-        PageLines.titleText(PageLines.titleWithoutAlternate(lines, pageLanguage: PageLines.readerLanguage))
+        PageLines.mendTitleDash(PageLines.titleText(PageLines.titleWithoutAlternate(lines, pageLanguage: PageLines.readerLanguage)))
     }
 
     /// A yield as the app shows it ("MAKES 2 CUPS" → "Makes 2 cups").

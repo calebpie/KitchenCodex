@@ -88,9 +88,16 @@ enum PageFixtures {
         var sections: Int?
         /// For a Sources page: the suppliers it reads into.
         var suppliers: Int?
+        /// For an index page: a lower bound on the entries the page prints, counted as its lines
+        /// that end in a page reference in the fuller of the Mac's and the phone's readings
+        /// (ux-notes row 143); the readings are measured against it.
+        var printed: Int?
         /// False where the counts are the reading's and could not be checked against the page.
         var settled: Bool
         var note: String?
+        /// On a book's barcode row: the recognizer's second language for a bilingual book
+        /// ("fr-FR"), beside the reader's own (ux-notes row 126).
+        var languages: [String]?
 
         var testDescription: String { "\(slug)/\(file)" }
     }

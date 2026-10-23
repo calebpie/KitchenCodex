@@ -22,7 +22,10 @@ enum ReferenceReader {
     /// The page's reference reading, or nil when the page is a recipe, continues one, or holds too
     /// little prose. `blocks` carry the structurer's roles; `recipes` are what it read.
     static func read(blocks: [PageBlock], recipes: [PageRecipe], isContinuation: Bool) -> ImportedReference? {
-        guard !recipes.contains(where: { $0.ingredients.count >= 2 }) else { return nil }
+        // An ingredient run makes a recipe; two short lines a glossary's columns happened to set
+        // like one, under no title, do not (a glossary page from the phone read as a recipe's
+        // continuation on them, slice 8).
+        guard !recipes.contains(where: { $0.ingredients.count >= 3 || ($0.ingredients.count >= 2 && !$0.title.isEmpty) }) else { return nil }
         let content = blocks.filter { $0.kind != .photo && $0.role != .ignore && $0.role != .furniture && $0.role != .crossReference && $0.text.filter(\.isLetter).count >= 2 }
         guard content.reduce(0, { $0 + $1.characterCount }) >= minimumCharacters else { return nil }
         let furniture = blocks.filter { $0.role == .furniture }.map(\.text)

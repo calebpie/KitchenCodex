@@ -27,6 +27,12 @@ public enum PageStitcher {
         guard previous.kind == .recipe, next.kind == .recipe, next.isContinuation,
               let opening = next.recipes.first, !(opening.ingredients.isEmpty && opening.steps.isEmpty),
               let ending = previous.recipes.last else { return false }
+        // A printed "continued" line at the first page's foot or the next page's head is the cue
+        // (ux-notes row 131), and so is a page of method alone on the book's very next page. A
+        // page with an ingredient list of its own is a recipe whose title didn't read, never a
+        // continuation by adjacency.
+        if ending.continuesOverPage || opening.continuesFromPage { return true }
+        if opening.ingredients.isEmpty, let last = previous.pageNumbers.last ?? nil, let first = next.pageNumbers.first ?? nil, first == last + 1 { return true }
         // A recipe that closed with its yield ("MAKES 2 TO 4 SERVINGS") and a complete last step
         // has ended; a page after it with no title is something else (a continuation photographed
         // out of order, a variation box).
@@ -81,6 +87,7 @@ public enum PageStitcher {
         recipe.yield = recipe.yield ?? opening.yield
         if recipe.headnote == nil { recipe.headnote = opening.headnote }
         recipe.endsMidStep = opening.endsMidStep
+        recipe.continuesOverPage = opening.continuesOverPage
         recipe.stepCountDisagrees = recipe.stepCountDisagrees || opening.stepCountDisagrees
         // Confidence over both pages, weighted by what each contributed.
         let weightA = Double(max(1, recipe.ingredients.count - opening.ingredients.count + recipe.steps.count - steps.count))

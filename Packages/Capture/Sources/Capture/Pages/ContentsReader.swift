@@ -253,12 +253,13 @@ public enum ContentsReader {
         var endsInUnreadPage = false
     }
 
-    /// The page's printed lines, the ones outside its outline dropped (ux-notes row 119): what lies
-    /// beside the book in the frame. The outline is trusted only when it holds most of the lines;
-    /// one that found a picture or a box on the page instead is not used. Vision's outline can
-    /// clip a page's edge (a heading set on a dark band at the top), so a line outside it stays
-    /// when it lines up with a column of the lines inside, within three lines of them, and the
-    /// reader didn't set it aside as off the page.
+    /// The page's printed lines, the ones outside its outline dropped (ux-notes rows 119, 151):
+    /// what lies beside the book in the frame, a box or a page. The outline is trusted only when
+    /// it holds most of the lines; one that found a picture or a box on the page instead is not
+    /// used. Vision's outline can clip a page's head or foot (a heading set on a dark band at the
+    /// top), so a line above or below it stays when it lines up with a column of the lines inside,
+    /// within three lines of them, sits within the outline's width, and the reader didn't set it
+    /// aside as off the page; a line beside the outline never does.
     static func printedLines(of reading: PageReading) -> [PageTextLine] {
         let blocks = reading.blocks.filter { $0.kind != .photo }
         let lines = blocks.flatMap(\.lines)
@@ -268,10 +269,11 @@ public enum ContentsReader {
         guard Double(inside.count) >= Double(lines.count) * 0.6 else { return lines }
         let steps = inside.sorted { $0.rect.minY < $1.rect.minY }.adjacentSteps
         let reach = (median(steps.filter { $0 > 0.005 }) ?? 0.02) * 3
+        let left = outline.corners.map(\.x).min() ?? 0, right = outline.corners.map(\.x).max() ?? 1
         return blocks.flatMap { block in
             block.lines.filter { line in
                 if isInside(line) { return true }
-                guard block.role != .ignore else { return false }
+                guard block.role != .ignore, line.rect.midX >= left, line.rect.midX <= right else { return false }
                 return inside.contains { other in
                     abs(other.rect.minX - line.rect.minX) < 0.02 && abs(other.rect.midY - line.rect.midY) <= reach
                 }
@@ -743,7 +745,10 @@ public enum ContentsReader {
     /// first page; a headword ending in a colon ("chard:") heads the indented lines under it
     /// ("Chard, in spring gratin"); a line that runs over ("with brown butter and toasted" over
     /// "hazelnuts, 63–64") is one entry; "see also" lines and letter headings ("D") are not
-    /// entries. Column by column, outside the page's outline dropped as on a contents page.
+    /// entries. Column by column, outside the page's outline dropped as on a contents page. The
+    /// open headword and an unfinished line carry from a column's foot to the next column's head
+    /// when that column opens indented (ux-notes row 143), and a line at the margin whose first
+    /// word is a bare conjunction or article continues the entry before it (row 151).
     static func readIndex(_ reading: PageReading) -> BookContents {
         let lines = printedLines(of: reading).compactMap { line -> Line? in
             let text = line.text.trimmingCharacters(in: .whitespaces)
@@ -751,11 +756,16 @@ public enum ContentsReader {
             return Line(text: text, rect: line.rect, size: line.size, page: nil, isNumberOnly: false)
         }
         var entries: [BookContents.Entry] = []
+        var headword: String?
+        var pending: String?
         for column in columns(lines) {
             let margin = column.map(\.rect.minX).sorted().dropFirst(column.count / 10).first ?? 0
             let indent = max(0.006, (median(column.map(\.size)) ?? 0.01) * 0.6)
-            var headword: String?
-            var pending: String?
+            // The column before ended on an open headword or an unfinished line: they carry over
+            // only when this column opens indented (a sub-entry, or a line's second half).
+            let opensIndented = column.first.map { $0.rect.minX >= margin + indent } ?? false
+            if !opensIndented { pending = nil }
+            if !opensIndented, !(column.first.map { startsWithSmallWord($0.text) } ?? false) { headword = nil }
             for line in column {
                 let text = line.text
                 let lower = text.lowercased()
@@ -764,7 +774,7 @@ public enum ContentsReader {
                     continue
                 }
                 let atMargin = line.rect.minX < margin + indent
-                if pending != nil, atMargin, text.range(of: #"^\d"#, options: .regularExpression) == nil {
+                if pending != nil, atMargin, text.range(of: #"^\d"#, options: .regularExpression) == nil, !startsWithSmallWord(text) {
                     // A new entry at the margin: the one before never read a page.
                     pending = nil
                 }
@@ -773,6 +783,17 @@ public enum ContentsReader {
                     if text.allSatisfy({ $0.isNumber || "–-—,. ".contains($0) }) { continue }
                     if text.hasSuffix(":") {
                         headword = finalTitle(String(text.dropLast()))
+                        continue
+                    }
+                    if atMargin, startsWithSmallWord(text), let last = entries.indices.last {
+                        // "and quillet, 55" at the margin: the rest of the entry before it, whose
+                        // first line was lost or sits at the foot of the column before.
+                        if let (title, page) = indexEntry(text) {
+                            entries[last].title += " " + title
+                            if entries[last].page == nil { entries[last].page = page }
+                        } else {
+                            entries[last].title += " " + finalTitle(cleanTitle(text))
+                        }
                         continue
                     }
                     if atMargin { headword = nil }
@@ -834,6 +855,13 @@ public enum ContentsReader {
         let high = known[known.count * 9 / 10]
         let last = indexFolios.filter { Double($0) >= Double(high) * 0.9 }.min() ?? top
         return last + max(10, last / 20)
+    }
+
+    /// A bare conjunction or article opens the line ("and quillet, 55", "with pellow dust"): the
+    /// rest of an entry, never one of its own (ux-notes row 151).
+    static func startsWithSmallWord(_ text: String) -> Bool {
+        let first = text.split(whereSeparator: { $0.isWhitespace }).first.map { String($0).lowercased().trimmingCharacters(in: CharacterSet(charactersIn: ",;:")) } ?? ""
+        return ["and", "or", "with", "the", "a", "an", "in", "of", "for", "to", "on", "at", "by", "from", "&", "et", "au", "aux", "de", "du", "des", "la", "le", "les", "y", "con", "con", "e"].contains(first)
     }
 
     /// "Leek soup, 16, 42", "lemon curd, 88–89": the title and the first page.
@@ -916,7 +944,7 @@ public enum ContentsReader {
         return shorter.count >= 5 && longer.hasPrefix(shorter)
     }
 
-    static func normalized(_ text: String) -> String {
+    public static func normalized(_ text: String) -> String {
         let folded = text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "en"))
             .replacingOccurrences(of: "&", with: " and ")
         let words = folded.split { !$0.isLetter && !$0.isNumber }.map(String.init)

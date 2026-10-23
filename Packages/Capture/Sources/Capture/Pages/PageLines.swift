@@ -58,6 +58,28 @@ enum PageLines {
         return result
     }
 
+    /// A kept second name's dash as a spaced em dash (ux-notes row 69): the recognizer reads the
+    /// dash between the names as a hyphen with a space on one side ("Orrindle -Crème d'Orrindle"),
+    /// and a title that keeps both names reads best with the dash set off. A hyphen inside a word
+    /// ("Mint-Pistachio") stays.
+    static func mendTitleDash(_ text: String) -> String {
+        var result = text.replacingOccurrences(of: #"(?<=\S)\s*[—–]\s*(?=\S)"#, with: " — ", options: .regularExpression)
+        result = result.replacingOccurrences(of: #"(?<=\p{L})\s+-\s*(?=\p{L})|(?<=\p{L})\s*-\s+(?=\p{L})"#, with: " — ", options: .regularExpression)
+        return result
+    }
+
+    /// A printed "continued" line (ux-notes row 131): "continued", "(continued)", "continued on
+    /// next page", "recipe continues", "continued from previous page", with the recipe's title
+    /// before it or not ("Braised Lamb, continued"). Furniture, and the stitcher's cue that the
+    /// recipe runs over the page.
+    static func isContinuedLine(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespaces)
+        guard trimmed.count <= 90 else { return false }
+        let onPage = #"\s+(?:on|from|to)\s+(?:the\s+)?(?:next|previous|following|preceding|opposite|facing)\s+page"#
+        // "continued", "recipe continues", "continues on next page": a bare "Continue" is a verb.
+        return trimmed.range(of: #"^\(?\s*(?:[^()]{1,60},\s*)?(?:recipe\s+continue[sd]?|continued|continues?"# + onPage + #")(?:"# + onPage + #")?\s*\)?\.?$"#, options: [.regularExpression, .caseInsensitive]) != nil
+    }
+
     // MARK: - Alternate titles
 
     /// The language a title's main name is in: the reader's own (the device's first preferred
@@ -80,6 +102,12 @@ enum PageLines {
                 let before = part[..<dash].trimmingCharacters(in: .whitespaces)
                 let after = part[part.index(after: dash)...].trimmingCharacters(in: .whitespaces)
                 if before.contains(where: \.isLetter), isAlternateTitle(after, pageLanguage: pageLanguage) {
+                    if index == 0, isAlternateTitle(before, pageLanguage: pageLanguage) {
+                        // Both names in the second language (ux-notes row 69): both are kept, the
+                        // dash between them set off by `mendTitleDash`.
+                        kept.append(part)
+                        continue
+                    }
                     if index == 0 || !isAlternateTitle(before, pageLanguage: pageLanguage) { kept.append(before) }
                     break
                 }
@@ -101,6 +129,21 @@ enum PageLines {
             kept.append(part)
         }
         return PageText.join(kept.isEmpty ? parts : kept)
+    }
+
+    /// The language a title's second name reads as, when it carries one (ux-notes row 126): the
+    /// book's second language, for the recognizer on its later pages. Nil when no part of the
+    /// title is an alternate name.
+    static func alternateLanguage(_ parts: [String], pageLanguage: NLLanguage) -> NLLanguage? {
+        for (index, part) in parts.enumerated() {
+            if let dash = part.lastIndex(where: { "—–-".contains($0) }) {
+                let before = part[..<dash].trimmingCharacters(in: .whitespaces)
+                let after = part[part.index(after: dash)...].trimmingCharacters(in: .whitespaces)
+                if before.contains(where: \.isLetter), isAlternateTitle(after, pageLanguage: pageLanguage) { return language(of: after) }
+            }
+            if index > 0, isAlternateTitle(part, pageLanguage: pageLanguage) { return language(of: part) }
+        }
+        return nil
     }
 
     /// The language a short text reads as, among the ones cookbooks pair with English.

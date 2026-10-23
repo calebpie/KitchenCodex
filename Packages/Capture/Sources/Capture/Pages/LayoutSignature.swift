@@ -21,6 +21,23 @@ enum LayoutSignature {
         var numbered: Bool
     }
 
+    /// Whether `signature` is a layout the cook has confirmed (ux-notes row 125): one of
+    /// `confirmed` as it is, or, once the book has a confirmed layout, one whose title and method
+    /// are set the same way and that differs only in where the ingredients sit. A book that
+    /// places a sub-recipe's ingredients beside the method on one page and under it on the next
+    /// has one layout to the cook.
+    static func matches(_ signature: String, confirmed: Set<String>) -> Bool {
+        if confirmed.contains(signature) { return true }
+        guard !confirmed.isEmpty else { return false }
+        let parts = withoutIngredients(signature)
+        return confirmed.contains { withoutIngredients($0) == parts }
+    }
+
+    /// The title and method parts of a signature.
+    static func withoutIngredients(_ signature: String) -> String {
+        signature.split(separator: " ").filter { !$0.hasPrefix("i:") }.joined(separator: " ")
+    }
+
     static func make(_ input: Input) -> String {
         let title: String
         if let block = input.title {

@@ -182,6 +182,11 @@ public struct PageRecipe: Sendable {
     public var startsMidStep: Bool
     /// The last step stops mid-sentence: it continues on the next page.
     public var endsMidStep: Bool
+    /// The page prints a "continued" line at its foot (ux-notes row 131): the recipe runs over the
+    /// page, whatever its last step looks like.
+    public var continuesOverPage = false
+    /// The page prints a "continued" line at its head: it carries on the recipe before it.
+    public var continuesFromPage = false
     /// `.pageText` for the deterministic reading, `.model` once the on-device model refined it.
     public var method: ImportMethod
 
@@ -213,8 +218,15 @@ public struct PageRecipe: Sendable {
     /// already, and the layouts the cook has confirmed.
     public func reviewReasons(bookHasRecipes: Bool, reviewedLayouts: Set<String>) -> [ReviewReason] {
         var reasons: [ReviewReason] = []
-        if !bookHasRecipes { reasons.append(.firstRecipeOfBook) }
-        if !reviewedLayouts.contains(layoutSignature) { reasons.append(.unseenLayout) }
+        if !bookHasRecipes {
+            // The book's first recipe carries that one reason (ux-notes row 159): its layout is
+            // new by definition, and one warning says it.
+            reasons.append(.firstRecipeOfBook)
+        } else if !LayoutSignature.matches(layoutSignature, confirmed: reviewedLayouts) {
+            // A layout the cook has confirmed, or one that differs from a confirmed one only in
+            // where the ingredients sit (ux-notes row 125).
+            reasons.append(.unseenLayout)
+        }
         if confidence.ocr < PageStructurer.lowOCR { reasons.append(.lowOCRConfidence) }
         if unparsedIngredientCount > 0 { reasons.append(.unparsedIngredients) }
         if stepCountDisagrees { reasons.append(.stepCountDisagrees) }
@@ -263,6 +275,12 @@ public struct PageReading: Sendable {
     public var recipes: [PageRecipe]
     /// The page number read off each page (a folio or running head), nil where none was found.
     public var pageNumbers: [Int?]
+    /// The recognizer's confidence in the folio line the first page's number came from, when it
+    /// came from one: a doubtful read lets the margin pass's number stand instead (ux-notes row 160).
+    public var pageNumberConfidence: Double?
+    /// The second language a title's alternate name read as ("fr", "es"), when a title carried
+    /// one (ux-notes rows 59, 126): the book's, for the recognizer's languages on later pages.
+    public var secondLanguage: String?
     /// The gate's reading of each page, when it was run.
     public var quality: [PageQualityReading?]
     /// Mean recognizer confidence over the page's text.

@@ -43,18 +43,21 @@ public struct PageQualityReading: Sendable, Equatable {
 /// dirty lens, a Laplacian-variance sharpness measure for blur. Sharpness is taken over tiles and
 /// the sharpest tenth counts, so a page with a soft photo or wide margins still reads Sharp when
 /// its text is crisp, and a page blurred all over does not. Thresholds were tuned on the private
-/// page fixtures (Phase 2 slice 2).
+/// page fixtures (Phase 2 slice 2); the smudge threshold was set from the iPhone's scores on them
+/// (slice 8, ux-notes row 171): the phone and the Mac score a hazy page up to 0.2 apart, and
+/// 0.92 is where they disagree least (one photo of 91), the pages that read cleanly below it.
 public struct PageQualityGate: Sendable {
     /// Below this the page reads Hold still.
     public var minimumSharpness: Double
-    /// At or above this smudge confidence the page reads Clean the lens (Apple's sample uses 0.9).
+    /// At or above this smudge confidence the page reads Clean the lens (Apple's sample uses 0.9;
+    /// 0.92 from the device's scores, ux-notes row 171).
     public var smudgeThreshold: Double
 
     public static let measureLongSide = 2400
     static let tileColumns = 12
     static let tileRows = 16
 
-    public init(minimumSharpness: Double = 220, smudgeThreshold: Double = 0.9) {
+    public init(minimumSharpness: Double = 220, smudgeThreshold: Double = 0.92) {
         self.minimumSharpness = minimumSharpness
         self.smudgeThreshold = smudgeThreshold
     }

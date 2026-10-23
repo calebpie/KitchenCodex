@@ -101,11 +101,15 @@ public struct PagePipeline: Sendable {
         progress?(.structuring(page: page, of: count, lines: scan.blocks.reduce(0) { $0 + $1.lines.count }))
         var reading = structurer.read(scan, file: file, quality: quality)
         var marginLines: [String]?
-        if reading.pageNumber == nil, reading.kind == .recipe || reading.kind == .prose {
-            // The folio's small type, read again from the page's foot and head.
-            let margins = await reader.marginLines(of: image, paper: scan.paper)
+        if reading.kind == .recipe || reading.kind == .prose {
+            // The folio's small type, read again from the page's foot and head (ux-notes row 160):
+            // the number when the page-wide pass found none; the lines are kept for the report
+            // either way.
+            let margins = await reader.marginLines(of: image, paper: scan.paper, found: reading.pageNumber != nil)
             marginLines = margins
-            if let number = PageStructurer.folioNumber(in: margins) { reading.pageNumbers = [number] }
+            if let number = PageStructurer.folioNumber(in: margins), Self.prefersMarginFolio(reading, margins: number) {
+                reading.pageNumbers = [number]
+            }
         }
         if findsOutline || reading.kind == .contents || reading.kind == .index {
             reading.outline = await PageCleanup.detectOutline(in: image, quarterTurns: scan.quarterTurns)
@@ -115,6 +119,14 @@ public struct PagePipeline: Sendable {
                         ingredients: reading.recipes.reduce(0) { $0 + $1.ingredients.count },
                         steps: reading.recipes.reduce(0) { $0 + $1.steps.count }))
         return PageRead(reading: reading, scan: scan, marginLines: marginLines, quality: quality)
+    }
+
+    /// Whether the margin pass's folio stands (ux-notes row 160): only when the page-wide pass
+    /// found none. The margin crops misread a number as often as the page-wide pass does (a
+    /// Bouchon folio read 12 on the page and 513 from the crop), so a number found stands, and
+    /// its line's confidence is only recorded.
+    static func prefersMarginFolio(_ reading: PageReading, margins number: Int) -> Bool {
+        reading.pageNumber == nil
     }
 
     /// Consecutive photos in capture order, read and stitched: a page that opens without a title
@@ -191,7 +203,7 @@ public struct PagePipeline: Sendable {
         var merged = recipe
         var used = false
         if merged.title.isEmpty, !draft.title.isEmpty {
-            merged.title = PageLines.titleText(draft.title)
+            merged.title = PageLines.mendTitleDash(PageLines.titleText(draft.title))
             used = true
         }
         if merged.yield == nil { merged.yield = draft.yield.map(PageLines.yieldText) }

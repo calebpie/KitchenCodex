@@ -23,6 +23,12 @@ public struct PageScan: Sendable {
     /// The rows and columns that are mostly paper: the page without the margin `paper` allows for
     /// a shadowed foot. Nil when not measured.
     public var pageCore: PageRect?
+    /// The median tilt of the text lines, in degrees clockwise, in the frame the page was read in:
+    /// the skew left after cleanup (ux-notes row 133). 0 when not measured.
+    public var skewDegrees: Double = 0
+    /// Lines whose letters were mostly outside the Latin script, set aside as misread (ux-notes
+    /// row 126).
+    public var nonLatinLines: Int = 0
     public var duration: Duration
 
     public init(blocks: [PageBlock], pixelWidth: Int = 0, pixelHeight: Int = 0, quarterTurns: Int = 0, paper: PageRect? = nil, duration: Duration = .zero) {
@@ -55,11 +61,30 @@ public struct PageReader: Sendable {
     public var maxPixelSize: Int?
     /// Whether to look for printed photos (cheap: a 400-pixel copy).
     public var findsPhotos: Bool
+    /// The languages the recognizer reads, with its automatic detection off (ux-notes row 126):
+    /// the reader's own and, for a bilingual book, the book's second, so a Latin word set in
+    /// italic is never read in another script and a misspelt word is corrected against the right
+    /// lexicon.
+    public var languages: [Locale.Language]
 
-    public init(minimumTextHeight: Float = 0.006, maxPixelSize: Int? = nil, findsPhotos: Bool = true) {
+    /// The reader's own language, the device's first preferred one with its region ("en-US").
+    public static var defaultLanguages: [Locale.Language] {
+        let preferred = Locale.preferredLanguages.first ?? "en-US"
+        return [Locale.Language(identifier: preferred.hasPrefix("en") ? "en-US" : preferred)]
+    }
+
+    /// The recognizer's language for a title's second language ("fr" → fr-FR), or nil for one it
+    /// doesn't read.
+    public static func language(forCode code: String) -> Locale.Language? {
+        let identifiers = ["fr": "fr-FR", "es": "es-ES", "it": "it-IT", "de": "de-DE", "pt": "pt-BR", "en": "en-US"]
+        return identifiers[String(code.prefix(2)).lowercased()].map { Locale.Language(identifier: $0) }
+    }
+
+    public init(minimumTextHeight: Float = 0.006, maxPixelSize: Int? = nil, findsPhotos: Bool = true, languages: [Locale.Language] = PageReader.defaultLanguages) {
         self.minimumTextHeight = minimumTextHeight
         self.maxPixelSize = maxPixelSize
         self.findsPhotos = findsPhotos
+        self.languages = languages
     }
 
     public func read(contentsOf url: URL) async throws -> PageScan {
@@ -77,6 +102,13 @@ public struct PageReader: Sendable {
         var request = RecognizeDocumentsRequest()
         request.textRecognitionOptions.minimumTextHeightFraction = minimumTextHeight
         request.textRecognitionOptions.useLanguageCorrection = true
+        // The book's languages, and no guessing at others (ux-notes row 126).
+        let supported = request.supportedRecognitionLanguages
+        let wanted = languages.filter { language in supported.contains { $0.minimalIdentifier == language.minimalIdentifier } }
+        if !wanted.isEmpty {
+            request.textRecognitionOptions.recognitionLanguages = wanted
+            request.textRecognitionOptions.automaticallyDetectLanguage = false
+        }
 
         var turns = 0
         var observation = try await request.perform(on: image, orientation: .up).first
@@ -103,6 +135,14 @@ public struct PageReader: Sendable {
         let turnedHeight = turns % 2 == 0 ? image.height : image.width
         let aspect = Double(turnedWidth) / Double(max(1, turnedHeight))
         var blocks = observation.map { Self.blocks(from: $0.document, aspect: aspect) } ?? []
+        let skew = observation.map { Self.skewDegrees($0.document, aspect: aspect) } ?? 0
+        // A line read in another script is a misreading of Latin type (an italic term, a decorative
+        // numeral), never a line of the page.
+        var nonLatin = 0
+        for index in blocks.indices where blocks[index].kind != .photo && Self.isMostlyNonLatin(blocks[index].text) {
+            blocks[index].role = .ignore
+            nonLatin += blocks[index].lines.count
+        }
 
         var paper: PageRect?
         var pageCore: PageRect?
@@ -132,13 +172,38 @@ public struct PageReader: Sendable {
         var scan = PageScan(blocks: blocks, pixelWidth: turnedWidth, pixelHeight: turnedHeight, quarterTurns: turns, paper: paper, duration: clock.now - start)
         scan.paperFraction = paperFraction
         scan.pageCore = pageCore
+        scan.skewDegrees = skew
+        scan.nonLatinLines = nonLatin
         return scan
+    }
+
+    /// Most of the text's letters outside the Latin script (ux-notes row 126).
+    public static func isMostlyNonLatin(_ text: String) -> Bool {
+        let letters = text.filter(\.isLetter)
+        guard !letters.isEmpty else { return false }
+        let latin = letters.count { ContentsReader.Script($0) == .latin }
+        return latin * 2 < letters.count
+    }
+
+    /// The median tilt of the lines that run across, in degrees clockwise.
+    static func skewDegrees(_ document: DocumentObservation.Container, aspect: Double) -> Double {
+        let angles = document.paragraphs.flatMap(\.lines).compactMap { line -> Double? in
+            guard line.transcript.count >= 6 else { return nil }
+            let dx = (line.topRight.x - line.topLeft.x) * aspect, dy = line.topRight.y - line.topLeft.y
+            guard dx > 0, abs(dx) > abs(dy) else { return nil }
+            // Vision's y runs up the image; clockwise tilt is a right end lower than the left.
+            return -atan2(dy, dx) * 180 / .pi
+        }.sorted()
+        guard !angles.isEmpty else { return 0 }
+        return angles[angles.count / 2]
     }
 
     /// The lines in the page's foot and head, read again from a crop where the folio's small type
     /// is large enough for the recognizer: the page-wide pass often misses a letterspaced folio
-    /// ("SMALL PLATES · 8"). About a tenth of a second.
-    public func marginLines(of image: CGImage, paper: PageRect?) async -> [String] {
+    /// ("SMALL PLATES · 8"). About a tenth of a second. When the crops give no folio and the
+    /// page-wide pass `found` none either, the crops are read again at twice their size (ux-notes
+    /// row 160): a phone reads a folio off the same pixels less often than the Mac does.
+    public func marginLines(of image: CGImage, paper: PageRect?, found: Bool = true) async -> [String] {
         let page = paper ?? .fullPage
         var bands = [PageRect(x: page.minX, y: max(0, page.maxY - page.height * 0.14), width: page.width, height: page.height * 0.14)]
         if page.maxY < 0.97 {
@@ -146,13 +211,29 @@ public struct PageReader: Sendable {
             bands.append(PageRect(x: page.minX, y: page.maxY - 0.02, width: page.width, height: min(0.12, 1 - (page.maxY - 0.02))))
         }
         bands.append(PageRect(x: page.minX, y: page.minY, width: page.width, height: page.height * 0.10))
+        var lines = await Self.marginLines(of: image, bands: bands, scale: 1, languages: languages)
+        if !found, PageStructurer.folioNumber(in: lines) == nil {
+            // Thinner bands at twice the size, the folio's own strip: a wider crop read large picks
+            // numbers out of the text above it.
+            let thin = [PageRect(x: page.minX, y: max(0, page.maxY - page.height * 0.06), width: page.width, height: page.height * 0.06),
+                        PageRect(x: page.minX, y: page.minY, width: page.width, height: page.height * 0.05)]
+            lines += await Self.marginLines(of: image, bands: thin, scale: 2, languages: languages).filter { $0.count <= 24 }
+        }
+        return lines
+    }
+
+    private static func marginLines(of image: CGImage, bands: [PageRect], scale: Int, languages: [Locale.Language]) async -> [String] {
         var lines: [String] = []
         for band in bands {
             let rect = CGRect(x: band.x * Double(image.width), y: band.y * Double(image.height), width: band.width * Double(image.width), height: band.height * Double(image.height)).integral
-            guard rect.width > 10, rect.height > 10, let crop = image.cropping(to: rect) else { continue }
+            guard rect.width > 10, rect.height > 10, var crop = image.cropping(to: rect) else { continue }
+            if scale > 1, let larger = PageImage.scaled(crop, longSide: Int(max(crop.width, crop.height)) * scale) { crop = larger }
+            // The recognizer's own detection here: a folio is numerals and a running head, and
+            // pinning the languages lost Bouchon's foot strip.
             var request = RecognizeTextRequest()
             request.recognitionLevel = .accurate
             request.minimumTextHeightFraction = 0.02
+            _ = languages
             let found = (try? await request.perform(on: crop)) ?? []
             lines += found.compactMap { $0.topCandidates(1).first?.string }
         }

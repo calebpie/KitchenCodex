@@ -27,7 +27,6 @@ struct PrivatePageTests {
         let books = all.filter(PageFixtures.isInManifest)
         #expect(!books.isEmpty)
         let manifest = Dictionary(PageFixtures.manifest.map { ("\($0.slug)/\($0.file)", $0) }, uniquingKeysWith: { first, _ in first })
-        let pipeline = PagePipeline()
         var report = PageReport(usesModel: Self.usesModel)
         report.unlisted = all.filter { !PageFixtures.isInManifest($0) }.map { ($0.slug, $0.files.count) }
         let hint = "If the reading improved, update Fixtures/private-pages.json (counts only)."
@@ -44,6 +43,9 @@ struct PrivatePageTests {
             if let expected = barcodeEntry?.isbn {
                 #expect(isbn == expected, "\(book.slug): barcode read \(isbn ?? "nothing"), manifest says \(expected)")
             }
+            // The recognizer reads the book's languages (ux-notes row 126).
+            let languages = PageReader.defaultLanguages + (barcodeEntry?.languages ?? []).map { Locale.Language(identifier: $0) }
+            let pipeline = PagePipeline(reader: PageReader(languages: languages))
 
             // Every other photo: gate, read, structure.
             var readings: [PageReading] = []
@@ -253,7 +255,7 @@ struct PageManifestTests {
         let entries = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [[String: Any]])
         #expect(!entries.isEmpty)
         #expect(PageFixtures.manifest.count == entries.count, "every entry decodes")
-        let allowed: Set<String> = ["slug", "isbn", "file", "kind", "gate", "page", "recipes", "contents", "sections", "suppliers", "settled", "note"]
+        let allowed: Set<String> = ["slug", "isbn", "file", "kind", "gate", "page", "recipes", "contents", "sections", "suppliers", "settled", "note", "languages", "printed"]
         let kinds: Set<String> = ["recipe", "spread-start", "spread-middle", "spread-end", "contents", "index", "sources", "photo", "reference", "glossary", "bad-capture", "other"]
         let gates = Set(PageQuality.allCases.map(\.rawValue))
         for entry in entries {
@@ -268,8 +270,11 @@ struct PageManifestTests {
             #expect(entry.contents == nil || entry.kind == "contents" || entry.kind == "index", "contents counts belong to contents and index pages")
             #expect(entry.sections == nil || entry.kind == "reference" || entry.kind == "glossary", "section counts belong to reference and glossary pages")
             #expect(entry.suppliers == nil || entry.kind == "sources", "supplier counts belong to Sources pages")
+            #expect(entry.printed == nil || entry.kind == "index", "printed counts belong to index pages")
             // A note describes the capture ("ISBN barcode", "haze over the upper left"), never the page's words.
             #expect((entry.note?.count ?? 0) <= 160)
+            #expect(entry.languages == nil || entry.kind == "other", "languages belong to the book's barcode row")
+            for language in entry.languages ?? [] { #expect(language.range(of: #"^[a-z]{2}-[A-Z]{2}$"#, options: .regularExpression) != nil) }
         }
     }
 }

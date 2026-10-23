@@ -48,11 +48,16 @@ public enum PunchlistMatcher {
         public var title: String
         public var page: Int?
         public var isCaptured: Bool
+        /// Put on the list by a page pointer rather than the contents or the cook (ux-notes rows
+        /// 155, 156): it waits in Missing, is never the session's next item, and never takes a
+        /// capture by position.
+        public var isPointerMade: Bool
 
-        public init(title: String, page: Int? = nil, isCaptured: Bool = false) {
+        public init(title: String, page: Int? = nil, isCaptured: Bool = false, isPointerMade: Bool = false) {
             self.title = title
             self.page = page
             self.isCaptured = isCaptured
+            self.isPointerMade = isPointerMade
         }
     }
 
@@ -93,14 +98,18 @@ public enum PunchlistMatcher {
                 result[recipe] = entry
                 taken.insert(entry)
             }
-        } else if let current, entries.indices.contains(current), let first = titles.indices.first {
+        } else if let current, entries.indices.contains(current), let first = titles.indices.first, !entries[current].isPointerMade {
+            // The current item takes the capture only when the contents or the cook listed it and
+            // the capture's title doesn't disagree with its title (ux-notes row 156): a title that
+            // read and shares next to nothing with it means a recipe of its own.
             let elsewhere = bestTitle(titles[first], in: entries, excluding: [current], minimum: 0.75)
-            if let elsewhere, similarity(titles[first], entries[current].title) < 0.3, !titles[first].isEmpty {
+            let disagrees = !titles[first].isEmpty && similarity(titles[first], entries[current].title) < 0.3
+            if let elsewhere, disagrees {
                 result[first] = elsewhere
-            } else {
+            } else if !disagrees {
                 result[first] = current
             }
-            taken.insert(result[first]!)
+            if let taken_ = result[first] { taken.insert(taken_) }
         }
         // Any recipe still without an entry: the best title anywhere on the list.
         for index in result.indices where result[index] == nil && !titles[index].isEmpty {
@@ -121,11 +130,12 @@ public enum PunchlistMatcher {
     }
 
     /// The next entry not yet captured after `index` in the list's order, wrapping to the top; nil
-    /// once every entry is captured.
+    /// once every entry is captured. An entry a pointer made waits in Missing and is never next
+    /// (ux-notes row 155).
     public static func next(after index: Int?, in entries: [Entry]) -> Int? {
         let start = (index ?? -1) + 1
         let order = Array(entries.indices.dropFirst(min(start, entries.count))) + Array(entries.indices.prefix(min(start, entries.count)))
-        return order.first { !entries[$0].isCaptured }
+        return order.first { !entries[$0].isCaptured && !entries[$0].isPointerMade }
     }
 
     /// How alike two titles are, 0…1: the share of their words in common, without case, accents,

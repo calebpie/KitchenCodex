@@ -50,10 +50,12 @@ public struct PageStructurer: Sendable {
         var page = Page(scan: scan)
         page.markNoise()
         let pageNumber = page.markFurniture()
+        page.markContinuedLines()
         page.markDropCaps()
 
         var reading = PageReading(files: [file], blocks: [], kind: .recipe, pageNumbers: [pageNumber], quality: [quality], ocrConfidence: page.ocrConfidence, durations: [scan.duration])
         reading.quarterTurns = [scan.quarterTurns]
+        reading.pageNumberConfidence = page.folioConfidence
         if let (kind, reason) = page.nonRecipeKind() {
             reading.kind = kind
             reading.reason = reason
@@ -79,7 +81,12 @@ public struct PageStructurer: Sendable {
         for (recipe, ids) in recipeBlocks.enumerated() {
             for id in ids { page.blocks[id].recipe = recipe }
         }
+        // A printed "continued" line (ux-notes row 131): the recipe at the page's head carries on
+        // the page before; the one at its foot runs over the page.
+        if page.continuedAtHead, !recipes.isEmpty { recipes[0].continuesFromPage = true }
+        if page.continuedAtFoot, !recipes.isEmpty { recipes[recipes.count - 1].continuesOverPage = true }
         reading.blocks = page.blocks
+        reading.secondLanguage = page.secondLanguage
         // Reference reading (slice 7): a glossary, a chapter opener or a technique, which a recipe
         // with no ingredients on this page would otherwise be read as.
         if let reference = ReferenceReader.read(blocks: page.blocks, recipes: recipes, isContinuation: recipes.first?.title.isEmpty == true) {
@@ -126,6 +133,13 @@ private struct Page {
     /// A paragraph's first line read together with its drop cap ("Few thangs are as gaod…"): set
     /// large, level with the lines beside it.
     var dropCapLines: Set<Int> = []
+    /// The recognizer's confidence in the folio line the page number came from.
+    var folioConfidence: Double?
+    /// The second language a title's alternate name read as ("fr"), when one did.
+    var secondLanguage: String?
+    /// A printed "continued" line at the page's head or foot (ux-notes row 131).
+    var continuedAtHead = false
+    var continuedAtFoot = false
 
     init(scan: PageScan) {
         blocks = scan.blocks
@@ -215,7 +229,7 @@ private struct Page {
         let text = textIndices
         guard let top = text.map({ blocks[$0].rect.minY }).min(), let bottom = text.map({ blocks[$0].rect.maxY }).max() else { return nil }
         let band = max(0.04, (bottom - top) * 0.10)
-        var numbers: [(Int, Double, Bool)] = []
+        var numbers: [(Int, Double, Bool, Double)] = []
         bareFolio = false
         for index in text {
             let block = blocks[index]
@@ -240,7 +254,7 @@ private struct Page {
             if folio != nil, small || apart {
                 blocks[index].role = .furniture
                 if let number = folio {
-                    numbers.append((number, block.rect.minX, inBottom))
+                    numbers.append((number, block.rect.minX, inBottom, block.confidence))
                     if line.range(of: #"[|/·•\-–—]"#, options: .regularExpression) == nil { bareNumbers.insert(number) }
                 }
             } else if apart, small || block.typeSize <= body * 1.1, !line.hasSuffix("."),
@@ -260,7 +274,7 @@ private struct Page {
                 let line = blocks[index].text.trimmingCharacters(in: .whitespaces)
                 guard !line.allSatisfy(\.isNumber), let number = Self.folioNumber(line) else { continue }
                 blocks[index].role = .furniture
-                numbers.append((number, rect.minX, rect.minY > paper.maxY - 0.02))
+                numbers.append((number, rect.minX, rect.minY > paper.maxY - 0.02, blocks[index].confidence))
                 if line.range(of: #"[|/·•\-–—]"#, options: .regularExpression) == nil { bareNumbers.insert(number) }
                 break
             }
@@ -273,9 +287,24 @@ private struct Page {
             }
         }
         // A bottom folio beats a top one; on a spread the left page's comes first.
-        let number = numbers.sorted { ($0.2 ? 0 : 1, $0.1) < ($1.2 ? 0 : 1, $1.1) }.first?.0
+        let chosen = numbers.sorted { ($0.2 ? 0 : 1, $0.1) < ($1.2 ? 0 : 1, $1.1) }.first
+        let number = chosen?.0
+        folioConfidence = chosen?.3
         bareFolio = number.map(bareNumbers.contains) ?? false
         return number
+    }
+
+    /// A printed "continued" line, with the title or without, is furniture (ux-notes row 131), and
+    /// says which way the recipe runs: at the page's head it carries on the page before, at its
+    /// foot it runs over the page.
+    mutating func markContinuedLines() {
+        let text = textIndices.filter { blocks[$0].role != .furniture }
+        guard let top = text.map({ blocks[$0].rect.minY }).min(), let bottom = text.map({ blocks[$0].rect.maxY }).max(), bottom > top else { return }
+        for index in textIndices where blocks[index].lines.count <= 2 && blocks[index].characterCount <= 90 {
+            guard PageLines.isContinuedLine(blocks[index].text) else { continue }
+            blocks[index].role = .furniture
+            if blocks[index].rect.midY < top + (bottom - top) * 0.5 { continuedAtHead = true } else { continuedAtFoot = true }
+        }
     }
 
     static let headingWeight = 1.8
@@ -311,9 +340,11 @@ private struct Page {
 
 extension Page {
     /// "47", "46 / KITCHEN", "SAUCES & PICKLES / 47", "Vegetables | 15", "16 | Grains", "14 small
-    /// plates", "small plates 17", "SMALL PLATES · 16", "INTRODUCTION · xii".
+    /// plates", "small plates 17", "SMALL PLATES · 16", "INTRODUCTION · xii", and a margin crop's
+    /// "• 17" (the separator read on its own with the number, ux-notes row 160).
     static func folioNumber(_ text: String) -> Int? {
-        let line = text.trimmingCharacters(in: .whitespaces)
+        // A separator read ahead of the number goes; one after it stays ("513-" is no folio).
+        let line = text.replacingOccurrences(of: #"^[\s•·|/–—-]+"#, with: "", options: .regularExpression).trimmingCharacters(in: .whitespaces)
         if let match = line.firstMatch(of: /^(\d{1,3})$/) { return Int(match.output.1) }
         // The separator is sometimes read as a 1, l, I or ! ("Soups 1 41" for "Soups | 41").
         if let match = line.firstMatch(of: /^(\d{1,3})\s*(?:[|\/·•\-–—]|\s[1lI!]\s)?\s*[A-Za-z][A-Za-z &',.’\-]{2,30}$/) { return Int(match.output.1) }
@@ -481,12 +512,15 @@ extension Page {
             }
         }
         candidates = extended
-        // Join a title's lines (a two-line title, a title and its subtitle).
+        // Join a title's lines (a two-line title, a title and its subtitle), and a one-line title
+        // the recognizer read as two blocks side by side, as a phone reads a long one (ux-notes
+        // row 63): the second half level with the first and close across.
         var titles: [Title] = []
         for (index, wide) in candidates {
             if var last = titles.last, let previous = last.blocks.last,
                blocks[index].rect.minY - blocks[previous].rect.maxY < body * 1.6,
-               blocks[index].rect.horizontalOverlap(with: blocks[previous].rect) > 0 || abs(blocks[index].rect.midX - blocks[previous].rect.midX) < 0.05 {
+               blocks[index].rect.horizontalOverlap(with: blocks[previous].rect) > 0 || abs(blocks[index].rect.midX - blocks[previous].rect.midX) < 0.05
+                || isLevelHalf(index, of: previous) {
                 last.blocks.append(index)
                 last.isWide = last.isWide || wide
                 titles[titles.count - 1] = last
@@ -494,22 +528,35 @@ extension Page {
                 titles.append(Title(blocks: [index], text: "", isWide: wide))
             }
         }
-        // A second-language name leaves the title and stays in the regions (ux-notes row 59).
+        // A second-language name leaves the title and stays in the regions (ux-notes row 59); a
+        // kept second name's dash is set off (row 69).
         let language = PageLines.readerLanguage
         for index in titles.indices {
             let parts = titles[index].blocks.flatMap { blocks[$0].lines.map { $0.text.trimmingCharacters(in: .whitespaces) } }
-            titles[index].text = PageLines.titleText(PageLines.titleWithoutAlternate(parts, pageLanguage: language))
+            titles[index].text = PageLines.mendTitleDash(PageLines.titleText(PageLines.titleWithoutAlternate(parts, pageLanguage: language)))
+            if secondLanguage == nil, let alternate = PageLines.alternateLanguage(parts, pageLanguage: language) { secondLanguage = alternate.rawValue }
             for block in titles[index].blocks { blocks[block].role = .title }
         }
         return titles
     }
 
-    /// Another text block level with it and beside or under it.
+    /// `index` is the second half of a one-line title whose first half is `previous`: set in
+    /// title type, level with it, and starting close after its end.
+    func isLevelHalf(_ index: Int, of previous: Int) -> Bool {
+        let rect = blocks[index].rect, first = blocks[previous].rect
+        guard rect.verticalOverlap(with: first) > 0.3, rect.minX > first.minX, rect.minX - first.maxX < body * 3 else { return false }
+        return blocks[index].typeSize >= body * PageStructurer.titleSize && blocks[previous].typeSize >= body * PageStructurer.titleSize
+    }
+
+    /// Another text block level with it and beside or under it. A block set in title type level
+    /// with it is the other half of its own line, not text beside it.
     func besideText(_ index: Int) -> Bool {
         let rect = blocks[index].rect
+        let titleType = blocks[index].typeSize >= body * PageStructurer.titleSize
         return textIndices.contains { other in
             guard other != index, blocks[other].role == nil else { return false }
             let candidate = blocks[other].rect
+            if titleType, blocks[other].typeSize >= body * PageStructurer.titleSize, candidate.verticalOverlap(with: rect) > 0.3 { return false }
             return candidate.verticalOverlap(with: rect) > 0.3 && candidate.distance(to: rect) < body * 1.5
                 && candidate.minY > rect.minY + rect.height * 0.25
         }
@@ -760,6 +807,9 @@ extension Page {
         var numbered = false
         var visionBlocksInSteps = Set<Int>()
         var stepLineRects: [[PageRect]] = []
+        // The ingredient column's extent across, for a step set beside it (ux-notes row 166).
+        let ingredientRectsRead = lines.indices.filter { roles[$0] == .ingredient }.map { lines[$0].line.rect }
+        let ingredientBox: PageRect? = ingredientRectsRead.first.map { first in ingredientRectsRead.dropFirst().reduce(first) { $0.union($1) } }
         for (number, paragraph) in paragraphs.enumerated() {
             let text = PageText.join(paragraph.lines.map { lines[$0].text })
             guard text.filter(\.isLetter).count >= 2 else { continue }
@@ -779,7 +829,14 @@ extension Page {
             // recipe has no ingredients here, as on a page that continues one); after them, the
             // paragraphs before the first instruction that read as the cook talking are.
             let headnote: Bool
+            let paragraphRect = paragraph.lines.map { lines[$0].line.rect }.dropFirst().reduce(lines[paragraph.lines[0]].line.rect) { $0.union($1) }
             if sawStep || continuesPrevious || marked {
+                headnote = false
+            } else if paragraph.beforeIngredients, let ingredientBox, paragraphRect.minX >= ingredientBox.maxX - 0.02,
+                      instruction, PageLines.opensWithVerb(text), !PageLines.readsAsHeadnote(text) {
+                // A step set in a column beside the ingredients, read before them (a method that
+                // runs on at the top right of the page, ux-notes row 166): the method's, not the
+                // headnote's.
                 headnote = false
             } else if recipe.headnote != nil, previousWasHeadnote, previousPart == paragraph.part, text.first?.isLowercase == true {
                 // The rest of a headnote paragraph the recognizer split ("in the same pot. I make…").
@@ -817,7 +874,9 @@ extension Page {
             var stepText = text
             var stepNumber: Int?
             let expectedNumber = recipe.steps.count + 1
-            if let (value, rest) = PageLines.stepNumber(text), value == expectedNumber || value == (recipe.steps.compactMap(\.number).last ?? 0) + 1 {
+            if let (value, rest) = PageLines.stepNumber(text), (1...40).contains(value) {
+                // The numeral as printed, in sequence or not: a gap or a repeat in the run is what
+                // says the steps disagree with the page (ux-notes row 124).
                 stepNumber = value
                 stepText = rest
                 numbered = true
@@ -833,6 +892,14 @@ extension Page {
             stepLineRects.append(paragraph.lines.map { lines[$0].line.rect })
             blockIDs.forEach { visionBlocksInSteps.insert($0) }
             crossReferences += PageCrossReferences.find(in: stepText, kind: .recipe)
+        }
+        // The method's steps in print order (ux-notes row 166): by their printed numerals when
+        // every step carries one, else column by column, each column read to its foot before the
+        // next, so a method set in two columns beside the ingredients reads as printed.
+        let order = PageStructurer.stepOrder(recipe.steps, rects: stepLineRects)
+        if order != Array(recipe.steps.indices) {
+            recipe.steps = order.map { recipe.steps[$0] }
+            stepLineRects = order.map { stepLineRects[$0] }
         }
         for (number, step) in recipe.steps.enumerated() {
             for block in step.blocks where blocks[block].role == nil || blocks[block].role == .step {
@@ -871,11 +938,13 @@ extension Page {
         recipe.unassignedBlocks = unassigned
         recipe.crossReferences = Self.unique(crossReferences)
 
-        // Step count against the page.
+        // Step count against the page: only a broken run of printed numerals, a gap or a repeat,
+        // says the steps read disagree with it (ux-notes row 124); the largest numeral differing
+        // from the count read does not, as a numeral misread, or one read off a time or a page
+        // pointer, would.
         let numbers = recipe.steps.compactMap(\.number)
         if !numbers.isEmpty {
-            let expected = numbers.max() ?? 0
-            recipe.stepCountDisagrees = expected != recipe.steps.count
+            recipe.stepCountDisagrees = zip(numbers, numbers.dropFirst()).contains { $1 != $0 + 1 }
         } else if !recipe.steps.isEmpty {
             // The recognizer splits printed paragraphs more often than it joins them, so its count
             // runs high; far more, or fewer than the steps read, means the paragraphs are in doubt.
@@ -914,6 +983,7 @@ extension Page {
         /// A label set apart from the text it introduces ("note").
         case label
     }
+
 
     /// A block of running text: several lines with sentences, most of which are not ingredient lines.
     func isProse(_ block: PageBlock) -> Bool {
@@ -1090,5 +1160,35 @@ extension Page {
     static func unique(_ references: [PageCrossReference]) -> [PageCrossReference] {
         var seen = Set<String>()
         return references.filter { seen.insert($0.phrase.lowercased()).inserted }
+    }
+}
+
+extension PageStructurer {
+    /// The steps' indices in print order (ux-notes row 166): by numeral when every step has one;
+    /// else, where the steps sit in more than one column, column by column (left to right), each
+    /// top to bottom; else as read.
+    static func stepOrder(_ steps: [PageStep], rects: [[PageRect]]) -> [Int] {
+        let indices = Array(steps.indices)
+        guard steps.count > 1 else { return indices }
+        if steps.allSatisfy({ $0.number != nil }) {
+            return indices.sorted { (steps[$0].number!, $0) < (steps[$1].number!, $1) }
+        }
+        let boxes = rects.map { lines in lines.dropFirst().reduce(lines.first ?? .zero) { $0.union($1) } }
+        guard boxes.allSatisfy({ $0.width > 0 }) else { return indices }
+        // Columns: groups of steps whose extents across don't overlap.
+        var columns: [(minX: Double, maxX: Double)] = []
+        for box in boxes.sorted(by: { $0.minX < $1.minX }) {
+            let low = box.minX + 0.01, high = max(box.minX + 0.02, box.maxX - 0.01)
+            if let last = columns.last, low <= last.maxX {
+                columns[columns.count - 1].maxX = max(last.maxX, high)
+            } else {
+                columns.append((low, high))
+            }
+        }
+        guard columns.count > 1 else { return indices }
+        func column(of box: PageRect) -> Int {
+            columns.firstIndex { box.midX >= $0.minX - 0.01 && box.midX <= $0.maxX + 0.01 } ?? 0
+        }
+        return indices.sorted { (column(of: boxes[$0]), boxes[$0].minY, $0) < (column(of: boxes[$1]), boxes[$1].minY, $1) }
     }
 }
