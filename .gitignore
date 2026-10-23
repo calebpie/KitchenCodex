@@ -45,4 +45,4 @@ TestResults/
 .env.*
 
 # Copyrighted capture fixtures (photographed cookbook pages) never go in the public repo.
-Docs/Fixtures/Private/
+Docs/Fixtures/Private
