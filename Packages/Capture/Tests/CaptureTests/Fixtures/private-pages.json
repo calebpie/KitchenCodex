@@ -33,6 +33,8 @@
   {"slug": "bouchon", "isbn": "9781579652395", "file": "IMG_1269.HEIC", "kind": "index", "gate": "cleanTheLens", "contents": {"sections": 0, "entries": 58, "paged": 58}, "settled": false},
   {"slug": "bouchon", "isbn": "9781579652395", "file": "IMG_1270.HEIC", "kind": "index", "gate": "sharp", "page": 340, "contents": {"sections": 0, "entries": 36, "paged": 36}, "settled": false},
   {"slug": "bouchon", "isbn": "9781579652395", "file": "IMG_1271.HEIC", "kind": "index", "gate": "cleanTheLens", "page": 341, "contents": {"sections": 0, "entries": 37, "paged": 37}, "settled": false},
+  {"slug": "bouchon", "isbn": "9781579652395", "file": "IMG_1312.HEIC", "kind": "contents", "gate": "sharp", "contents": {"sections": 13, "entries": 0, "paged": 0}, "settled": false, "note": "contents, first page, photographed again Oct 22 with a box standing beside the page (ux-notes row 151)"},
+  {"slug": "bouchon", "isbn": "9781579652395", "file": "IMG_1313.HEIC", "kind": "contents", "gate": "sharp", "contents": {"sections": 11, "entries": 0, "paged": 0}, "settled": false, "note": "contents, second page, photographed again Oct 22 with a box standing beside the page (ux-notes row 151)"},
   {"slug": "gjelina", "isbn": "9781452128092", "file": "IMG_1072.HEIC", "kind": "other", "gate": "sharp", "settled": true, "note": "ISBN barcode"},
   {"slug": "gjelina", "isbn": "9781452128092", "file": "IMG_1073.HEIC", "kind": "contents", "gate": "sharp", "contents": {"sections": 2, "entries": 49, "paged": 47}, "settled": true, "note": "contents, first of four pages"},
   {"slug": "gjelina", "isbn": "9781452128092", "file": "IMG_1074.HEIC", "kind": "contents", "gate": "sharp", "contents": {"sections": 3, "entries": 43, "paged": 41}, "settled": true},
