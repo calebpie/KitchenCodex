@@ -93,5 +93,6 @@
   {"slug": "nobu-west", "isbn": "9780740765476", "file": "IMG_1233.HEIC", "kind": "glossary", "gate": "sharp", "page": 252, "sections": 23, "settled": false, "note": "glossary page, three columns; count as read"},
   {"slug": "nobu-west", "isbn": "9780740765476", "file": "IMG_1234.HEIC", "kind": "glossary", "gate": "sharp", "page": 253, "sections": 22, "settled": false, "note": "glossary page, three columns; count as read"},
   {"slug": "nobu-west", "isbn": "9780740765476", "file": "IMG_1279_contentsCluttered.HEIC", "kind": "contents", "gate": "sharp", "contents": {"sections": 4, "entries": 32, "paged": 32}, "settled": true, "note": "contents, things beside the book in the frame (row 119)"},
-  {"slug": "nobu-west", "isbn": "9780740765476", "file": "IMG_1280_contentsCluttered.HEIC", "kind": "contents", "gate": "sharp", "contents": {"sections": 4, "entries": 31, "paged": 31}, "settled": true, "note": "contents, things beside the book in the frame (row 119)"}
+  {"slug": "nobu-west", "isbn": "9780740765476", "file": "IMG_1280_contentsCluttered.HEIC", "kind": "contents", "gate": "sharp", "contents": {"sections": 4, "entries": 31, "paged": 31}, "settled": true, "note": "contents, things beside the book in the frame (row 119)"},
+  {"slug": "nobu-west", "isbn": "9780740765476", "file": "IMG_1314.HEIC", "kind": "recipe", "gate": "sharp", "recipes": [{"ingredients": 8, "steps": 2}], "settled": false, "note": "recipe, the method in two columns beside the ingredients: the Mac reads 2 steps where the page prints more, in order to fix (ux-notes row 166)"}
 ]
