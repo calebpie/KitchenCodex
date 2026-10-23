@@ -764,6 +764,12 @@ On the iPhone 17 Pro and the iPad, with this build. On the iPad, name the Displa
 - **IMG_1049 on the phone** reads as a recipe continuation (row 170) still, on the finished run too: its blocks hold a page number and no page-number-ending lines; the Mac reads the same photo as contents.
 - **Simulator state**: the iPhone gained IMG_1107 in Photos (`simctl addmedia`) and the Page Scans export folder; nothing else changed. The iPad was not opened.
 
+### Fixes after the coordinator's verification (Oct 23), `45ce638`, `7b55449`
+
+- **Checked independently** at `3234cf6`: every package's tests green (Units 126, Capture 207, RecipeModel 19, Intelligence 15, KnowledgeBase 4, Nutrition 4, Scheduler 4; the replay rerun writes the same counts, 152 of 184 rows the same on the phone's blocks, 175 by the phone's own reading, none changed by this build); both simulator builds and the device build from a fresh DerivedData; a leak check of every quoted string, three-word run and commit message added since `5bbe9b4` against the private readings (only generic cooking phrases in the made-up test pages matched, no run of five words); the shelf, Bouchon Fresh's detail and editors, the index editor's framing with the keyboard up, Scan Now from the row, the References delete alert and Export Page Scans (12 files named by kind and page) on the iPhone 17 Pro simulator, and the shelf, Nobu West's detail with its Scan Now popover, the index editor's Add Entry and the Sources delete alert on the iPad simulator.
+- **Two rounds**: the review's row never scrolled above the half-height page (`scrollProxy` captured in an empty section's `onAppear`, which never runs) → `45ce638`; with the keyboard up the page showed whole and small (the strip fits the page by height, so 2.2× left it narrower than the view) → `7b55449`. Both seen fixed on the iPhone 17 Pro simulator with a page read from Photos (Scan Page → From Photo), the first tap's half-height framing unchanged.
+- **Installed** at `2c136ca` on Caleb's iPhone and iPad (`devicectl`; the iPad took the install on the third try after two connection drops). The phone's Read Fixtures run on this build is still to come; the camera rows and the iPad's editor with a page pane (no index captured on the iPad simulator) stay unverified.
+
 ### Caleb's device checklist
 
 On the iPhone 17 Pro and the iPad, with this build. Each step is a flow from where a cook starts; note what looks wrong, reads oddly or takes a second try.
