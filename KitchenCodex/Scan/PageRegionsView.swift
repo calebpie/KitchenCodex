@@ -238,6 +238,9 @@ struct ZoomablePage<Content: View>: View {
     @ViewBuilder var content: Content
 
     @State private var zoom: CGFloat = 1
+    /// The zoom `frame(_:in:)` last set, so a later framing replaces the view's own zoom but
+    /// keeps one the cook pinched to.
+    @State private var framedZoom: CGFloat?
     @GestureState private var pinch: CGFloat = 1
     @State private var position = ScrollPosition()
 
@@ -277,11 +280,27 @@ struct ZoomablePage<Content: View>: View {
         }
     }
 
-    /// Scrolls the region into the middle of the view, zoomed in enough to read.
+    /// Scrolls the region into the middle of the view, zoomed in enough to read: 2.2× the fitted
+    /// page. Where that leaves the page narrower than the view (the strip left above the keyboard
+    /// fits the page by height, ux-notes row 163) both offsets clamp to 0 and nothing is framed,
+    /// and the view's width alone makes a line of print six points tall; so there the zoom goes as
+    /// far past the view's width as 2.2× goes past a page fitted by width, which keeps the region
+    /// the share of the view it has at half height, held to what fits the region's width in the
+    /// view and to the pinch's maximum, and never under the view's width.
     private func frame(_ rect: CGRect?, in size: CGSize) {
         guard let rect, size.width > 0, size.height > 0 else { return }
         let fitted = fittedSize(in: size)
-        if zoom < 1.8 { zoom = 2.2 }
+        guard fitted.width > 0, fitted.height > 0 else { return }
+        var wanted: CGFloat = 2.2
+        if fitted.width * wanted < size.width {
+            let fillWidth = size.width / fitted.width
+            var more = wanted * fillWidth
+            if rect.width > 0 { more = min(more, 0.95 * size.width / (rect.width * fitted.width)) }
+            wanted = max(fillWidth, more)
+        }
+        wanted = min(5, wanted)
+        if zoom < wanted || zoom == framedZoom { zoom = wanted }
+        framedZoom = zoom
         let width = fitted.width * zoom, height = fitted.height * zoom
         let x = max(0, rect.midX * width - size.width / 2)
         let y = max(0, rect.midY * height - size.height / 2)
