@@ -4,9 +4,11 @@ import SwiftData
 import SwiftUI
 
 /// The contents or index page a list entry was read from (ux-notes row 152), shown as scan review
-/// shows a recipe's page: the stored page scan with its regions, the one holding the tapped
-/// line's words highlighted and framed. The book keeps its contents and index captures as page
-/// scans with their regions (`ScanSaving.keepPageScan`), so nothing new is stored.
+/// shows a recipe's page: the stored page scan, the region holding the tapped line's words
+/// highlighted and framed (the other regions aren't drawn: an index page has hundreds). The book
+/// keeps its contents and index captures as page scans with their regions
+/// (`ScanSaving.keepPageScan`), so nothing new is stored. On iPhone it sits above the list at a
+/// fixed height, where the keyboard can't cover it; on iPad beside the list.
 struct ContentsPagePane: View {
     let book: Book
     /// Index pages, or the contents pages.
@@ -28,9 +30,12 @@ struct ContentsPagePane: View {
         var pageNumber: Int? { scan.pageNumber }
     }
 
+    /// The pane's height above the list on iPhone.
+    static let compactHeight: CGFloat = 230
+
     var body: some View {
         VStack(spacing: 0) {
-            if pages.count > 1 {
+            if pages.count > 1, pages.count <= 4 {
                 Picker("Page", selection: $shown) {
                     ForEach(pages) { page in
                         Text(page.pageNumber.map { "p. \($0)" } ?? "Page \(page.id + 1)").tag(page.id)
@@ -38,20 +43,38 @@ struct ContentsPagePane: View {
                 }
                 .pickerStyle(.segmented)
                 .padding(.horizontal)
-                .padding(.vertical, 8)
+                .padding(.vertical, 6)
+            } else if pages.count > 4, let page = pages.first(where: { $0.id == shown }) {
+                HStack {
+                    Button("Previous Page", systemImage: "chevron.backward") { shown = max(0, shown - 1) }
+                        .labelStyle(.iconOnly)
+                        .disabled(shown == 0)
+                    Spacer()
+                    Text((page.pageNumber.map { "p. \($0)" } ?? "Page \(page.id + 1)") + " · \(page.id + 1) of \(pages.count)")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                    Spacer()
+                    Button("Next Page", systemImage: "chevron.forward") { shown = min(pages.count - 1, shown + 1) }
+                        .labelStyle(.iconOnly)
+                        .disabled(shown + 1 >= pages.count)
+                }
+                .padding(.horizontal)
+                .padding(.vertical, 4)
             }
             if pages.isEmpty {
                 ContentUnavailableView(kind == .index ? "No Index Page" : "No Contents Page", systemImage: "doc.text.image",
                                        description: Text(kind == .index ? "The index pages weren't photographed." : "The contents pages weren't photographed."))
             } else {
                 let image = images[shown]
+                let highlighted = pages.first { $0.id == shown }?.regions.filter { $0.id == selected } ?? []
                 ZoomablePage(aspectRatio: image.map { $0.size.width / max(1, $0.size.height) } ?? 3 / 4, focus: focusRect) {
                     PageRegionsView(
                         image: image,
-                        regions: pages.first { $0.id == shown }?.regions ?? [],
+                        regions: highlighted,
                         role: { _ in nil },
                         label: { _, _ in nil },
-                        selected: Set([selected].compactMap(\.self))
+                        selected: Set(highlighted.map(\.id))
                     ) { _ in EmptyView() }
                 }
             }
@@ -123,7 +146,6 @@ struct IndexEditorView: View {
 
     @Environment(\.modelContext) private var modelContext
     @FocusState private var focused: UUID?
-    @State private var isShowingPage = false
     @State private var highlight: String?
     @State private var width: CGFloat = 0
 
@@ -131,8 +153,9 @@ struct IndexEditorView: View {
 
     var body: some View {
         let entries = book.indexEntries
+        let hasPages = !book.pageScans(of: .index).isEmpty
         Group {
-            if isWide {
+            if isWide, hasPages {
                 HStack(spacing: 0) {
                     ContentsPagePane(book: book, kind: .index, highlight: highlight)
                         .frame(maxWidth: .infinity)
@@ -140,14 +163,16 @@ struct IndexEditorView: View {
                     list(entries)
                         .frame(width: min(440, width * 0.42))
                 }
+            } else if hasPages {
+                // Above the list, where the keyboard can't cover it (ux-notes rows 152, 163).
+                VStack(spacing: 0) {
+                    ContentsPagePane(book: book, kind: .index, highlight: highlight)
+                        .frame(height: ContentsPagePane.compactHeight)
+                    Divider()
+                    list(entries)
+                }
             } else {
                 list(entries)
-                    .sheet(isPresented: $isShowingPage) {
-                        ContentsPagePane(book: book, kind: .index, highlight: highlight)
-                            .presentationDetents([.medium, .large])
-                            .presentationBackgroundInteraction(.enabled(upThrough: .medium))
-                            .presentationDragIndicator(.visible)
-                    }
             }
         }
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
@@ -165,7 +190,6 @@ struct IndexEditorView: View {
         .onChange(of: focused) { _, id in
             guard let id, let entry = entries.first(where: { $0.id == id }) else { return }
             highlight = entry.title
-            if !isWide, !book.pageScans(of: .index).isEmpty { isShowingPage = true }
         }
     }
 

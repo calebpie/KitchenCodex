@@ -56,6 +56,17 @@ struct ReferencesPane: View {
             }
         }
         .navigationTitle("References")
+        // The question a swipe's Delete asks (ux-notes row 149), on the pane so it presents from
+        // any row.
+        .alert(deleting.map { "Delete “\($0.title.isEmpty ? "Reference" : $0.title)”?" } ?? "", isPresented: Binding { deleting != nil } set: { if !$0 { deleting = nil } }, presenting: deleting) { reference in
+            Button("Delete Reference", role: .destructive) {
+                ReferenceSaving.delete(reference, in: modelContext)
+                deleting = nil
+            }
+            Button("Cancel", role: .cancel) { deleting = nil }
+        } message: { reference in
+            Text(deleteMessage(reference))
+        }
         .navigationDestination(item: $opened) { reference in
             ReferencePageView(reference: reference) { recipe in router.openRecipe(id: recipe.id) }
         }
@@ -92,18 +103,13 @@ struct ReferencesPane: View {
         .tint(.primary)
         .accessibilityHint("Opens the reference.")
         .swipeActions(edge: .trailing) {
-            // Asks first, as Delete Cookbook does, naming what goes (ux-notes row 149).
+            // Asks first, as Delete Cookbook does, naming what goes (ux-notes row 149): an alert,
+            // which a swipe action can present from any row.
             Button("Delete", systemImage: "trash", role: .destructive) { deleting = reference }
         }
-        .confirmationDialog("Delete “\(reference.title.isEmpty ? "Reference" : reference.title)”?", isPresented: Binding { deleting == reference } set: { if !$0 { deleting = nil } }, titleVisibility: .visible) {
-            Button("Delete Reference", role: .destructive) {
-                ReferenceSaving.delete(reference, in: modelContext)
-                deleting = nil
-            }
-        } message: {
-            Text(deleteMessage(reference))
-        }
     }
+
+
 
     /// "Its 3 page images and 12 entries go with it."
     private func deleteMessage(_ reference: Reference) -> String {

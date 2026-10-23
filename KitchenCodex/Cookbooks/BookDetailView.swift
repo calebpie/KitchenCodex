@@ -343,9 +343,12 @@ struct BookDetailView: View {
                         Text("Recipes are added as you scan.")
                     }
                 } else {
+                    let pointerMade = Set(BookScanStore.shared.state(for: book)?.pointerEntries.filter(\.madeEntry).map(\.entry) ?? [])
                     ForEach(sections) { section in
                         // An entry captured as reference reading shows under Reading only (row 122).
                         let entries = section.orderedEntries.filter { !$0.isReading(in: book) }
+                        // Entries page pointers made count only in Missing (ux-notes row 165).
+                        let counted = entries.filter { !pointerMade.contains($0.id) }
                         Section {
                             ForEach(entries) { EntryRow(entry: $0) { scanNow($0) } }
                         } header: {
@@ -353,8 +356,8 @@ struct BookDetailView: View {
                                 Text(section.title.isEmpty ? "Untitled Section" : section.title)
                                 Spacer()
                                 // No count on a chapter with nothing listed (ux-notes row 147).
-                                if !entries.isEmpty {
-                                    Text("\(entries.count { $0.status != .listed }) of \(entries.count)")
+                                if !counted.isEmpty {
+                                    Text("\(counted.count { $0.status != .listed }) of \(counted.count)")
                                 }
                             }
                         }

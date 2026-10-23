@@ -23,8 +23,7 @@ struct PunchlistEditorView: View {
     @FocusState private var focused: EntryField?
     /// Where the field under edit is, so a tap anywhere else ends the edit.
     @State private var editingFrame: CGRect = .zero
-    /// The contents page under the list (iPhone) or beside it (iPad), the line under edit shown.
-    @State private var isShowingPage = false
+    /// The contents page above the list (iPhone) or beside it (iPad), the line under edit shown.
     @State private var highlight: String?
     @State private var width: CGFloat = 0
 
@@ -48,14 +47,16 @@ struct PunchlistEditorView: View {
                     list
                         .frame(width: min(440, width * 0.42))
                 }
+            } else if hasContentsPages {
+                // Above the list, where the keyboard can't cover it (ux-notes rows 152, 163).
+                VStack(spacing: 0) {
+                    ContentsPagePane(book: book, kind: .contents, highlight: highlight)
+                        .frame(height: ContentsPagePane.compactHeight)
+                    Divider()
+                    list
+                }
             } else {
                 list
-                    .sheet(isPresented: $isShowingPage) {
-                        ContentsPagePane(book: book, kind: .contents, highlight: highlight)
-                            .presentationDetents([.medium, .large])
-                            .presentationBackgroundInteraction(.enabled(upThrough: .medium))
-                            .presentationDragIndicator(.visible)
-                    }
             }
         }
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
@@ -65,7 +66,6 @@ struct PunchlistEditorView: View {
             let id: UUID = switch field { case let .title(id), let .page(id): id }
             guard let entry = book.orderedEntries.first(where: { $0.id == id }) else { return }
             highlight = entry.title
-            if !isWide, hasContentsPages { isShowingPage = true }
         }
     }
 

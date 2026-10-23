@@ -60,15 +60,6 @@ struct SourcesPane: View {
                                         // swipe all the way across asks too.
                                         Button("Delete", systemImage: "trash", role: .destructive) { deleting = source }
                                     }
-                                    .confirmationDialog("Delete “\(source.name)”?", isPresented: Binding { deleting == source } set: { if !$0 { deleting = nil } }, titleVisibility: .visible) {
-                                        Button("Delete Source", role: .destructive) {
-                                            modelContext.delete(source)
-                                            try? modelContext.save()
-                                            deleting = nil
-                                        }
-                                    } message: {
-                                        Text(source.notes.isEmpty ? "Its details go with it." : "Its details and your notes go with it.")
-                                    }
                                     .swipeActions(edge: .leading) {
                                         if let phone = source.phone, let url = Self.telephone(phone) {
                                             Button("Call", systemImage: "phone") { openURL(url) }
@@ -87,6 +78,18 @@ struct SourcesPane: View {
             }
         }
         .navigationTitle(book.map { "Sources from \($0.displayTitle)" } ?? "Sources")
+        // The question a swipe's Delete asks (ux-notes row 149), on the pane so it presents from
+        // any row.
+        .alert(deleting.map { "Delete “\($0.name)”?" } ?? "", isPresented: Binding { deleting != nil } set: { if !$0 { deleting = nil } }, presenting: deleting) { source in
+            Button("Delete Source", role: .destructive) {
+                modelContext.delete(source)
+                try? modelContext.save()
+                deleting = nil
+            }
+            Button("Cancel", role: .cancel) { deleting = nil }
+        } message: { source in
+            Text(source.notes.isEmpty ? "Its details go with it." : "Its details and your notes go with it.")
+        }
         .navigationDestination(item: $opened) { source in
             SourceDetailView(source: source)
         }
