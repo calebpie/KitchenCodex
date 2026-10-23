@@ -226,8 +226,9 @@ struct SourceDetailView: View {
                     }
                 }
                 .padding(.vertical, 2)
-                Toggle(isOn: Binding { source.isFrequented } set: { source.isFrequented = $0; try? modelContext.save() }) {
-                    Label("Favorite", systemImage: source.isFrequented ? "star.fill" : "star")
+                // The list's star, one control for one state (ux-notes row 129).
+                LabeledContent("Favorite") {
+                    FavoriteStar(source: source)
                 }
             }
             if source.phone != nil || source.url != nil || source.address != nil {
