@@ -41,9 +41,12 @@ struct ScanReviewView: View {
     @State private var pageDetent = PresentationDetent.medium
     @State private var focusRect: CGRect?
     @State private var lastTapped: ReviewItem.ID?
-    /// The structure list's scroll proxy, so a tapped row can be kept above the half-height page
-    /// (ux-notes row 162) and an editing row just above it (row 163).
-    @State private var scrollProxy: ScrollViewProxy?
+    /// The row the structure list should scroll to the top, so a tapped row is kept above the
+    /// half-height page (ux-notes row 162) and an editing row above the page and the keyboard
+    /// (row 163). A state the reader's closure watches, rather than a captured proxy: a proxy
+    /// kept from an empty section's `onAppear` was never set, since an empty section renders
+    /// nothing. The anchor is `.top`: a List puts a unit-point anchor at the centre, under the page.
+    @State private var scrollTarget: ScrollTarget?
     @State private var editingText = ""
     @FocusState private var editingFocus: ReviewItem.ID?
     @State private var popoverRegion: Int?
@@ -408,11 +411,6 @@ struct ScanReviewView: View {
     private var structurePane: some View {
         ScrollViewReader { proxy in
         List {
-            Section {}
-                .listRowBackground(Color.clear)
-                .listRowInsets(EdgeInsets())
-                .frame(height: 0)
-                .onAppear { scrollProxy = proxy }
             Section {
                 if model.recipes.count > 1 {
                     Picker("Recipe", selection: $model.current) {
@@ -524,6 +522,10 @@ struct ScanReviewView: View {
         .listStyle(.insetGrouped)
         .opacity(model.recipe.isSkipped ? 0.5 : 1)
         .animation(.default, value: model.recipe)
+        .onChange(of: scrollTarget) { _, target in
+            guard let target else { return }
+            withAnimation { proxy.scrollTo(target.id, anchor: .top) }
+        }
         }
     }
 
@@ -635,7 +637,7 @@ struct ScanReviewView: View {
             withAnimation { proxy.scrollTo(part, anchor: .top) }
         } else if !isWide {
             // The tapped warning kept above the half-height page (ux-notes row 162).
-            withAnimation { proxy.scrollTo(detail.id, anchor: UnitPoint(x: 0.5, y: 0.12)) }
+            withAnimation { proxy.scrollTo(detail.id, anchor: .top) }
         }
         let regions = detail.regions.compactMap(model.region)
         if let first = regions.first {
@@ -742,10 +744,16 @@ struct ScanReviewView: View {
         }
     }
 
-    /// The row scrolled into the screen's upper half, where the half-height page doesn't cover it.
-    private func keepAbovePage(_ id: ReviewItem.ID, anchorY: CGFloat = 0.15) {
-        guard let scrollProxy else { return }
-        withAnimation { scrollProxy.scrollTo(id, anchor: UnitPoint(x: 0.5, y: anchorY)) }
+    /// The row scrolled to the top of the list, where the half-height page doesn't cover it.
+    /// Each call is a new target even for the same row, so a second tap scrolls again.
+    private func keepAbovePage(_ id: ReviewItem.ID) {
+        scrollTarget = ScrollTarget(id: id, serial: (scrollTarget?.serial ?? 0) + 1)
+    }
+
+    /// A row to scroll to; `serial` makes each request distinct.
+    private struct ScrollTarget: Equatable {
+        let id: ReviewItem.ID
+        let serial: Int
     }
 
     /// A second tap edits the wording in place; the page keeps the line's region framed in whatever
@@ -756,7 +764,7 @@ struct ScanReviewView: View {
         Task {
             await Task.yield()
             editingFocus = item.id
-            if !isWide, isShowingPage { keepAbovePage(item.id, anchorY: 0.08) }
+            if !isWide, isShowingPage { keepAbovePage(item.id) }
         }
     }
 
