@@ -72,9 +72,9 @@ struct WebReferenceReaderTests {
         #expect(reference.figures.map(\.section) == [0, 1, 1, 2])
     }
 
-    /// Cards set among the article, each a linked recipe's thumbnail, title and blurb, are
-    /// furniture: neither sections nor figures. A page that wraps its whole article in a card
-    /// class still reads.
+    /// Cards set among the article, each a linked recipe's thumbnail, title and blurb, and
+    /// newsletter boxes (by their class, or under a sign-up heading) are furniture: neither
+    /// sections nor figures. A page that wraps its whole article in a card class still reads.
     @Test func leavesOutTheCardsSetAmongTheArticle() throws {
         let card = { (name: String) in
             #"<div class="FeaturedRecipe_cardWrapper"><img class="FeaturedRecipe_cardImg" src="/img/\#(name).jpg" alt=""><h3>Brown Butter \#(name.capitalized)</h3><p>Rich, nutty and ready in ten minutes, the only way to start.</p><a href="/recipes/\#(name)">View recipe</a></div>"#
@@ -84,6 +84,9 @@ struct WebReferenceReaderTests {
             body: """
             <p>\(Self.paragraph)</p>
             <figure><img src="/img/pan.jpg" alt="Butter foaming in a steel pan"></figure>
+            <div class="Newsletter_wrapper"><img src="/img/envelope.jpg" alt=""><p>Weekly notes from our kitchen, the good and the burnt.</p></div>
+            <h3>Subscribe to Kitchen Notes</h3>
+            <p>Fresh ideas, tested recipes and stories from the kitchen, every Friday morning.</p>
             <h2>Three ways to use it</h2>
             <p>\(Self.second)</p>
             <div class="FeaturedRecipe_list">\(card("cookies"))\(card("sauce"))\(card("cake"))</div>
@@ -95,6 +98,7 @@ struct WebReferenceReaderTests {
         let reference = try #require(WebReferenceReader.read(html: html, url: URL(string: "https://example.test/notes/brown-butter")))
         #expect(reference.sections.map(\.heading) == ["", "Three ways to use it", "Keeping it"])
         #expect(reference.figures.map(\.url.lastPathComponent) == ["pan.jpg"])
+        #expect(!reference.sections[0].body.contains("kitchen"))
         // The paywall's line after the cards is furniture too.
         #expect(!reference.sections[1].body.contains("Members"))
 

@@ -15,11 +15,11 @@ struct PageLine: Sendable, Equatable {
     var images: [String] = []
     /// Each of `images`' alt text, "" where it has none: an article figure's caption.
     var imageAlts: [String] = []
-    /// Whether the line sits in a card, teaser or related-content block (`isTeaserClass`): a link
-    /// to another page set among the article, not the article's own text.
-    var isTeaser = false
+    /// Whether the line sits in a block set aside from the article (`isAsideClass`): a card,
+    /// teaser or related-content link to another page, or a newsletter box.
+    var isAside = false
     /// Each of `images`, whether it sits in such a block: a card's thumbnail, not a figure.
-    var imageTeasers: [Bool] = []
+    var imageAsides: [Bool] = []
 
     var isHeading: Bool { headingLevel != nil }
 }
@@ -108,7 +108,7 @@ private struct Builder {
         var listID: Int?
         var itemScopeType: String?
         var isJSONLDScript = false
-        var isTeaser = false
+        var isAside = false
         var captureIDs: [Int] = []
     }
 
@@ -137,7 +137,7 @@ private struct Builder {
     private var currentTag = "body"
     private var currentHeading: Int?
     private var currentList: Int?
-    private var currentTeaser = false
+    private var currentAside = false
     private var lastTokenWasInlineEnd = false
     private var nextListID = 0
     private var activeCaptures: [Int: Capture] = [:]
@@ -146,7 +146,7 @@ private struct Builder {
     private var segmentBreaks: [Int] = []
     private var pendingImages: [String] = []
     private var pendingAlts: [String] = []
-    private var pendingTeasers: [Bool] = []
+    private var pendingAsides: [Bool] = []
 
     mutating func consume(_ token: HTMLTokenizer.Token) {
         switch token {
@@ -218,7 +218,7 @@ private struct Builder {
             if name == "img", let src = Self.contentImageSource(attributes) {
                 pendingImages.append(src)
                 pendingAlts.append(HTMLEntities.decode(attributes["alt"] ?? "").collapsingWhitespace)
-                pendingTeasers.append(stack.contains(where: \.isTeaser) || Self.isTeaserClass(attributes["class"]))
+                pendingAsides.append(stack.contains(where: \.isAside) || Self.isAsideClass(attributes["class"]))
             }
         }
         lastTokenWasInlineEnd = false
@@ -255,7 +255,7 @@ private struct Builder {
             element.itemScopeType = attributes["itemtype"] ?? ""
         }
         element.isJSONLDScript = name == "script" && attributes["type"]?.lowercased().contains("ld+json") == true
-        element.isTeaser = Self.isTeaserClass(attributes["class"])
+        element.isAside = Self.isAsideClass(attributes["class"])
         element.captureIDs = captureIDs
         stack.append(element)
         if skipped { skipDepth += 1 }
@@ -264,7 +264,7 @@ private struct Builder {
             currentTag = name
             currentHeading = currentHeadingLevel
             currentList = currentListID
-            currentTeaser = stack.contains(where: \.isTeaser)
+            currentAside = stack.contains(where: \.isAside)
         }
     }
 
@@ -282,7 +282,7 @@ private struct Builder {
             }
             currentHeading = currentHeadingLevel
             currentList = currentListID
-            currentTeaser = stack.contains(where: \.isTeaser)
+            currentAside = stack.contains(where: \.isAside)
             lastTokenWasInlineEnd = false
         } else {
             lastTokenWasInlineEnd = skipDepth == 0
@@ -344,17 +344,18 @@ private struct Builder {
         currentLine = ""
         segmentBreaks = []
         guard !text.isEmpty else { return }
-        lines.append(PageLine(text: text, tag: currentTag, headingLevel: currentHeading, listID: currentList, segments: segments, images: pendingImages, imageAlts: pendingAlts, isTeaser: currentTeaser, imageTeasers: pendingTeasers))
+        lines.append(PageLine(text: text, tag: currentTag, headingLevel: currentHeading, listID: currentList, segments: segments, images: pendingImages, imageAlts: pendingAlts, isAside: currentAside, imageAsides: pendingAsides))
         pendingImages = []
         pendingAlts = []
-        pendingTeasers = []
+        pendingAsides = []
     }
 
-    /// A class naming a card, teaser, promo or related-content block ("FeaturedContent_cardWrapper",
-    /// "related-posts", "promo-tile"): what sits in it links to another page.
-    static func isTeaserClass(_ value: String?) -> Bool {
+    /// A class naming a block set aside from the article: a card, teaser, promo or related-content
+    /// block, whose contents link to another page ("FeaturedContent_cardWrapper", "related-posts"),
+    /// or a newsletter box ("Newsletter_wrapper", "signup-form").
+    static func isAsideClass(_ value: String?) -> Bool {
         guard let value = value?.lowercased(), !value.isEmpty else { return false }
-        return ["card", "teaser", "promo", "related", "recirc"].contains(where: value.contains)
+        return ["card", "teaser", "promo", "related", "recirc", "newsletter", "signup", "sign-up", "subscribe"].contains(where: value.contains)
     }
 
     /// An `<img>` that shows content: a real source (`src`, or a lazy loader's `data-src`), not an
