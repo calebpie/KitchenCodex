@@ -88,17 +88,20 @@ public struct PageQuad: Sendable, Equatable, Hashable, Codable {
 
 /// A camera capture made ready to read (03 §3.5, phase2-plan slice 4 "Photo cleanup"): the page
 /// found with Vision's document segmentation, deskewed and cropped to it with Core Image's
-/// perspective correction, then levels set from the paper and the ink and the text sharpened. The
-/// cleaned page is what the pipeline reads and what is stored as the page scan. A printed photo
-/// captured in Photo mode is only deskewed and cropped: levels and sharpening are for print.
+/// perspective correction. Levels set from the paper and the ink and a sharpened text are here too
+/// (`clean(_:page:enhances:)`) but off for captures since slice 8: measured over the private page
+/// photos, they moved more readings away from the manifest than toward it (ux-notes row 76). The
+/// cleaned page is what the pipeline reads and what is stored as the page scan.
 public enum PageCleanup {
     /// A page smaller than this share of the frame is more likely a printed photo or a label than
     /// the page; the whole frame is kept instead.
     public static let minimumPageArea = 0.15
     /// Room left around the detected edges, as a share of each corner's distance from the centre.
     public static let margin = 0.025
-    /// Whether a Recipe capture gets levels and sharpening as well as the crop.
-    public static let enhancesPages = true
+    /// Whether a Recipe capture gets levels and sharpening as well as the crop. Off since slice 8
+    /// (ux-notes row 76): over the 175 private page photos they changed 33 readings, 15 away from
+    /// the manifest and 1 toward it, one settled recipe page splitting in two.
+    public static let enhancesPages = false
 
     /// The page in `image`, upright as shown, or nil when Vision finds none worth cropping to.
     public static func detectPage(in image: CGImage) async -> PageQuad? {

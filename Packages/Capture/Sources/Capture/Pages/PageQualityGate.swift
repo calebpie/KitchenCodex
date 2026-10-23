@@ -27,13 +27,17 @@ public struct PageQualityReading: Sendable, Equatable {
     /// Laplacian variance of the image's sharpest detail (the 90th percentile of its tiles), on a
     /// 0–255 gray scale at `PageQualityGate.measureLongSide` pixels.
     public var sharpness: Double
+    /// The same measure over the softer text tiles (the 25th percentile), the floor a page blurred
+    /// in part fails (ux-notes row 81). 0 when not measured.
+    public var lowSharpness: Double
     /// Vision's lens-smudge confidence, 0…1.
     public var smudge: Double
     public var duration: Duration
 
-    public init(quality: PageQuality, sharpness: Double, smudge: Double, duration: Duration = .zero) {
+    public init(quality: PageQuality, sharpness: Double, lowSharpness: Double = 0, smudge: Double, duration: Duration = .zero) {
         self.quality = quality
         self.sharpness = sharpness
+        self.lowSharpness = lowSharpness
         self.smudge = smudge
         self.duration = duration
     }
@@ -42,13 +46,18 @@ public struct PageQualityReading: Sendable, Equatable {
 /// Judges a captured page before it is read (01 §2.3): Vision's `DetectLensSmudgeRequest` for a
 /// dirty lens, a Laplacian-variance sharpness measure for blur. Sharpness is taken over tiles and
 /// the sharpest tenth counts, so a page with a soft photo or wide margins still reads Sharp when
-/// its text is crisp, and a page blurred all over does not. Thresholds were tuned on the private
+/// its text is crisp, and a page blurred all over does not; a floor over the softer text tiles
+/// (the 25th percentile) catches a page blurred in part, a finger over half the lens (ux-notes
+/// row 81). Thresholds were tuned on the private
 /// page fixtures (Phase 2 slice 2); the smudge threshold was set from the iPhone's scores on them
 /// (slice 8, ux-notes row 171): the phone and the Mac score a hazy page up to 0.2 apart, and
 /// 0.92 is where they disagree least (one photo of 91), the pages that read cleanly below it.
 public struct PageQualityGate: Sendable {
     /// Below this the page reads Hold still.
     public var minimumSharpness: Double
+    /// Below this on the softer text tiles (the 25th percentile) the page reads Hold still too
+    /// (ux-notes row 81): a page blurred in part. The fixtures' softest tiles measure 37 and up.
+    public var minimumLowSharpness: Double
     /// At or above this smudge confidence the page reads Clean the lens (Apple's sample uses 0.9;
     /// 0.92 from the device's scores, ux-notes row 171).
     public var smudgeThreshold: Double
@@ -57,8 +66,9 @@ public struct PageQualityGate: Sendable {
     static let tileColumns = 12
     static let tileRows = 16
 
-    public init(minimumSharpness: Double = 220, smudgeThreshold: Double = 0.92) {
+    public init(minimumSharpness: Double = 220, minimumLowSharpness: Double = 20, smudgeThreshold: Double = 0.92) {
         self.minimumSharpness = minimumSharpness
+        self.minimumLowSharpness = minimumLowSharpness
         self.smudgeThreshold = smudgeThreshold
     }
 
@@ -74,20 +84,26 @@ public struct PageQualityGate: Sendable {
         let start = clock.now
         // Both measures on the same copy, so the reading doesn't depend on the size handed in.
         let measured = max(image.width, image.height) > Self.measureLongSide ? (PageImage.scaled(image, longSide: Self.measureLongSide) ?? image) : image
-        let sharpness = Self.sharpness(of: measured)
+        let (sharpness, low) = Self.sharpnessPercentiles(of: measured)
         let smudge = (try? await DetectLensSmudgeRequest().perform(on: measured).confidence).map(Double.init) ?? 0
-        return PageQualityReading(quality: quality(sharpness: sharpness, smudge: smudge), sharpness: sharpness, smudge: smudge, duration: clock.now - start)
+        return PageQualityReading(quality: quality(sharpness: sharpness, lowSharpness: low, smudge: smudge), sharpness: sharpness, lowSharpness: low, smudge: smudge, duration: clock.now - start)
     }
 
-    public func quality(sharpness: Double, smudge: Double) -> PageQuality {
+    public func quality(sharpness: Double, lowSharpness: Double = .infinity, smudge: Double) -> PageQuality {
         if smudge >= smudgeThreshold { return .cleanTheLens }
-        if sharpness < minimumSharpness { return .holdStill }
+        if sharpness < minimumSharpness || lowSharpness < minimumLowSharpness { return .holdStill }
         return .sharp
     }
 
     /// The 90th percentile of the tiles' Laplacian variance, over tiles with some contrast.
     static func sharpness(of image: CGImage) -> Double {
-        guard let (gray, width, height) = PageImage.grayPixels(of: image, longSide: measureLongSide), width > 8, height > 8 else { return 0 }
+        sharpnessPercentiles(of: image).high
+    }
+
+    /// The 90th and the 25th percentiles of the tiles' Laplacian variance, over tiles with some
+    /// contrast: the sharpest text and the softest, for a page blurred in part.
+    static func sharpnessPercentiles(of image: CGImage) -> (high: Double, low: Double) {
+        guard let (gray, width, height) = PageImage.grayPixels(of: image, longSide: measureLongSide), width > 8, height > 8 else { return (0, 0) }
         var source = gray.map(Float.init)
         var laplacian = [Float](repeating: 0, count: width * height)
         let kernel: [Float] = [0, 1, 0, 1, -4, 1, 0, 1, 0]
@@ -123,8 +139,8 @@ public struct PageQualityGate: Sendable {
                 variances.append(sumSquares / count - pow(sum / count, 2))
             }
         }
-        guard !variances.isEmpty else { return 0 }
+        guard !variances.isEmpty else { return (0, 0) }
         variances.sort()
-        return variances[Int(Double(variances.count - 1) * 0.9)]
+        return (variances[Int(Double(variances.count - 1) * 0.9)], variances[Int(Double(variances.count - 1) * 0.25)])
     }
 }

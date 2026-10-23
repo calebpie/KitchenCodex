@@ -176,7 +176,8 @@ struct PrivatePageTests {
     }
 
     /// Each book's first page and a page from its middle, blurred as a shaky hand (motion) and an
-    /// unfocused lens (Gaussian) would.
+    /// unfocused lens (Gaussian) would, and blurred over its left half only, as a finger over part
+    /// of the lens does (ux-notes row 81: the floor over the softer text tiles).
     static func blurredCaptures(books: [PageFixtures.Book]) async throws -> [BlurCheck] {
         let gate = PageQualityGate()
         let context = CIContext()
@@ -184,13 +185,18 @@ struct PrivatePageTests {
         for book in books where book.files.count > 2 {
             for file in [book.files[1], book.files[book.files.count / 2]] {
                 let image = try PageImage.load(contentsOf: file, maxPixelSize: 4000)
-                for (name, filterName, radius) in [("motion blur, 12 px", "CIMotionBlur", 12.0), ("out of focus, 3 px", "CIGaussianBlur", 3.0)] {
+                for (name, filterName, radius, half) in [("motion blur, 12 px", "CIMotionBlur", 12.0, false), ("out of focus, 3 px", "CIGaussianBlur", 3.0, false), ("left half out of focus, 6 px", "CIGaussianBlur", 6.0, true)] {
                     let source = CIImage(cgImage: image)
                     guard let filter = CIFilter(name: filterName) else { continue }
                     filter.setValue(source, forKey: kCIInputImageKey)
                     filter.setValue(radius, forKey: kCIInputRadiusKey)
-                    guard let output = filter.outputImage?.cropped(to: source.extent),
-                          let blurred = context.createCGImage(output, from: source.extent) else { continue }
+                    guard var output = filter.outputImage?.cropped(to: source.extent) else { continue }
+                    if half {
+                        // The blur over the left half, the page sharp on the right.
+                        let right = source.cropped(to: CGRect(x: source.extent.midX, y: source.extent.minY, width: source.extent.width / 2, height: source.extent.height))
+                        output = right.composited(over: output)
+                    }
+                    guard let blurred = context.createCGImage(output, from: source.extent) else { continue }
                     let reading = await gate.assess(blurred)
                     checks.append(BlurCheck(label: "\(book.slug)/\(file.lastPathComponent), \(name)", reading: reading))
                 }

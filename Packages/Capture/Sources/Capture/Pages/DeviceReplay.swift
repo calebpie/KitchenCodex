@@ -14,7 +14,7 @@ public enum DeviceReplay {
     public static func reading(of photo: DeviceReadingReport.Photo, structurer: PageStructurer = PageStructurer(), gate: PageQualityGate = PageQualityGate(), outline: PageQuad? = nil) -> PageReading? {
         guard let record = photo.scan else { return nil }
         let scan = PageScan(record)
-        let quality = photo.quality.map { PageQualityReading(quality: gate.quality(sharpness: $0.sharpness, smudge: $0.smudge), sharpness: $0.sharpness, smudge: $0.smudge) }
+        let quality = photo.quality.map { PageQualityReading(quality: gate.quality(sharpness: $0.sharpness, lowSharpness: $0.lowSharpness ?? .infinity, smudge: $0.smudge), sharpness: $0.sharpness, lowSharpness: $0.lowSharpness ?? 0, smudge: $0.smudge) }
         var reading = structurer.read(scan, file: photo.fileName, quality: quality)
         if reading.kind == .recipe || reading.kind == .prose, let margins = photo.marginLines,
            let number = PageStructurer.folioNumber(in: margins), PagePipeline.prefersMarginFolio(reading, margins: number) {

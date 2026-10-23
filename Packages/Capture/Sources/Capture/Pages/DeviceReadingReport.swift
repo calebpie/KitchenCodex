@@ -62,6 +62,8 @@ public struct DeviceReadingReport: Codable, Sendable, Equatable {
     public struct Quality: Codable, Sendable, Equatable {
         public var quality: PageQuality
         public var sharpness: Double
+        /// The softer text tiles' measure (format 2; ux-notes row 81).
+        public var lowSharpness: Double?
         public var smudge: Double
     }
 
@@ -179,7 +181,7 @@ extension DeviceReadingReport.Photo {
         }
         self.init(
             fileName: fileName, assetID: assetID,
-            quality: DeviceReadingReport.Quality(quality: read.quality.quality, sharpness: read.quality.sharpness, smudge: read.quality.smudge),
+            quality: DeviceReadingReport.Quality(quality: read.quality.quality, sharpness: read.quality.sharpness, lowSharpness: read.quality.lowSharpness, smudge: read.quality.smudge),
             scan: DeviceReadingReport.Scan(
                 pixelWidth: scan.pixelWidth, pixelHeight: scan.pixelHeight, quarterTurns: scan.quarterTurns,
                 paper: scan.paper, pageCore: scan.pageCore, paperFraction: scan.paperFraction,
