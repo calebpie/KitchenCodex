@@ -29,6 +29,12 @@ struct BookScanState: Codable {
     var sittingStart = 0
     /// Pages the book's recipes point to that went on its to-scan list (04 §5.1 "Page pointers").
     var pointerEntries: [PointerEntry] = []
+    /// The book's second language ("fr"), learned from a title's alternate name (ux-notes row
+    /// 126): the recognizer reads later pages in it beside the reader's own.
+    var secondLanguage: String?
+    /// Rescan from the review queue (ux-notes row 164): the recipe the next recipe capture replaces
+    /// outright (`Recipe.id`), with no untouched test and no Keep New · Keep Earlier question.
+    var rescanning: UUID?
 
     /// One capture: the cleaned page in the folder, what the camera noted, and what it became.
     struct StoredCapture: Codable, Identifiable {
@@ -189,6 +195,13 @@ struct BookScanState: Codable {
         sitting = try container.decodeIfPresent(Int.self, forKey: .sitting) ?? 0
         sittingStart = try container.decodeIfPresent(Int.self, forKey: .sittingStart) ?? nextCaptureID
         pointerEntries = try container.decodeIfPresent([PointerEntry].self, forKey: .pointerEntries) ?? []
+        secondLanguage = try container.decodeIfPresent(String.self, forKey: .secondLanguage)
+        rescanning = try container.decodeIfPresent(UUID.self, forKey: .rescanning)
+    }
+
+    /// The recognizer's languages for this book: the reader's own and the second one it learned.
+    var recognitionLanguages: [Locale.Language] {
+        PageReader.defaultLanguages + (secondLanguage.flatMap(PageReader.language(forCode:)).map { [$0] } ?? [])
     }
 }
 

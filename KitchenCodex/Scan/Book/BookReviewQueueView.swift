@@ -40,14 +40,16 @@ extension Book {
 /// another in scan review over their stored pages; a reference the session marked for a look
 /// shows its page beside its title and sections (slice 7). Save reviews one (its entry
 /// `reviewed`, its layout confirmed) and moves to the next; Skip leaves it in the queue and is off
-/// on the last, so the end comes only through Save (ux-notes row 137). More holds Rescan, back to
-/// the camera at the recipe's page, and Discard Scan, the capture and its recipe gone and the entry
+/// on the last, and Save on the last closes the review, back to the camera when opened from the
+/// session and to Book detail otherwise (ux-notes rows 137, 168). More holds Rescan, back to the
+/// camera at the recipe's page, and Discard Scan, the capture and its recipe gone and the entry
 /// listed again (row 136). Under the page, the title as a plain centred caption with its page in
 /// italics (row 138). Opened at the end of a session or from Book detail's "N need review".
 struct BookReviewQueueView: View {
     let book: Book
-    /// Rescan: the book session's camera at the recipe's entry (nil when it is on no list).
-    var onRescan: (BookEntry?) -> Void
+    /// Rescan: the book session's camera at the recipe's entry (nil when it is on no list), the
+    /// recipe named so the next capture replaces it (ux-notes row 164).
+    var onRescan: (BookEntry?, Recipe) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
@@ -74,7 +76,7 @@ struct BookReviewQueueView: View {
         NavigationStack {
             Group {
                 if let model, let current {
-                    ScanReviewView(model: model, book: book, stored: current, onRescan: { onRescan(current.bookEntry) }, rescansWithCamera: true,
+                    ScanReviewView(model: model, book: book, stored: current, onRescan: { onRescan(current.bookEntry, current) }, rescansWithCamera: true,
                                    onDiscard: { discard(current) }, offersSkip: false)
                         .id(ObjectIdentifier(model))
                         .disabled(isSaving)
@@ -83,12 +85,12 @@ struct BookReviewQueueView: View {
                         .id(reference.id)
                         .disabled(isSaving)
                 } else {
+                    // Only when the queue was empty to begin with: the last Save closes the review
+                    // (ux-notes row 168).
                     ContentUnavailableView {
-                        Label(reviewedCount > 0 ? "Review Done" : "Nothing to Review", systemImage: "checkmark.seal")
+                        Label("Nothing to Review", systemImage: "checkmark.seal")
                     } description: {
-                        Text(reviewedCount > 0
-                             ? (reviewedCount == 1 ? "1 reviewed." : "\(reviewedCount) reviewed.") + (book.reviewTargets.isEmpty ? "" : " The ones you skipped wait in the book.")
-                             : "Every recipe scanned from this book has been looked at.")
+                        Text("Every recipe scanned from this book has been looked at.")
                     }
                 }
             }
@@ -100,7 +102,8 @@ struct BookReviewQueueView: View {
                         if hasChanges { isConfirmingClose = true } else { dismiss() }
                     }
                     .keyboardShortcut(.cancelAction)
-                    .confirmationDialog("Discard changes?", isPresented: $isConfirmingClose, titleVisibility: .visible) {
+                    // An alert, so Keep Reviewing always draws over the full-screen page (ux-notes row 158).
+                    .alert("Discard changes?", isPresented: $isConfirmingClose) {
                         Button("Discard Changes", role: .destructive) { dismiss() }
                         Button("Keep Reviewing", role: .cancel) {}
                     }
@@ -185,8 +188,13 @@ struct BookReviewQueueView: View {
         }
     }
 
+    /// The next (or previous) recipe; past the last, the review closes (ux-notes row 168).
     private func go(to index: Int) {
-        position = max(0, min(index, queue.count))
+        guard index < queue.count else {
+            dismiss()
+            return
+        }
+        position = max(0, index)
         load()
     }
 

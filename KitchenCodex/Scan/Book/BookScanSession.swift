@@ -141,6 +141,22 @@ final class BookScanSession: PageCaptureSink {
         save()
     }
 
+    /// Rescan from the review queue (ux-notes row 164): the session remembers the recipe, and the
+    /// next recipe capture replaces it outright, capture, reading, entry, place in the queue and
+    /// cover photos, with no untouched test and no Keep New · Keep Earlier question.
+    func rescan(_ recipe: Recipe, at entry: BookEntry?) {
+        state.rescanning = recipe.id
+        if let entry { state.currentEntry = entry.id }
+        save()
+    }
+
+    /// Rescan by the recipe's id, from Book detail's queue.
+    func rescan(id: UUID) {
+        state.rescanning = id
+        if let entry = (try? context.fetch(FetchDescriptor<Recipe>(predicate: #Predicate { $0.id == id })).first)?.bookEntry { state.currentEntry = entry.id }
+        save()
+    }
+
     private func moveToNextUncaptured(after entry: BookEntry?) {
         let entries = book.orderedEntries
         let index = entry.flatMap { entries.firstIndex(of: $0) }
@@ -152,6 +168,13 @@ final class BookScanSession: PageCaptureSink {
     /// This sitting's captures, and any left waiting from before.
     var shownCaptures: [BookScanState.StoredCapture] {
         state.captures.filter { $0.sitting == state.sitting || $0.status == .pending }
+    }
+
+    /// Entries page pointers put on the list that nothing has captured: they wait in Missing and
+    /// are never the session's next item (ux-notes row 155).
+    var pointerEntriesWaiting: Int {
+        let made = Set(state.pointerEntries.filter(\.madeEntry).map(\.entry))
+        return book.orderedEntries.count { made.contains($0.id) && $0.status == .listed }
     }
 
     var capturedCount: Int { shownCaptures.count }
@@ -380,11 +403,19 @@ final class BookScanSession: PageCaptureSink {
         }
     }
 
-    /// Image files chosen in Files, as captures.
+    /// Image files chosen in Files, as captures; a PDF's pages each as one (slice 8).
     func add(files urls: [URL], mode: CaptureMode) {
         for url in urls {
             let scoped = url.startAccessingSecurityScopedResource()
             defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            if PDFPageImages.isPDF(url) {
+                let folder = captureFolder().appending(path: "pdf-\(UUID().uuidString)")
+                for page in PDFPageImages.render(url, into: folder) {
+                    if let data = try? Data(contentsOf: page) { add(data, extension: "jpg", mode: mode) }
+                }
+                try? FileManager.default.removeItem(at: folder)
+                continue
+            }
             guard let data = try? Data(contentsOf: url) else { continue }
             add(data, extension: url.pathExtension.isEmpty ? "jpg" : url.pathExtension, mode: mode)
         }
@@ -433,7 +464,8 @@ final class BookScanSession: PageCaptureSink {
         worker?.cancel()
     }
 
-    private var pipeline: PagePipeline { ScanSession.makePipeline() }
+    /// The pipeline, reading in the book's languages (ux-notes row 126).
+    private var pipeline: PagePipeline { ScanSession.makePipeline(languages: state.recognitionLanguages) }
 
     private func process(_ id: Int) async {
         guard let index = state.captures.firstIndex(where: { $0.id == id }) else { return }
@@ -452,6 +484,10 @@ final class BookScanSession: PageCaptureSink {
         // Deleted or made a photo while it was read: as it is now.
         guard let now = state.captures.first(where: { $0.id == id && $0.status == .pending }) else { return }
         readings[id] = reading
+        // A title's second-language name names the book's second language for the pages after it.
+        if state.secondLanguage == nil, let language = reading.secondLanguage, PageReader.language(forCode: language) != nil {
+            state.secondLanguage = language
+        }
         if now.mode == .recipe, reading.kind == .recipe {
             lastCapturePreview = reading.previewBlocks
             if lens.note(reading, quality: capture.quality?.reading) { asksToCleanLens = true }
@@ -555,8 +591,13 @@ final class BookScanSession: PageCaptureSink {
         var replaced = 0
         var duplicates: [BookScanState.Duplicate] = []
         var queued = false
+        // Rescan (ux-notes row 164): the recipe named is replaced outright by the first recipe on
+        // this page, on its own entry.
+        let rescanned = state.rescanning.flatMap { id in try? context.fetch(FetchDescriptor<Recipe>(predicate: #Predicate { $0.id == id })).first }
+        state.rescanning = nil
         for recipeIndex in model.recipes.indices where !model.recipes[recipeIndex].isSkipped {
-            let entry = match.entries[recipeIndex]
+            var entry = match.entries[recipeIndex]
+            if let rescanned, saved.isEmpty, let own = rescanned.bookEntry { entry = own }
             // The punchlist names a recipe the page's title didn't read for.
             if model.recipes[recipeIndex].title?.text.trimmed.isEmpty != false {
                 let name = entry.map(\.title).flatMap { $0.isEmpty ? nil : $0 } ?? "Untitled Recipe"
@@ -571,7 +612,18 @@ final class BookScanSession: PageCaptureSink {
             let wantsLook = flagged ?? (!reasons.isEmpty || read.title.isEmpty || ownerCapture.queued)
             let recipe = await ScanSaving.saveNew(model, recipe: recipeIndex, book: book, reviewed: false, images: images, appliesPointers: false, in: context)
             recipe.currentVersion?.needsReview = wantsLook
-            if PunchlistLinking.link(recipe, to: entry, reviewed: false), let entry {
+            if let rescanned, saved.isEmpty, !rescanned.isDeleted {
+                // The rescan's recipe goes, whatever the cook did to it; the new one takes its place.
+                if let own = rescanned.bookEntry {
+                    replace(rescanned, with: recipe, on: own)
+                    linked.append(own)
+                } else {
+                    for index in state.captures.indices { state.captures[index].recipes.removeAll { $0 == rescanned.id } }
+                    CrossReferenceLinking.forget(recipes: [rescanned.id], in: book, state: &state, context: context)
+                    context.delete(rescanned)
+                }
+                replaced += 1
+            } else if PunchlistLinking.link(recipe, to: entry, reviewed: false), let entry {
                 linked.append(entry)
             } else if let entry, let earlier = entry.recipe, earlier != recipe {
                 // A page shot again (ux-notes row 93): it replaces a recipe the cook hasn't reviewed

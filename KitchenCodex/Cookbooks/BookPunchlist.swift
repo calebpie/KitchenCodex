@@ -26,7 +26,8 @@ extension Book {
     /// The review queue (02 Flow C step 7): the book's scanned recipes waiting for a look, the
     /// oldest first, so the recipe that confirms the layout leads.
     var reviewQueue: [Recipe] {
-        (recipes ?? []).filter { $0.needsReview && $0.isScanned }.sorted { $0.createdAt < $1.createdAt }
+        // A recipe deleted but not yet saved away stays in the book's array (ux-notes row 164).
+        (recipes ?? []).filter { !$0.isDeleted && $0.needsReview && $0.isScanned }.sorted { $0.createdAt < $1.createdAt }
     }
 
     /// The section a page falls in: the last whose first page is at or before it, by its entries'
@@ -64,7 +65,9 @@ extension Book {
             }
             var nextEntry = (section.orderedEntries.map(\.sortOrder).max() ?? -1) + 1
             for item in read.entries {
-                let listed = section.orderedEntries.contains { $0.page == item.page && PunchlistMatcher.similarity($0.title, item.title) >= 0.99 }
+                // Already listed in this chapter at this page with a close title (a second photo of
+                // the same page read a letter off, ux-notes row 146): not listed twice.
+                let listed = section.orderedEntries.contains { $0.page == item.page && PunchlistMatcher.similarity($0.title, item.title) >= (item.page == nil ? 0.99 : 0.6) }
                 guard !listed else { continue }
                 let entry = BookEntry(title: item.title, page: item.page)
                 entry.sortOrder = nextEntry
@@ -108,19 +111,25 @@ extension Book {
         }
     }
 
-    /// The list as the matcher sees it.
+    /// The list as the matcher sees it, the entries page pointers made marked (ux-notes rows 155,
+    /// 156).
     var matcherEntries: [PunchlistMatcher.Entry] {
-        orderedEntries.map { PunchlistMatcher.Entry(title: $0.title, page: $0.page, isCaptured: $0.status != .listed) }
+        let pointerMade = Set(BookScanStore.shared.state(for: self)?.pointerEntries.filter(\.madeEntry).map(\.entry) ?? [])
+        return orderedEntries.map { PunchlistMatcher.Entry(title: $0.title, page: $0.page, isCaptured: $0.status != .listed, isPointerMade: pointerMade.contains($0.id)) }
     }
 
     /// A `listed` entry the contents didn't have, placed by its page in the chapter the page falls
-    /// in (the last chapter when the page comes after every first page); nil for a book with no
-    /// chapters.
-    func addEntry(title: String, page: Int, in context: ModelContext) -> BookEntry? {
-        guard let section = section(forPage: page) ?? orderedSections.last else { return nil }
+    /// in (the last chapter when the page comes after every first page), or, when its page didn't
+    /// read, at the end of `chapter` (ux-notes row 155); nil for a book with no chapters.
+    func addEntry(title: String, page: Int?, chapter: BookSection? = nil, in context: ModelContext) -> BookEntry? {
+        guard let section = page.flatMap(section(forPage:)) ?? chapter ?? orderedSections.last else { return nil }
         let entry = BookEntry(title: title, page: page)
-        entry.sortOrder = (section.orderedEntries.firstIndex { ($0.page ?? .max) > page }).map { section.orderedEntries[$0].sortOrder } ?? ((section.orderedEntries.map(\.sortOrder).max() ?? -1) + 1)
-        for later in section.orderedEntries where later.sortOrder >= entry.sortOrder { later.sortOrder += 1 }
+        if let page {
+            entry.sortOrder = (section.orderedEntries.firstIndex { ($0.page ?? .max) > page }).map { section.orderedEntries[$0].sortOrder } ?? ((section.orderedEntries.map(\.sortOrder).max() ?? -1) + 1)
+            for later in section.orderedEntries where later.sortOrder >= entry.sortOrder { later.sortOrder += 1 }
+        } else {
+            entry.sortOrder = (section.orderedEntries.map(\.sortOrder).max() ?? -1) + 1
+        }
         context.insert(entry)
         entry.section = section
         return entry
@@ -216,8 +225,10 @@ enum PunchlistLinking {
         for (offset, index) in indices.enumerated() {
             if let index {
                 matched.append(entries[index])
-            } else if createsMissing, let page = pages.first, let entry = book.addEntry(title: titles[offset], page: page, in: context) {
-                // A recipe the contents didn't list: the punchlist gains it, so the counts stay true.
+            } else if createsMissing, let entry = book.addEntry(title: titles[offset], page: pages.first, chapter: current?.section, in: context) {
+                // A recipe the contents didn't list: the punchlist gains it, so the counts stay
+                // true, even when its page didn't read (ux-notes row 155), in the current entry's
+                // chapter.
                 matched.append(entry)
                 created.append(entry)
             } else {

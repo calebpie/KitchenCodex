@@ -34,8 +34,9 @@ struct BookDetailView: View {
     @State private var scanning: ScanStart?
     @State private var isBuildingList = false
     @State private var isEditingList = false
+    /// Edit beside the switcher on the Index tab: the index's entries by hand (ux-notes row 152).
+    @State private var isEditingIndex = false
     @State private var isReviewing = false
-    @State private var offeredEntry: BookEntry?
     /// More → Scan Sources Page: the one-off scan, expecting the Sources page.
     @State private var isScanningSources = false
 
@@ -44,10 +45,13 @@ struct BookDetailView: View {
         var entry: BookEntry?
         /// Recipe pages offered as contents pages: the session's first captures.
         var pages: [URL] = []
+        /// Rescan: the recipe the next capture replaces (ux-notes row 164).
+        var rescanning: UUID?
     }
 
     var body: some View {
         let progress = book.punchlistProgress
+        let reviewCount = book.reviewCount
         // A list of chapters with no recipes yet is a list (ux-notes row 117).
         let hasList = !book.orderedSections.isEmpty
         List {
@@ -57,13 +61,15 @@ struct BookDetailView: View {
                     .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
             }
 
-            // The ring's row waits for the punchlist (ux-notes row 52); until then the list under
-            // the switcher says "No recipes listed yet" once.
-            if progress.total > 0 {
+            // The ring waits until a contents or index page has been captured (ux-notes rows 52,
+            // 165); the review row shows whenever something waits for a look.
+            if progress != nil || reviewCount > 0 {
                 Section {
-                    CompletenessRow(captured: progress.captured, total: progress.total, needReview: progress.needReview)
-                    if progress.needReview > 0 {
-                        Button(progress.needReview == 1 ? "Review 1 Recipe" : "Review \(progress.needReview) Recipes", systemImage: "rectangle.and.text.magnifyingglass") {
+                    if let progress {
+                        CompletenessRow(progress: progress)
+                    }
+                    if reviewCount > 0 {
+                        Button(reviewCount == 1 ? "Review 1 Recipe" : "Review \(reviewCount) Recipes", systemImage: "rectangle.and.text.magnifyingglass") {
                             isReviewing = true
                         }
                     }
@@ -75,10 +81,11 @@ struct BookDetailView: View {
             // are scanned (ux-notes row 114).
             Section {
                 if hasList {
+                    // The title alone, centred, as Build the Recipe List is (ux-notes rows 115, 153).
                     Button {
                         scanning = ScanStart()
                     } label: {
-                        Label(progress.captured == 0 ? "Start Scanning" : "Continue Scanning", systemImage: "camera.viewfinder")
+                        Text((book.recipes ?? []).isEmpty && (progress?.captured ?? 0) == 0 ? "Start Scanning" : "Continue Scanning")
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
@@ -109,15 +116,26 @@ struct BookDetailView: View {
             }
 
             Section {
-                Picker("Punchlist", selection: $punchlist) {
-                    ForEach(Punchlist.allCases) { Text($0.rawValue).tag($0) }
+                // Edit beside the switcher opens the editor for the tab shown (ux-notes row 152):
+                // the sections and their recipes, or the index's entries, with the page each was
+                // read from.
+                HStack(spacing: 12) {
+                    Picker("Punchlist", selection: $punchlist) {
+                        ForEach(Punchlist.allCases) { Text($0.rawValue).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    if hasList || !book.indexEntries.isEmpty {
+                        Button("Edit") {
+                            if punchlist == .index { isEditingIndex = true } else { isEditingList = true }
+                        }
+                        .accessibilityHint(punchlist == .index ? "Edits the index's entries." : "Edits the sections and recipes.")
+                    }
                 }
-                .pickerStyle(.segmented)
                 .listRowBackground(Color.clear)
                 .listRowInsets(EdgeInsets())
             }
 
-            punchlistContent(total: progress.total, hasList: hasList)
+            punchlistContent(hasList: hasList)
 
             let reading = (book.references ?? []).sorted { ($0.source?.firstPage ?? $0.bookEntry?.page ?? .max, $0.title) < ($1.source?.firstPage ?? $1.bookEntry?.page ?? .max, $1.title) }
             if !reading.isEmpty {
@@ -203,13 +221,20 @@ struct BookDetailView: View {
                 PunchlistEditorView(book: book) { isEditingList = false }
             }
         }
+        .sheet(isPresented: $isEditingIndex) {
+            NavigationStack {
+                IndexEditorView(book: book) { isEditingIndex = false }
+            }
+        }
         .reviewPresentation(isPresented: $isReviewing) {
-            // Rescan: the book session's camera at the recipe's entry, once the queue has gone.
-            BookReviewQueueView(book: book) { entry in
+            // Rescan: the book session's camera at the recipe's entry, once the queue has gone, the
+            // recipe named so the next capture replaces it (ux-notes row 164).
+            BookReviewQueueView(book: book) { entry, recipe in
                 isReviewing = false
+                let id = recipe.id
                 Task {
                     try? await Task.sleep(for: .milliseconds(450))
-                    scanning = ScanStart(entry: entry)
+                    scanning = ScanStart(entry: entry, rescanning: id)
                 }
             }
         }
@@ -217,14 +242,7 @@ struct BookDetailView: View {
             ScanPageView(book: book, expectsSources: true) { _ in }
         }
         .fullScreenCover(item: $scanning) { start in
-            BookScanView(book: book, startAt: start.entry, firstPages: start.pages)
-        }
-        .confirmationDialog(offeredEntry.map { "“\($0.displayTitle)”" } ?? "", isPresented: Binding { offeredEntry != nil } set: { if !$0 { offeredEntry = nil } }, titleVisibility: .visible) {
-            if let entry = offeredEntry {
-                Button(entry.page.map { "Scan Now, p. \($0)" } ?? "Scan Now") { scanNow(entry) }
-            }
-        } message: {
-            Text("Not captured yet.")
+            BookScanView(book: book, startAt: start.entry, firstPages: start.pages, rescanning: start.rescanning)
         }
         .onAppear {
             book.reconcilePunchlist()
@@ -258,14 +276,12 @@ struct BookDetailView: View {
         return ""
     }
 
-    /// Cover beside the title, author, year and ISBN.
+    /// Cover beside the title, author, year and ISBN: the cover whole at a fixed height with its
+    /// own width (ux-notes row 150).
     private var header: some View {
         HStack(alignment: .top, spacing: 16) {
-            Color.clear
-                .frame(width: 112, height: 168)
-                .overlay { BookCoverImage(book: book, pointSize: 180) }
-                .clipShape(.rect(cornerRadius: 6))
-                .overlay { RoundedRectangle(cornerRadius: 6).strokeBorder(.separator, lineWidth: 0.5) }
+            BookCoverImage(book: book, pointSize: 180)
+                .frame(height: 168)
                 .shadow(color: .black.opacity(0.12), radius: 6, y: 3)
 
             VStack(alignment: .leading, spacing: 6) {
@@ -295,7 +311,10 @@ struct BookDetailView: View {
     }
 
     @ViewBuilder
-    private func punchlistContent(total: Int, hasList: Bool) -> some View {
+    private func punchlistContent(hasList: Bool) -> some View {
+        // Chapters with no recipes listed (ux-notes row 117): each scanned recipe files in the
+        // chapter its page falls in.
+        let total = book.entries.count
         if !hasList, book.indexEntries.isEmpty {
             Section {
                 Text("No recipes listed yet")
@@ -307,8 +326,6 @@ struct BookDetailView: View {
             case .sections:
                 let sections = book.orderedSections
                 if total == 0 {
-                    // Chapters with no recipes listed (ux-notes row 117): each scanned recipe files
-                    // in the chapter its page falls in.
                     Section {
                         ForEach(sections) { section in
                             HStack {
@@ -330,12 +347,15 @@ struct BookDetailView: View {
                         // An entry captured as reference reading shows under Reading only (row 122).
                         let entries = section.orderedEntries.filter { !$0.isReading(in: book) }
                         Section {
-                            ForEach(entries) { EntryRow(entry: $0) { offeredEntry = $0 } }
+                            ForEach(entries) { EntryRow(entry: $0) { scanNow($0) } }
                         } header: {
                             HStack {
                                 Text(section.title.isEmpty ? "Untitled Section" : section.title)
                                 Spacer()
-                                Text("\(entries.count { $0.status != .listed }) of \(entries.count)")
+                                // No count on a chapter with nothing listed (ux-notes row 147).
+                                if !entries.isEmpty {
+                                    Text("\(entries.count { $0.status != .listed }) of \(entries.count)")
+                                }
                             }
                         }
                     }
@@ -352,9 +372,9 @@ struct BookDetailView: View {
                     let rows = (index.isEmpty ? book.entries : index).sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
                     ForEach(rows) { entry in
                         if entry.section?.isIndex == true {
-                            IndexEntryRow(entry: entry, book: book) { offeredEntry = $0 }
+                            IndexEntryRow(entry: entry, book: book) { scanNow($0) }
                         } else {
-                            EntryRow(entry: entry) { offeredEntry = $0 }
+                            EntryRow(entry: entry) { scanNow($0) }
                         }
                     }
                 }
@@ -398,6 +418,8 @@ private struct IndexEntryRow: View {
     let book: Book
     var onScan: (BookEntry) -> Void
 
+    @State private var isOffering = false
+
     var body: some View {
         switch entry.page.map({ book.holding(pages: [$0], named: entry.title, from: nil) }) {
         case let .recipe(recipe):
@@ -409,9 +431,11 @@ private struct IndexEntryRow: View {
                 line(PunchlistMark(state: .captured))
             }
         default:
-            Button { onScan(entry) } label: { line(PunchlistMark(state: .listed)) }
+            // The dialog on the row, so its arrow points at the row (ux-notes row 167).
+            Button { isOffering = true } label: { line(PunchlistMark(state: .listed)) }
                 .buttonStyle(.plain)
                 .accessibilityHint("Offers to scan it now.")
+                .scanNowDialog(for: entry, isPresented: $isOffering) { onScan(entry) }
         }
     }
 
@@ -432,12 +456,11 @@ private struct IndexEntryRow: View {
     }
 }
 
-/// The completeness ring and its line: "47 of 112 captured, 3 need review". Shown once the book
-/// has a punchlist.
+/// The completeness ring and its line: "47 of 112 captured, 3 need review", or "about 12 of 320
+/// pages captured" while the list has chapters but no recipes (ux-notes row 165). Shown once a
+/// contents or index page has been captured.
 private struct CompletenessRow: View {
-    let captured: Int
-    let total: Int
-    let needReview: Int
+    let progress: PunchlistProgress
 
     var body: some View {
         HStack(spacing: 14) {
@@ -445,23 +468,27 @@ private struct CompletenessRow: View {
                 Circle()
                     .stroke(.fill.secondary, lineWidth: 6)
                 Circle()
-                    .trim(from: 0, to: total == 0 ? 0 : CGFloat(captured) / CGFloat(total))
+                    .trim(from: 0, to: progress.total == 0 ? 0 : CGFloat(progress.captured) / CGFloat(progress.total))
                     .stroke(.tint, style: StrokeStyle(lineWidth: 6, lineCap: .round))
                     .rotationEffect(.degrees(-90))
             }
             .frame(width: 40, height: 40)
             .accessibilityHidden(true)
-            Text(line)
-                .foregroundStyle(total == 0 ? .secondary : .primary)
+            Text(progress.line)
         }
         .padding(.vertical, 4)
         .accessibilityElement(children: .combine)
     }
+}
 
-    private var line: String {
-        guard total > 0 else { return "No recipes listed yet" }
-        let base = "\(captured) of \(total) captured"
-        return needReview > 0 ? "\(base), \(needReview == 1 ? "1 needs review" : "\(needReview) need review")" : base
+extension View {
+    /// Scan Now, presented from the row tapped so its arrow points at the row (ux-notes row 167).
+    func scanNowDialog(for entry: BookEntry, isPresented: Binding<Bool>, action: @escaping () -> Void) -> some View {
+        confirmationDialog("“\(entry.displayTitle)”", isPresented: isPresented, titleVisibility: .visible) {
+            Button(entry.page.map { "Scan Now, p. \($0)" } ?? "Scan Now", action: action)
+        } message: {
+            Text("Not captured yet.")
+        }
     }
 }
 
@@ -471,6 +498,8 @@ private struct EntryRow: View {
     let entry: BookEntry
     var showsScanNow = false
     var onScan: (BookEntry) -> Void
+
+    @State private var isOffering = false
 
     var body: some View {
         if let recipe = entry.recipe {
@@ -491,9 +520,10 @@ private struct EntryRow: View {
                     .accessibilityLabel("Scan \(entry.displayTitle) now")
             }
         } else {
-            Button { onScan(entry) } label: { PunchlistEntryLine(entry: entry) }
+            Button { isOffering = true } label: { PunchlistEntryLine(entry: entry) }
                 .buttonStyle(.plain)
                 .accessibilityHint("Offers to scan it now.")
+                .scanNowDialog(for: entry, isPresented: $isOffering) { onScan(entry) }
         }
     }
 }

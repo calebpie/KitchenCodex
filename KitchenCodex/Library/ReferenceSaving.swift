@@ -15,7 +15,9 @@ import UIKit
 enum ReferenceSaving {
     /// A page's reading saved into `book` with the page scans of `model`: a new Reference, or the
     /// glossary it continues when the pages run on from one already captured (its entries follow,
-    /// its pages extend), so a glossary over four pages is one Reference.
+    /// its pages extend), so a glossary over four pages is one Reference; a titleless page of prose
+    /// joins the chapter or technique captured from the page before it the same way (ux-notes row
+    /// 110), as the stitcher joins a recipe's pages.
     @discardableResult
     static func save(_ imported: ImportedReference, model: ScanReviewModel, book: Book, images: ScanSaving.PageImages, reviewed: Bool, in context: ModelContext) async -> Reference {
         let pages = model.pages.compactMap(\.pageNumber)
@@ -52,6 +54,17 @@ enum ReferenceSaving {
                 let high = max(source.lastPage ?? source.firstPage ?? last, last)
                 source.firstPage = low
                 source.lastPage = high == low ? nil : high
+            }
+        } else if imported.kind != .glossary, imported.title.isEmpty, let page = pages.min(), let previous = book.prose(endingBefore: page) {
+            // A titleless page of prose on the page after a chapter or technique: its sections
+            // follow that reference's, and its pages extend it (ux-notes row 110).
+            reference = previous
+            let existing = reference.sortedSections
+            add(imported.sections, to: reference, from: (existing.map(\.sortOrder).max() ?? -1) + 1, in: context)
+            if let source = reference.source, let last = pages.max() {
+                let low = source.firstPage ?? page
+                source.firstPage = low
+                source.lastPage = max(source.lastPage ?? low, last) == low ? nil : max(source.lastPage ?? low, last)
             }
         } else {
             reference = Reference(title: imported.title, author: book.author, kind: imported.referenceKind)
@@ -231,6 +244,15 @@ extension Book {
             guard reference.isGlossary, let first = reference.source?.firstPage else { return false }
             let last = reference.source?.lastPage ?? first
             return (first - 1)...(last + 1) ~= low || (first - 1)...(last + 1) ~= high
+        }
+    }
+
+    /// A chapter or technique whose pages end on the page before `page` (ux-notes row 110): what a
+    /// titleless page of prose at `page` continues.
+    func prose(endingBefore page: Int) -> Reference? {
+        (references ?? []).first { reference in
+            guard !reference.isGlossary, !reference.isDeleted, let first = reference.source?.firstPage else { return false }
+            return (reference.source?.lastPage ?? first) == page - 1
         }
     }
 

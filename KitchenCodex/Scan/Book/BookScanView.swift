@@ -23,6 +23,8 @@ struct BookScanView: View {
     /// Recipe pages offered as contents pages (Scan It as a Recipe, ux-notes row 114): the
     /// session's first captures.
     var firstPages: [URL] = []
+    /// Rescan from Book detail's queue (ux-notes row 164): the recipe the next capture replaces.
+    var rescanning: UUID?
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
@@ -59,6 +61,10 @@ struct BookScanView: View {
                 hasTakenFirstPages = true
                 session.add(files: firstPages, mode: .recipe)
             }
+            if let rescanning, !hasTakenFirstPages {
+                hasTakenFirstPages = true
+                session.rescan(id: rescanning)
+            }
             if CameraAccess.isAvailable {
                 cameraState = CameraAccess.isDenied ? .denied : (await CameraAccess.request() ? .ready : .denied)
             } else {
@@ -81,10 +87,10 @@ struct BookScanView: View {
             }
         }
         .reviewPresentation(isPresented: $isReviewing) {
-            // Rescan: back to this camera at the recipe's entry.
-            BookReviewQueueView(book: book) { entry in
+            // Rescan: back to this camera at the recipe's entry, the recipe named (ux-notes row 164).
+            BookReviewQueueView(book: book) { entry, recipe in
                 isReviewing = false
-                if let entry { session?.select(entry) }
+                session?.rescan(recipe, at: entry)
             }
         }
         .alert("Clean the Lens?", isPresented: Binding { session?.asksToCleanLens == true && cameraState != .ready } set: { session?.asksToCleanLens = $0 }) {
@@ -99,8 +105,9 @@ struct BookScanView: View {
         } message: {
             Text("Everything captured is saved. The review queue waits in the book's detail.")
         }
-        // ✕ where there is no camera; the camera asks its own.
-        .confirmationDialog(session?.discardQuestion?.title ?? "", isPresented: $isConfirmingDiscard, titleVisibility: .visible) {
+        // ✕ where there is no camera; the camera asks its own. An alert, so both buttons always
+        // draw (ux-notes row 158).
+        .alert(session?.discardQuestion?.title ?? "", isPresented: $isConfirmingDiscard) {
             Button("Discard", role: .destructive) { discard() }
             Button("Keep Scanning", role: .cancel) {}
         } message: {
@@ -276,17 +283,23 @@ struct BookScanView: View {
         }
     }
 
-    /// "12 of 112 captured".
+    /// "12 of 112 captured", or the recipes captured while the book's extent isn't known (ux-notes
+    /// row 165).
     private var progressLine: String {
-        let progress = book.punchlistProgress
-        return "\(progress.captured) of \(progress.total) captured"
+        if let progress = book.punchlistProgress { return progress.line }
+        let captured = (book.recipes ?? []).count
+        return captured == 1 ? "1 recipe captured" : "\(captured) recipes captured"
     }
 
-    /// "Now: Leek Soup, p. 114".
+    /// "Now: Leek Soup, p. 114"; once every listed recipe is captured, how many pointed-to pages
+    /// wait in Missing (ux-notes row 155).
     private func nowLine(_ session: BookScanSession) -> String {
         // No recipes listed: the list grows as pages are scanned (ux-notes rows 114, 117).
         if book.orderedEntries.isEmpty { return "Recipes are added as you scan" }
-        guard let entry = session.currentEntry else { return "Every listed recipe is captured" }
+        guard let entry = session.currentEntry else {
+            let waiting = session.pointerEntriesWaiting
+            return "Every listed recipe is captured" + (waiting == 0 ? "" : waiting == 1 ? " · 1 pointed-to page waits in Missing" : " · \(waiting) pointed-to pages wait in Missing")
+        }
         return "Now: \(entry.displayTitle)" + (entry.page.map { ", p. \($0)" } ?? "")
     }
 
@@ -296,7 +309,8 @@ struct BookScanView: View {
 }
 
 /// Right of the shutter (ux-notes row 134): the strip's four figures stacked, captured, processed,
-/// need review (in orange while there are any) and battery.
+/// need review (in orange while there are any) and battery, their lines leading-aligned so the
+/// numbers sit in one column (row 154).
 private struct SessionFigures: View {
     let session: BookScanSession
 
@@ -304,20 +318,33 @@ private struct SessionFigures: View {
     @State private var battery: Float = -1
 
     var body: some View {
-        VStack(alignment: .trailing, spacing: 2) {
-            HStack(spacing: 4) {
-                if session.isReadingCaptures {
-                    ProgressView()
-                        .controlSize(.mini)
-                        .tint(.white)
+        Grid(alignment: .leading, horizontalSpacing: 4, verticalSpacing: 2) {
+            GridRow {
+                Text("\(session.capturedCount)")
+                    .gridColumnAlignment(.trailing)
+                HStack(spacing: 4) {
+                    Text("captured")
+                    if session.isReadingCaptures {
+                        ProgressView()
+                            .controlSize(.mini)
+                            .tint(.white)
+                    }
                 }
-                Text("\(session.capturedCount) captured")
             }
-            Text("\(session.processedCount) processed")
-            Text(session.needReviewCount == 1 ? "1 needs review" : "\(session.needReviewCount) need review")
-                .foregroundStyle(session.needReviewCount > 0 ? Color.orange : Color.white)
+            GridRow {
+                Text("\(session.processedCount)")
+                Text("processed")
+            }
+            GridRow {
+                Text("\(session.needReviewCount)")
+                Text(session.needReviewCount == 1 ? "needs review" : "need review")
+            }
+            .foregroundStyle(session.needReviewCount > 0 ? Color.orange : Color.white)
             if battery >= 0 {
-                Text("battery \(Int((battery * 100).rounded()))%")
+                GridRow {
+                    Text("\(Int((battery * 100).rounded()))%")
+                    Text("battery")
+                }
             }
         }
         .font(.caption2.weight(.semibold))
@@ -450,7 +477,7 @@ private struct CaptureIntake: View {
             .frame(maxWidth: .infinity)
         }
         .photosPicker(isPresented: $isChoosingPhotos, selection: $photoItems, maxSelectionCount: 30, selectionBehavior: .ordered, matching: .images, preferredItemEncoding: .current, photoLibrary: .shared())
-        .fileImporter(isPresented: $isChoosingFiles, allowedContentTypes: [.image], allowsMultipleSelection: true) { result in
+        .fileImporter(isPresented: $isChoosingFiles, allowedContentTypes: [.image, .pdf], allowsMultipleSelection: true) { result in
             guard case let .success(urls) = result else { return }
             session.add(files: urls, mode: mode)
             mode = .recipe
