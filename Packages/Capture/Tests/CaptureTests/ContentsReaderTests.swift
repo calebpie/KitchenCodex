@@ -224,6 +224,28 @@ struct ContentsReaderTests {
         ])
     }
 
+    /// A misread index line is no entry (ux-notes row 148): one starting with a digit or a letter
+    /// of another script, and one whose page lies beyond the book. The book runs to its index's
+    /// first page when that page's number read.
+    @Test func anIndexKeepsNoMisreadLines() {
+        var page = ContentsReader.read(Self.page([
+            Self.line("chard, in spring gratin, 41", x: 0.10, y: 0.20),
+            Self.line("1101 pear tart, 150", x: 0.10, y: 0.215),
+            Self.line("Квас, 12", x: 0.10, y: 0.23),
+            Self.line("eggplant, smoked, 112", x: 0.10, y: 0.245),
+            Self.line("fennel, braised, 950", x: 0.10, y: 0.26),
+            Self.line("figs, roasted, 291", x: 0.10, y: 0.275),
+        ], kind: .index))
+        #expect(page.index.map(\.title) == ["Chard, in spring gratin", "Eggplant, smoked", "Fennel, braised", "Figs, roasted"])
+        let chapters = BookContents(sections: [BookContents.Section(title: "Soups", page: 10), BookContents.Section(title: "Desserts", page: 280)], isOverview: true)
+        #expect(ContentsReader.combine([chapters], indexPages: [page]).index.map(\.page) == [41, 112, 291])
+        // The index's own page read as 287: nothing after it is a page it lists.
+        page.indexFolio = 287
+        #expect(ContentsReader.combine([chapters], indexPages: [page]).index.map(\.page) == [41, 112, 291])
+        page.indexFolio = 260
+        #expect(ContentsReader.combine([chapters], indexPages: [page]).index.map(\.page) == [41, 112, 291])
+    }
+
     // MARK: - Ux-notes rows 118 and 119
 
     /// Caleb's rule: an entry is complete only when a page number closes it. A title wrapped at a
@@ -337,6 +359,46 @@ struct ContentsReaderTests {
         ]))
         let combined = ContentsReader.combine([first, second])
         #expect(combined.sections.map(\.title) == ["Soups", "Grains", "Fish", "Breads", "Mains", "Fish", "Meat", "Desserts"])
+    }
+
+    /// An overview whose page numbers didn't read (the Simulator's reading of small folios) is told
+    /// by its layout: a few lines spaced in groups. It gives chapters, never entries; a chapter
+    /// with no page stays in print order, and a name printed in two parts stays two chapters. A
+    /// line alone in its column (a misread folio) and display type (a facing photo's title) are
+    /// none. Evenly spaced lines with no pages are still entries.
+    @Test func anOverviewWithoutItsPagesIsToldByItsLayout() {
+        let first = ContentsReader.read(Self.page([
+            Self.line("SOUPS", x: 0.12, y: 0.20),
+            Self.line("ON MAKING STOCK", x: 0.12, y: 0.215),
+            Self.line("GRAINS", x: 0.12, y: 0.26),
+            Self.line("ON SOAKING GRAINS", x: 0.12, y: 0.275),
+            Self.line("FISH", x: 0.12, y: 0.32),
+            Self.line("THE MARKET", x: 0.12, y: 0.335),
+            Self.line("BREADS", x: 0.12, y: 0.38),
+            Self.line("XVIT", x: 0.45, y: 0.20),
+            Self.line("La Mer", x: 0.70, y: 0.30, size: 0.04),
+            Self.line("en Hiver", x: 0.72, y: 0.35, size: 0.04),
+        ]))
+        #expect(first.isOverview)
+        #expect(first.entries.isEmpty)
+        #expect(first.sections.map(\.title) == ["Soups", "Grains", "Fish", "Breads"])
+        #expect(first.sections.allSatisfy { $0.page == nil })
+        let second = ContentsReader.read(Self.page([
+            Self.line("MAINS", x: 0.12, y: 0.20),
+            Self.line("LES PLATS", x: 0.12, y: 0.215),
+            Self.line("FISH", x: 0.12, y: 0.26),
+            Self.line("ON THE GRILL", x: 0.12, y: 0.275),
+            Self.line("MEAT", x: 0.12, y: 0.32),
+            Self.line("DESSERTS", x: 0.12, y: 0.365),
+        ]))
+        let combined = ContentsReader.combine([first, second])
+        #expect(combined.sections.map(\.title) == ["Soups", "Grains", "Fish", "Breads", "Mains", "Fish", "Meat", "Desserts"])
+
+        let detailed = ContentsReader.read(Self.page(["Leek Soup", "Onion Soup", "Bean Soup", "Pea Soup", "Corn Chowder", "Fish Stew"].enumerated().map {
+            Self.line($0.element, x: 0.12, y: 0.20 + Double($0.offset) * 0.02)
+        }))
+        #expect(!detailed.isOverview)
+        #expect(!detailed.entries.isEmpty)
     }
 
     /// Two photos overlapping list an entry once.

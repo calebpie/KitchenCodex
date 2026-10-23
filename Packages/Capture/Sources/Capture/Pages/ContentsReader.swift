@@ -27,6 +27,9 @@ public struct BookContents: Sendable, Equatable {
             self.page = page
             self.entries = entries
         }
+
+        /// A chapter with neither its page nor entries: an overview's line whose page didn't read.
+        var isBare: Bool { page == nil && entries.isEmpty }
     }
 
     public var sections: [Section]
@@ -39,6 +42,8 @@ public struct BookContents: Sendable, Equatable {
     public var isOverview: Bool
     /// `.pageText` for the deterministic reading, `.model` once the on-device model read it.
     public var method: ImportMethod
+    /// An index page's own page number when it read: the index lists only pages before it.
+    public var indexFolio: Int?
 
     public init(sections: [Section] = [], index: [Entry] = [], isOverview: Bool = false, method: ImportMethod = .pageText) {
         self.sections = sections
@@ -91,9 +96,20 @@ public enum ContentsReader {
         joinFragments(&lines)
         pairNumbers(&lines)
         let entrySize = Self.entrySize(lines)
-        let columns = Self.columns(lines.filter { !$0.isNumberOnly })
+        var columns = Self.columns(lines.filter { !$0.isNumberOnly })
         let paged = columns.flatMap { $0 }.filter { $0.page != nil }
-        let overview = isOverview(paged.map { $0.page! })
+        var overview = isOverview(paged.map { $0.page! })
+        if !overview, paged.count < 3, looksLikeOverview(columns) {
+            // Too few page numbers read to tell (the Simulator's reading of a small folio): the
+            // layout tells. A line alone in its column is a misread folio or a facing photo's text.
+            overview = true
+            columns = columns.filter { $0.count >= 2 }
+        }
+        if overview, let size = median(columns.flatMap { $0 }.map(\.size)) {
+            // Display type beside the chapters (a facing photo's title) is no chapter: its page
+            // never reads, and an overview keeps chapters without one.
+            columns = columns.map { $0.filter { $0.size <= size * 2.5 } }.filter { !$0.isEmpty }
+        }
         let style = Style(lines: paged.isEmpty ? columns.flatMap { $0 } : paged, entrySize: entrySize)
         let runs = pageOrder(columns.map { overview ? readOverview($0, style: style) : read($0, style: style) })
         var sections: [BookContents.Section] = []
@@ -145,7 +161,9 @@ public enum ContentsReader {
     /// one before (`sameChapter`: an overview's chapter and its detailed listing) is that section;
     /// entries before a page's first heading continue the section the page before ended on; an
     /// entry already read (two photos overlapping, the facing page in the frame) is not listed
-    /// twice. Index pages give the book's index, apart from the chapters (ux-notes row 117).
+    /// twice. Two chapters with neither a page nor entries stay apart: a name the book prints in two
+    /// parts, read with no pages, is two chapters. Index pages give the book's index, apart from
+    /// the chapters (ux-notes row 117), each with a page within the book's span (`pageSpan`).
     public static func combine(_ pages: [BookContents], indexPages: [BookContents] = []) -> BookContents {
         var sections: [BookContents.Section] = []
         var last: Int?
@@ -156,7 +174,7 @@ public enum ContentsReader {
                 if section.title.isEmpty, let index = last ?? sections.indices.last {
                     sections[index].entries += section.entries
                     last = index
-                } else if let index = sections.firstIndex(where: { sameChapter($0, section) }) {
+                } else if let index = sections.firstIndex(where: { sameChapter($0, section) && !($0.isBare && section.isBare) }) {
                     if sections[index].page == nil { sections[index].page = section.page }
                     if sections[index].title.count < section.title.count, !section.title.isEmpty { sections[index].title = section.title }
                     sections[index].entries += section.entries
@@ -169,7 +187,12 @@ public enum ContentsReader {
             }
         }
         var indexed = Set<String>()
-        let index = (indexPages + pages).flatMap(\.index).filter { indexed.insert(entryKey($0)).inserted }
+        var index = (indexPages + pages).flatMap(\.index).filter { indexed.insert(entryKey($0)).inserted }
+        // An index line's page beyond the book is a misreading, and the line no entry.
+        let chapterPages = sections.flatMap { [$0.page] + $0.entries.map(\.page) }.compactMap { $0 }
+        if let span = pageSpan(chapters: chapterPages, index: index.compactMap(\.page), indexFolios: indexPages.compactMap(\.indexFolio)) {
+            index.removeAll { ($0.page ?? .max) > span }
+        }
         let method: ImportMethod = pages.contains { $0.method == .model } ? .model : .pageText
         return BookContents(sections: sections, index: index, isOverview: !pages.isEmpty && pages.allSatisfy(\.isOverview), method: method)
     }
@@ -395,6 +418,20 @@ public enum ContentsReader {
             previous = line.rect.minX
         }
         return columns.map { $0.sorted { $0.rect.minY < $1.rect.minY } }
+    }
+
+    /// An overview by its layout, for a page whose page numbers didn't read: a few lines (thirty at
+    /// most, where a detailed page lists more), no ingredient amounts, and a column spaced in
+    /// groups, each chapter with its companion lines set close under it and wider space between.
+    static func looksLikeOverview(_ columns: [[Line]]) -> Bool {
+        let lines = columns.filter { $0.count >= 2 }.flatMap { $0 }.filter { !isLabel($0.text) }
+        guard (4...30).contains(lines.count) else { return false }
+        if lines.contains(where: { if case .strong = PageLines.ingredientShape($0.text) { true } else { false } }) { return false }
+        return columns.contains { column in
+            let steps = zip(column, column.dropFirst()).map { $1.rect.minY - $0.rect.minY }.filter { $0 > 0.003 }.sorted()
+            guard steps.count >= 4 else { return false }
+            return steps[steps.count * 3 / 4] >= steps[steps.count / 4] * 1.7
+        }
     }
 
     /// Page numbers that jump by six or more from one entry to the next: chapters, not recipes. A
@@ -749,7 +786,54 @@ public enum ContentsReader {
                 entries.append(BookContents.Entry(title: named, page: page))
             }
         }
-        return BookContents(index: entries)
+        // A misread line (a run of digits, a word in another script) is no entry: an entry starts
+        // with a letter of the page's script and holds a word of letters (ux-notes row 148).
+        let scripts = entries.compactMap { $0.title.first.flatMap(Script.init) }
+        let script = Dictionary(grouping: scripts, by: \.self).max { $0.value.count < $1.value.count }?.key
+        var contents = BookContents(index: entries.filter { entry in
+            guard let first = entry.title.first, first.isLetter, Script(first) == script else { return false }
+            return entry.title.contains(/\p{L}{2,}/)
+        })
+        contents.indexFolio = reading.pageNumber
+        return contents
+    }
+
+    /// A letter's script, coarsely, by its Unicode block.
+    enum Script: Hashable {
+        case latin, greek, cyrillic, hebrew, arabic, devanagari, thai, hangul, kana, han, other
+
+        init?(_ character: Character) {
+            guard character.isLetter, let value = character.unicodeScalars.first?.value else { return nil }
+            switch value {
+            case 0x41...0x24F, 0x1E00...0x1EFF: self = .latin
+            case 0x370...0x3FF: self = .greek
+            case 0x400...0x52F: self = .cyrillic
+            case 0x590...0x5FF: self = .hebrew
+            case 0x600...0x6FF, 0x750...0x77F: self = .arabic
+            case 0x900...0x97F: self = .devanagari
+            case 0xE00...0xE7F: self = .thai
+            case 0x1100...0x11FF, 0x3130...0x318F, 0xAC00...0xD7AF: self = .hangul
+            case 0x3040...0x30FF: self = .kana
+            case 0x4E00...0x9FFF: self = .han
+            default: self = .other
+            }
+        }
+    }
+
+    /// The pages the book runs to (ux-notes row 148), with a margin: the top of the run of pages the
+    /// contents and index give, a stray number far above it (a "250" misread "950", more than half
+    /// again and a hundred pages past the one below) not counted, and never below a chapter's page;
+    /// or, when an index page's own number read near the top, the index's first page, since an
+    /// index lists the pages before it. Nil when nothing gives a page.
+    static func pageSpan(chapters: [Int], index: [Int], indexFolios: [Int]) -> Int? {
+        let known = Array(Set((chapters + index).filter { $0 > 0 })).sorted()
+        guard !known.isEmpty else { return nil }
+        var at = known.count / 2
+        while at + 1 < known.count, Double(known[at + 1]) <= Double(known[at]) * 1.5 || known[at + 1] - known[at] <= 100 { at += 1 }
+        let top = max(known[at], chapters.max() ?? 0)
+        let high = known[known.count * 9 / 10]
+        let last = indexFolios.filter { Double($0) >= Double(high) * 0.9 }.min() ?? top
+        return last + max(10, last / 20)
     }
 
     /// "Leek soup, 16, 42", "lemon curd, 88–89": the title and the first page.
@@ -798,7 +882,9 @@ public enum ContentsReader {
             var section = section
             section.entries = section.entries.filter { $0.title.filter(\.isLetter).count >= 2 }
             if !section.title.isEmpty, isFrontOrBackMatter(section.title), section.entries.isEmpty { return nil }
-            if !section.title.isEmpty, section.entries.isEmpty, section.page == nil { return nil }
+            // An overview's chapter whose page didn't read stays, in print order, for the cook to
+            // fill in (ux-notes row 144).
+            if !overview, !section.title.isEmpty, section.entries.isEmpty, section.page == nil { return nil }
             if mostlyPaged, !section.title.isEmpty, section.page == nil, section.entries.allSatisfy({ $0.page == nil }) { return nil }
             if section.title.isEmpty, section.entries.isEmpty { return nil }
             return section
